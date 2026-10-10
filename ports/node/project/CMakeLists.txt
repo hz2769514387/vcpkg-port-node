@@ -77,8 +77,13 @@ execute_process(
           ${NODE_PORT_G2V_ENV}
   WORKING_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}"
   RESULT_VARIABLE _g2v_fresh
-  OUTPUT_QUIET ERROR_QUIET)
+  OUTPUT_VARIABLE _g2v_check_out
+  ERROR_VARIABLE _g2v_check_err)
 if(NOT _g2v_fresh EQUAL 0)
+  # 把"为什么判过期"打出来 —— check 的每一行都写着具体原因，不打出来的话 CI 上
+  # 只看到"清单缺失或过期，重新生成……"，没法排查。新鲜时这段不会输出。
+  string(REPLACE ";" "\\;" _g2v_check_msg "${_g2v_check_out}${_g2v_check_err}")
+  message(STATUS "gyp2vcpkg check 判为过期/缺失：\n${_g2v_check_msg}")
   message(STATUS "gyp2vcpkg：清单缺失或过期，重新生成……")
   execute_process(
     COMMAND "${Python3_EXECUTABLE}" "${NODE_PORT_GYP2VCPKG_TOOL}/gyp2vcpkg.py" all

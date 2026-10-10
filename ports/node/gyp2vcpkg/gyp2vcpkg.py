@@ -291,6 +291,14 @@ def parse_opts(args):
 
 
 def main():
+    # Windows 的控制台/管道默认编码是 cp1252，打印 `→`（以及中文）会抛
+    # UnicodeEncodeError —— CI 的 Windows job 上真这么崩过一次，直接把配置搞失败。
+    # 把 stdout/stderr 定成 UTF-8，别再依赖控制台代码页。
+    try:
+        sys.stdout.reconfigure(encoding="utf-8")
+        sys.stderr.reconfigure(encoding="utf-8")
+    except Exception:
+        pass
     args = sys.argv[1:]
     if not args:
         print(__doc__)

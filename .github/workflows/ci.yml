@@ -144,6 +144,18 @@ jobs:
             --overlay-ports="$GITHUB_WORKSPACE/ports" \
             --overlay-triplets="$GITHUB_WORKSPACE/triplets"
 
+      # vcpkg 的失败摘要会把构建 out.log 截断（`Skipped N lines`）——**第一条 error**
+      # 常被截掉，只剩一堆级联报错。这里把首错直接打出来（没有 error 行就退回尾部）。
+      - name: 失败时打印构建日志的首错
+        if: failure()
+        shell: bash
+        run: |
+          for f in "$VCPKG_ROOT"/buildtrees/node/*-out.log; do
+            [ -f "$f" ] || continue
+            echo "===== $f ====="
+            grep -n -m 25 -E "error:|fatal error|^FAILED|Error [0-9]+" "$f" || tail -n 60 "$f"
+          done
+
       # ---- L3：消费端冒烟（find_package + 链接 + 真跑 JS）-------------------
       - name: 构建并运行消费端冒烟
         shell: bash
