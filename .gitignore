@@ -66,3 +66,7 @@ vcpkg_installed/
 # test output & cache
 Testing/
 .cache/
+
+# python caches（gyp2vcpkg 是 python 工具，跑一次就会生成 __pycache__）
+__pycache__/
+*.py[cod]

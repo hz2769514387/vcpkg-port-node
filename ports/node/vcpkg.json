@@ -1,0 +1,44 @@
+{
+  "name": "node",
+  "version": "24.21.0",
+  "description": "把 Node.js v24.21.0 整棵源码树（含 V8、V8 third_party 与 vendored 五库）用 CMake 编成可链接的 node 静态库，并安装头文件与 CMake 消费配置。Node 自身依赖的官方 port 在此声明，消费方经传递依赖自动获得。",
+  "license": "MIT",
+  "supports": "windows | linux | osx",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    },
+    "libuv",
+    "llhttp",
+    "zlib",
+    "brotli",
+    "zstd",
+    "ada-url",
+    "ada-idna",
+    "openssl",
+    "nghttp2",
+    "c-ares",
+    {
+      "name": "sqlite3",
+      "features": [
+        "dbstat",
+        "fts3",
+        "fts5",
+        "geopoly",
+        "math",
+        "percentile",
+        "rtree",
+        "session"
+      ]
+    },
+    "simdjson",
+    "icu",
+    "ngtcp2",
+    "hdr-histogram"
+  ]
+}

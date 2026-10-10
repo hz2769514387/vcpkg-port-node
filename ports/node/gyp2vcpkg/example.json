@@ -1,0 +1,65 @@
+{
+  "_说明": "gyp2vcpkg 的配置模板。复制一份到自己工程里改，别直接改这份。",
+
+  "node_root": "../node/node-v24.21.0",
+  "_node_root_说明": "node 源码树根（相对**配置文件所在目录**；绝对路径也行）。里面要有 tools/gyp/pylib。",
+
+  "entry_gyp": "node.gyp",
+  "_entry_gyp_说明": "入口 .gyp（相对 node_root）。它的 dependencies 会把 v8.gyp / abseil.gyp / inspector_protocol.gyp 一起拉进来，所以一般不用写多个。",
+
+  "define_overrides": {},
+  "_define_overrides_说明": "强行覆盖变量环境里的某些键。gyp 里**文件里的 variables 比 -D 优先**，所以要覆盖只能写进 -I 的那份 gypi（本工具就是这么做的）。值里的 {{here}} 会展开成配置文件所在目录。",
+
+  "platforms": [
+    { "label": "win" },
+    { "label": "linux" }
+  ],
+  "_platforms_说明": "每个平台跑一次解析。变量环境 JSON（官方包 process.config 的导出）**不在这里写死** —— 用可重复的 `--env <label>=<路径>` 从命令行传（见 gyp2vcpkg.py 顶部用法），路径相对**当前工作目录**。",
+
+  "work_dir": "tmp/gyp2vcpkg",
+  "out_dir": "cmake/v8/generated",
+  "_目录_说明": "work_dir 放中间产物（gyp_resolved.json / compile_config_*.json），out_dir 放最终 .cmake 片段；都相对**当前工作目录**。",
+
+  "cmake": {
+    "_说明": "生成的片段里该用哪些变量名 —— 本工具不认识任何具体项目，全靠这里配。",
+    "var_prefix": "G2V",
+    "action_var_prefix": "G2V",
+    "node_root_var": "${G2V_SOURCE_ROOT}",
+    "shared_intermediate_var": "${G2V_GENERATED}",
+    "intermediate_var": "${G2V_GENERATED}/intermediate",
+    "python_var": "${Python3_EXECUTABLE}",
+    "target_os_var": "${G2V_TARGET_OS}",
+    "tool_expr": "$<TARGET_FILE:%s>",
+    "subtree_vars": []
+  },
+  "_cmake_说明": "subtree_vars 是 [[路径前缀, CMake 变量], …]：源码树里某棵子树由另一个变量表示时配在这里（前缀长的优先）。tool_expr 里的 %s 是构建期工具的名字。",
+
+  "targets": [],
+  "_targets_说明": "要出片段的 gyp 目标名（顺序即输出顺序）。",
+
+  "actions": [],
+  "_actions_说明": "要出片段的 gyp 动作：{host: 宿主目标, action: 动作名, name: 可选的输出文件名（默认取动作名）}。",
+
+  "_产物契约": {
+    "<目标>.cmake": [
+      "<前缀>_<目标大写>_IS_INTERFACE / _IS_EXECUTABLE",
+      "<前缀>_<目标大写>_SOURCES_WIN / _SOURCES_LINUX",
+      "<前缀>_<目标大写>_DEFINES / _DEFINES_WIN / _DEFINES_LINUX",
+      "<前缀>_<目标大写>_INCLUDE_DIRS / _INCLUDE_DIRS_WIN / _INCLUDE_DIRS_LINUX",
+      "<前缀>_<目标大写>_CFLAGS_LINUX / _CFLAGS_CC_LINUX / _LDFLAGS_LINUX / _LIBRARIES_LINUX",
+      "<前缀>_<目标大写>_EXCEPTIONS",
+      "<前缀>_<目标大写>_MSVS_DISABLED_WARNINGS / _MSVS_FLAGS / _LINK_LIBS_WIN"
+    ],
+    "<动作>_action.cmake": [
+      "<前缀>_<动作大写>_TOOL / _GEN / _OUTDIR / _INTERMEDIATE",
+      "<前缀>_<动作大写>_INPUTS / _OUTPUTS / _OUTPUT_DIRS / _IN_ALL / _CMD"
+    ]
+  },
+  "_产物契约_补充说明": [
+    "两份片段都**只 set() 变量**：不产 add_library / add_custom_command，怎么变成目标是调用方的事。",
+    "只出现在某一个平台上的东西（宏、include、动作）进 _WIN / _LINUX 那一份，两边都有的进不带后缀的那份。",
+    "编译/链接标志只出 POSIX 那一套（_LINUX）；MSVC 侧的等价物是 MSVS_* 三个变量 —— 两套各归各家，喂错了就是非法参数。",
+    "MSVS_FLAGS = AdditionalOptions + WarningLevel(→/W<n>) + RuntimeTypeInfo(→/GR-|/GR) + ExceptionHandling(→/EHs-c-|/EHsc|/EHa) 翻出来的开关；`ExceptionHandling: 0` 还会顺带在 _DEFINES_WIN 里加 `_HAS_EXCEPTIONS=0`（MSVC 关异常要两件一起做）。",
+    "gyp 里 `-Wl,-force_load,<(PRODUCT_DIR)/libuv` 这种"引用构建产物路径"的 ldflags 翻不成 CMake（要写成 $<LINK_LIBRARY:WHOLE_ARCHIVE,…>），会被**跳过并在片段里注明** —— 调用方看到那条注释就得自己补。"
+  ]
+}

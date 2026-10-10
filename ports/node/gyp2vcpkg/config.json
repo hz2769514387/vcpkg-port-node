@@ -1,0 +1,96 @@
+{
+  "node_root": ".",
+  "entry_gyp": "node.gyp",
+
+  "define_overrides": {
+    "icu_gyp_path": "{{here}}/icu-vcpkg.gyp",
+    "v8_embedder_string": "-node.53"
+  },
+
+  "platforms": [
+    { "label": "win" },
+    { "label": "linux" },
+    { "label": "mac" }
+  ],
+  "_platforms_说明": "每个平台跑一次解析；平台**按 --env 激活**：只给了 --env 的才参与生成（缺 mac 环境时产物就是两平台，变量后缀随之变化）。label 首段必须与 gyp 的 flavor 同名（win / linux / mac）。",
+
+  "work_dir": "../project/.gyp2vcpkg-work",
+  "out_dir": "../project/generated",
+
+  "cmake": {
+    "var_prefix": "NODE_PORT_V8",
+    "action_var_prefix": "NODE_PORT",
+    "node_root_var": "${NODE_ROOT}",
+    "shared_intermediate_var": "${NODE_PORT_V8_GENERATED}",
+    "intermediate_var": "${NODE_PORT_V8_GENERATED}/intermediate",
+    "python_var": "${Python3_EXECUTABLE}",
+    "target_os_var": "${NODE_PORT_TARGET_OS}",
+    "tool_expr": "$<TARGET_FILE:%s>",
+    "subtree_vars": [["deps/v8/", "${NODE_PORT_V8_ROOT}/"]]
+  },
+
+  "targets": [
+    "abseil",
+    "bytecode_builtins_list_generator",
+    "cppgc_base",
+    "crdtp",
+    "fp16",
+    "gen-regexp-special-case",
+    "highway",
+    "libnode",
+    "merve",
+    "mksnapshot",
+    "nbytes",
+    "ncrypto",
+    "ncrypto_engine",
+    "node",
+    "node_base",
+    "node_js2c",
+    "node_mksnapshot",
+    "node_text_start",
+    "postmortem-metadata",
+    "simdutf",
+    "torque",
+    "torque_base",
+    "torque_generated_definitions",
+    "torque_generated_initializers",
+    "torque_runtime_support",
+    "uvwasi",
+    "v8_base",
+    "v8_base_without_compiler",
+    "v8_bigint",
+    "v8_compiler",
+    "v8_compiler_for_mksnapshot",
+    "v8_headers",
+    "v8_heap_base",
+    "v8_init",
+    "v8_initializers",
+    "v8_initializers_slow",
+    "v8_inspector_headers",
+    "v8_internal_headers",
+    "v8_libbase",
+    "v8_libplatform",
+    "v8_maybe_icu",
+    "v8_pch",
+    "v8_shared_internal_headers",
+    "v8_snapshot",
+    "v8_version",
+    "v8_zlib"
+  ],
+
+  "actions": [
+    { "host": "v8_snapshot", "action": "asm_to_inline_asm" },
+    { "host": "node_base", "action": "concatenate_protocols" },
+    { "host": "node_base", "action": "convert_node_protocol_to_json" },
+    { "host": "generate_bytecode_builtins_list", "action": "generate_bytecode_builtins_list_action", "name": "generate_bytecode_builtins_list" },
+    { "host": "libnode", "action": "node_mksnapshot" },
+    { "host": "node_base", "action": "node_protocol_generated_sources" },
+    { "host": "postmortem-metadata", "action": "gen-postmortem-metadata", "name": "postmortem-metadata" },
+    { "host": "v8_inspector_headers", "action": "protocol_compatibility" },
+    { "host": "v8_inspector_headers", "action": "protocol_generated_sources" },
+    { "host": "run_gen-regexp-special-case", "action": "run_gen-regexp-special-case_action", "name": "run_gen-regexp-special-case" },
+    { "host": "v8_snapshot", "action": "run_mksnapshot" },
+    { "host": "run_torque", "action": "run_torque_action", "name": "run_torque" },
+    { "host": "node_base", "action": "v8_inspector_compress_protocol_json" }
+  ]
+}

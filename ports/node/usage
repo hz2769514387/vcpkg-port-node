@@ -1,0 +1,14 @@
+node 提供 node v24.21.0 整棵树的 CMake 构建产物：
+
+  * 头文件：<prefix>/include/node/（node 嵌入头）与 <prefix>/include/（v8 公开头）
+  * 静态库：<prefix>/lib/（node_base / node_main / v8_* / 各 vendored 库）
+  * 消费配置：<prefix>/share/node/node-config.cmake
+
+用法（CMake）：
+
+    find_package(node CONFIG REQUIRED)
+    target_link_libraries(<你的目标> PRIVATE node::node)
+
+`node::node` 已经把 node 的全部实现与第三方依赖接好，并带好 include 目录。
+Windows 上若要让目标嵌平台兼容性清单，可用变量
+`node_NODE_SOURCE_MANIFEST`（指向 node.exe.extra.manifest）。

@@ -1,0 +1,345 @@
+# 由 gyp2vcpkg 生成 —— 不要手改，改了会被判为过期。
+#   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
+#   指纹    ：../gyp2vcpkg/resolve.py 34eb26e83830e71f
+#             ../gyp2vcpkg/collect.py 69a202ae8e388ee3
+#             ../gyp2vcpkg/generate.py b91b0bec8bc781f3
+#             ../gyp2vcpkg/_dump_generator.py d3fe1a95334e65ee
+#             ../gyp2vcpkg/config.json 4304a096a04026f7
+#             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
+#             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#   蓝本    ：node-v24.21.0/tools/v8_gypfiles/abseil.gyp（目标 abseil，gyp 里的类型 static_library）
+#   编译单元：win 110 / linux 110（另外 win 237、linux 237 个是头文件）
+
+set(NODE_PORT_V8_ABSEIL_IS_INTERFACE FALSE)
+set(NODE_PORT_V8_ABSEIL_IS_EXECUTABLE FALSE)
+
+set(NODE_PORT_V8_ABSEIL_SOURCES_WIN
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/cycleclock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/low_level_alloc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/poison.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/raw_logging.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/scoped_set_env.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/spinlock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/spinlock_wait.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/strerror.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/sysinfo.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/thread_identity.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/throw_delegate.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/tracing.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/unscaledcycleclock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/log_severity.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/container/internal/hashtablez_sampler.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/container/internal/hashtablez_sampler_force_weak_definition.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/container/internal/raw_hash_set.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/crc32c.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/cpu_detect.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_cord_state.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_memcpy_fallback.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_memcpy_x86_arm_combined.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_non_temporal_memcpy.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_x86_arm_combined.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/failure_signal_handler.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/address_is_readable.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/decode_rust_punycode.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/demangle.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/demangle_rust.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/elf_mem_image.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/examine_stack.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/stack_consumption.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/utf8_for_code_point.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/vdso_support.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/leak_check.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/stacktrace.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/symbolize.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/hash/internal/city.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/hash/internal/hash.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/hash/internal/low_level_hash.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/numeric/int128.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/profiling/internal/exponential_biased.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/profiling/internal/periodic_sampler.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/ascii.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/charconv.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/cord.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/cord_analysis.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/escaping.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_bigint.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_parse.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_internal.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_btree.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_btree_navigator.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_btree_reader.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_consume.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_crc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_functions.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_handle.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_info.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_sample_token.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/damerau_levenshtein_distance.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/escaping.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/memutil.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/ostringstream.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/pow10_helper.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/bind.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/extension.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/float_conversion.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/output.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/parser.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/stringify_sink.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/utf8.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/match.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/numbers.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/str_cat.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/str_replace.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/str_split.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/string_view.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/substitute.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/barrier.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/blocking_counter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/create_thread_identity.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/futex_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/graphcycles.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/kernel_timeout.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/per_thread_sem.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/pthread_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/sem_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/stdcpp_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/waiter_base.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/win32_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/mutex.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/notification.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/civil_time.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/clock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/duration.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/format.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/civil_time_detail.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_fixed.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_format.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_if.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_impl.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_info.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_libc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_posix.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/zone_info_source.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/time.cc
+)
+set(NODE_PORT_V8_ABSEIL_SOURCES_LINUX
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/cycleclock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/low_level_alloc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/poison.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/raw_logging.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/scoped_set_env.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/spinlock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/spinlock_wait.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/strerror.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/sysinfo.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/thread_identity.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/throw_delegate.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/tracing.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/internal/unscaledcycleclock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/base/log_severity.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/container/internal/hashtablez_sampler.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/container/internal/hashtablez_sampler_force_weak_definition.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/container/internal/raw_hash_set.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/crc32c.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/cpu_detect.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_cord_state.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_memcpy_fallback.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_memcpy_x86_arm_combined.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_non_temporal_memcpy.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/crc/internal/crc_x86_arm_combined.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/failure_signal_handler.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/address_is_readable.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/decode_rust_punycode.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/demangle.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/demangle_rust.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/elf_mem_image.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/examine_stack.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/stack_consumption.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/utf8_for_code_point.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/internal/vdso_support.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/leak_check.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/stacktrace.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/debugging/symbolize.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/hash/internal/city.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/hash/internal/hash.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/hash/internal/low_level_hash.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/numeric/int128.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/profiling/internal/exponential_biased.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/profiling/internal/periodic_sampler.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/ascii.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/charconv.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/cord.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/cord_analysis.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/escaping.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_bigint.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/charconv_parse.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_internal.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_btree.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_btree_navigator.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_btree_reader.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_consume.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cord_rep_crc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_functions.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_handle.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_info.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/cordz_sample_token.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/damerau_levenshtein_distance.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/escaping.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/memutil.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/ostringstream.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/pow10_helper.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/arg.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/bind.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/extension.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/float_conversion.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/output.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/str_format/parser.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/stringify_sink.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/internal/utf8.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/match.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/numbers.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/str_cat.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/str_replace.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/str_split.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/string_view.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/strings/substitute.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/barrier.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/blocking_counter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/create_thread_identity.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/futex_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/graphcycles.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/kernel_timeout.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/per_thread_sem.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/pthread_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/sem_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/stdcpp_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/waiter_base.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/internal/win32_waiter.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/mutex.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/synchronization/notification.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/civil_time.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/clock.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/duration.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/format.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/civil_time_detail.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_fixed.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_format.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_if.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_impl.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_info.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_libc.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_lookup.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/time_zone_posix.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/internal/cctz/src/zone_info_source.cc
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp/absl/time/time.cc
+)
+
+set(NODE_PORT_V8_ABSEIL_DEFINES
+  "_GLIBCXX_USE_CXX11_ABI=1"
+  "_FILE_OFFSET_BITS=64"
+  "OPENSSL_NO_PINSHARED"
+  "OPENSSL_THREADS"
+  "V8_TARGET_ARCH_X64"
+  "V8_HAVE_TARGET_OS"
+)
+set(NODE_PORT_V8_ABSEIL_DEFINES_WIN
+  "WIN32"
+  "_CRT_SECURE_NO_DEPRECATE"
+  "_CRT_NONSTDC_NO_DEPRECATE"
+  "_HAS_EXCEPTIONS=0"
+  "BUILDING_V8_SHARED=1"
+  "BUILDING_UV_SHARED=1"
+  "NOMINMAX"
+  "_WIN32_WINNT=0x0A00"
+  "_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS"
+  "V8_TARGET_OS_WIN"
+)
+set(NODE_PORT_V8_ABSEIL_DEFINES_LINUX
+  "__STDC_FORMAT_MACROS"
+  "V8_TARGET_OS_LINUX"
+)
+
+set(NODE_PORT_V8_ABSEIL_INCLUDE_DIRS
+  ${NODE_PORT_V8_ROOT}/third_party/abseil-cpp
+)
+set(NODE_PORT_V8_ABSEIL_INCLUDE_DIRS_WIN
+)
+set(NODE_PORT_V8_ABSEIL_INCLUDE_DIRS_LINUX
+)
+
+set(NODE_PORT_V8_ABSEIL_CFLAGS_LINUX
+  "-pthread"
+  "-Wno-unused-parameter"
+  "-Wno-strict-overflow"
+  "-Wno-return-type"
+  "-Wno-int-in-bool-context"
+  "-Wno-deprecated"
+  "-Wno-stringop-overflow"
+  "-Wno-stringop-overread"
+  "-Wno-restrict"
+  "-Wno-array-bounds"
+  "-Wno-nonnull"
+  "-Wno-dangling-pointer"
+  "-flax-vector-conversions"
+  "-m64"
+  "-O3"
+  "-fno-omit-frame-pointer"
+  "-fdata-sections"
+  "-ffunction-sections"
+  "-O3"
+)
+set(NODE_PORT_V8_ABSEIL_CFLAGS_CC_LINUX
+  "-fno-rtti"
+  "-fno-exceptions"
+  "-fno-strict-aliasing"
+  "-std=gnu++20"
+  "-Wno-invalid-offsetof"
+)
+set(NODE_PORT_V8_ABSEIL_LDFLAGS_LINUX
+  "-pthread"
+  "-rdynamic"
+  "-m64"
+)
+
+set(NODE_PORT_V8_ABSEIL_EXCEPTIONS FALSE)
+# gyp 的 msvs_disabled_warnings（禁 21 个警告，不传就全刷屏）
+set(NODE_PORT_V8_ABSEIL_MSVS_DISABLED_WARNINGS
+  /wd4351
+  /wd4355
+  /wd4800
+  /wd4251
+  /wd4275
+  /wd4244
+  /wd4267
+  /wd4129
+  /wd4245
+  /wd4324
+  /wd4506
+  /wd4661
+  /wd4701
+  /wd4702
+  /wd4703
+  /wd4709
+  /wd4714
+  /wd4715
+  /wd4718
+  /wd4723
+  /wd4724
+)
+# msvs_settings.VCCLCompilerTool：AdditionalOptions + WarningLevel /
+# RuntimeTypeInfo / ExceptionHandling 翻出来的开关（Windows 专用）
+set(NODE_PORT_V8_ABSEIL_MSVS_FLAGS
+  "-Wno-invalid-offsetof"
+  "-Wno-nullability-completeness"
+  "/bigobj"
+  "/Zc:__cplusplus"
+  "/Zm2000"
+  "/W3"
+  "/GR-"
+  "/EHs-c-"
+)
+
