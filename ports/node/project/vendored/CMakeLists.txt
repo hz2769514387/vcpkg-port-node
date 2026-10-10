@@ -50,7 +50,8 @@ node_port_add_v8_target(crdtp)
 # 只剩"链 vcpkg 的 libuv"这一条是我们自己的决定。
 # ---------------------------------------------------------------------------
 node_port_add_v8_target(uvwasi)
-target_link_libraries(uvwasi PUBLIC libuv::uv_a)
+node_port_uv_lib(_node_uv)
+target_link_libraries(uvwasi PUBLIC ${_node_uv})
 
 # ---------------------------------------------------------------------------
 # ncrypto —— 蓝图是 deps/ncrypto/ncrypto.gyp，走的是

@@ -42,9 +42,26 @@ endfunction()
 # gyp 的 'none'（头文件集，作用是把设置下发给依赖方）→ CMake 的 INTERFACE 库；
 # 'static_library' → 静态库（工程约定第 1 条：静态单 exe，V8 也不编成 DLL）。
 #
+# vcpkg 的 libuv，目标名**随口径变**：动态口径（`x64-windows` 等）只给 `libuv::uv`，
+# 静态口径才另给 `libuv::uv_a`。node 的 gyp 里链的是"静态那份"，但把名字写死会在动态
+# 口径下直接配置失败（CI 的 `x64-windows` 实测：`libuv::uv_a` not found，连 `tools` /
+# `vendored` / `node` 三处链接一起报）。统一在这里解析成一个名字，调用点只认它。
+function(node_port_uv_lib out)
+  if(TARGET libuv::uv_a)
+    set(${out} libuv::uv_a PARENT_SCOPE)
+  elseif(TARGET libuv::uv)
+    set(${out} libuv::uv PARENT_SCOPE)
+  else()
+    message(FATAL_ERROR "找不到 vcpkg 的 libuv 目标（libuv::uv_a 与 libuv::uv 都没有）")
+  endif()
+endfunction()
+
+
 # 只做"清单 → 目标"，**不接依赖图**：依赖要等所有目标都建出来才接得上
 # （清单里的 dep 有前向引用，而且有两处我们自己的偏离要先处理）。
 # 这里只把名字记进 `NODE_PORT_V8_PENDING_DEPS` 备查，接法见本文件下面那段与 `9.0-P-26`。
+
+
 function(node_port_add_v8_target name)
   string(TOUPPER "${name}" U)
   get_property(_gen GLOBAL PROPERTY NODE_PORT_V8_GEN_DIR)

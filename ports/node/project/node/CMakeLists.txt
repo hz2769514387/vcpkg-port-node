@@ -131,11 +131,12 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_library(NODE_PORT_NGHTTP2_LIB nghttp2 PATHS
   "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
 
+node_port_uv_lib(_node_uv)
 add_library(node_third_party INTERFACE)
 target_link_libraries(node_third_party INTERFACE
   OpenSSL::SSL
   OpenSSL::Crypto
-  libuv::uv_a
+  ${_node_uv}
   llhttp::llhttp_static
   c-ares::cares
   unofficial::brotli::brotlidec

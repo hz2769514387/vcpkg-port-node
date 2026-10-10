@@ -1,9 +1,9 @@
 # 由 gyp2vcpkg 生成 —— 不要手改，改了会被判为过期。
 #   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
-#   指纹    ：../gyp2vcpkg/resolve.py 34eb26e83830e71f
-#             ../gyp2vcpkg/collect.py 69a202ae8e388ee3
-#             ../gyp2vcpkg/generate.py 99aeddd76277b094
-#             ../gyp2vcpkg/_dump_generator.py d3fe1a95334e65ee
+#   指纹    ：../gyp2vcpkg/resolve.py dd1094c2b980abfe
+#             ../gyp2vcpkg/collect.py bad964667d786dc9
+#             ../gyp2vcpkg/generate.py faa73f3b43a0a9ef
+#             ../gyp2vcpkg/_dump_generator.py 1c32cb74b4bccbe1
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2

@@ -221,6 +221,12 @@ string(APPEND _cfg
   "find_library(_node_nghttp2 NAMES nghttp2 PATHS \"\${_node_lib}\" NO_DEFAULT_PATH)\n"
   "if(NOT _node_nghttp2)\n  set(_node_nghttp2 nghttp2)\nendif()\n")
 
+# libuv 的目标名随口径变（见 consume.cmake 的 `node_port_uv_lib`）。这里（顶层）看不到
+# 导入目标 —— 各子目录自己 find_package —— 所以把解析放进**生成的配置**，由消费方在
+# 自己的环境里定夺用哪个名字。
+string(APPEND _cfg
+  "if(TARGET libuv::uv_a)\n  set(_node_uv libuv::uv_a)\nelse()\n  set(_node_uv libuv::uv)\nendif()\n")
+
 # V8 静态库之间有环（GNU ld 单遍解析会漏）→ Linux 用 LINK_GROUP:RESCAN；
 # Apple 的链接器不支持 RESCAN → 库列表重复一遍；Windows 直接列。
 set(_static
@@ -232,7 +238,7 @@ set(_own_rest
   node::node_main node::ncrypto node::ncrypto_engine
   node::nbytes node::merve node::uvwasi node::crdtp)
 set(_third
-  OpenSSL::SSL OpenSSL::Crypto libuv::uv_a llhttp::llhttp_static c-ares::cares
+  OpenSSL::SSL OpenSSL::Crypto "\${_node_uv}" llhttp::llhttp_static c-ares::cares
   unofficial::brotli::brotlidec unofficial::brotli::brotlienc unofficial::brotli::brotlicommon
   ZLIB::ZLIB ada::ada simdjson::simdjson ngtcp2::ngtcp2_static zstd::libzstd_static
   ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3 hdr_histogram::hdr_histogram_static)

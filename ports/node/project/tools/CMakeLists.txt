@@ -33,7 +33,8 @@ node_port_add_v8_target(node_js2c)
 # 两个 vcpkg / 自有目标的链接（清单里的 `_DEPS` 已经点了名，这里照它接）：
 #   simdutf —— V8 自带那份的 CMake 目标（src/v8 建的，所以 src/v8 要**先** add_subdirectory）
 #   libuv   —— vcpkg 的（`调研-1`）
-target_link_libraries(node_js2c PRIVATE simdutf libuv::uv_a)
+node_port_uv_lib(_node_uv)
+target_link_libraries(node_js2c PRIVATE simdutf ${_node_uv})
 
 # ---------------------------------------------------------------------------
 # node_js2c —— 把 lib/*.js 与 deps 里的 JS 打成 C++ 源文件（`node_javascript.cc`）。

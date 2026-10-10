@@ -49,8 +49,14 @@ def product_path(name):
 
 
 def sha16(path):
+    """文件的 sha256 前 16 位（**按 LF 归一化**后再算）。
+
+    git 在 Windows 上会把文本检出成 CRLF；不归一化的话，同一份内容在两台机器上会算出
+    不同指纹 —— CI 的 Windows job 就因此**每次都判"产物不新鲜"**（实测：config.json 与
+    三份 env json 的哈希全部对不上，236 行指纹报错），白白重新生成一遍。
+    """
     with open(path, "rb") as f:
-        return hashlib.sha256(f.read()).hexdigest()[:16]
+        return hashlib.sha256(f.read().replace(b"\r\n", b"\n")).hexdigest()[:16]
 
 
 def _expand_all(node, here):
