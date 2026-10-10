@@ -2,7 +2,7 @@
 #   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
 #   指纹    ：../gyp2vcpkg/resolve.py 34eb26e83830e71f
 #             ../gyp2vcpkg/collect.py 69a202ae8e388ee3
-#             ../gyp2vcpkg/generate.py e471cc445dfec174
+#             ../gyp2vcpkg/generate.py 99aeddd76277b094
 #             ../gyp2vcpkg/_dump_generator.py d3fe1a95334e65ee
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
@@ -67,6 +67,7 @@ set(NODE_PORT_V8_NODE_DEFINES_WIN
   "BUILDING_V8_SHARED=1"
   "BUILDING_UV_SHARED=1"
   "NOMINMAX"
+  "NODE_ARCH=\"x64\""
   "FD_SETSIZE=1024"
   "NODE_PLATFORM=\"win32\""
   "_UNICODE=1"
@@ -75,18 +76,45 @@ set(NODE_PORT_V8_NODE_DEFINES_WIN
   "UNICODE"
   "_UNICODE"
   "_WINSOCK_DEPRECATED_NO_WARNINGS"
+  "AES_ASM"
+  "CMLL_ASM"
+  "GHASH_ASM"
+  "OPENSSL_BN_ASM_GF2m"
+  "OPENSSL_BN_ASM_MONT5"
+  "OPENSSL_IA32_SSE2"
+  "PADLOCK_ASM"
+  "RC4_ASM"
+  "WHIRLPOOL_ASM"
+  "X25519_ASM"
 )
 set(NODE_PORT_V8_NODE_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
+  "NODE_ARCH=\"x64\""
   "NODE_PLATFORM=\"linux\""
+  "__POSIX__"
+  "_LARGEFILE_SOURCE"
   "_POSIX_C_SOURCE=200112"
   "OPENSSL_USE_NODELETE"
+  "L_ENDIAN"
+  "AES_ASM"
+  "CMLL_ASM"
+  "GHASH_ASM"
+  "OPENSSL_BN_ASM_GF2m"
+  "OPENSSL_BN_ASM_MONT5"
+  "OPENSSL_IA32_SSE2"
+  "PADLOCK_ASM"
+  "RC4_ASM"
+  "WHIRLPOOL_ASM"
+  "X25519_ASM"
 )
 set(NODE_PORT_V8_NODE_DEFINES_MAC
   "_DARWIN_USE_64_BIT_INODE=1"
   "NODE_ARCH=\"arm64\""
+  "__POSIX__"
   "NODE_RELEASE_URLBASE=\"https://nodejs.org/download/release/\""
   "NODE_PLATFORM=\"darwin\""
+  "_LARGEFILE_SOURCE"
+  "L_ENDIAN"
   "ECP_SM2P256_ASM"
   "OPENSSL_SM3_ASM"
   "SM4_ASM"

@@ -225,25 +225,28 @@ def _plat_suffix(label):
 
 
 def _split_common(per_plat_lists):
-    """N 平台的"公共 / 各平台独有"。
+    """N 平台的"公共 / 各平台其余"。
 
-    返回 `(common, [每平台独有一份])`：
+    返回 `(common, [每平台一份])`：
       * `common` = 所有平台的交集（按第一个平台的顺序）；
-      * 第 i 份 = 第 i 个平台里"其余平台都没有"的那些（按该平台自己的顺序）。
-    两平台时与旧的 `_common_and_only(a, b)` 结果一致（win 独有 = win − linux）。
+      * 第 i 份 = 第 i 个平台里**除去公共**的全部（按该平台自己的顺序）。
+
+    ⚠ 第 i 份**不能**写成"第 i 个平台独有"（`x not in 其它平台并集`）：那样在
+    **3 个及以上平台**时会丢东西 —— 只被 2 个平台共有的项，既进不了交集，又不被
+    任何一个平台认作"独有"，于是谁都不带、直接消失。实测踩到两次：
+      * `V8_TARGET_ARCH_X64`（win+linux 共有）消失 → Linux 编 V8 时
+        `codegen/reglist.h` 选不到 x64 架构实现，级联报
+        "`RegisterFrameState` 没有 `free`/`used`/`empty` 成员"；
+      * `V8_ENABLE_SYSTEM_INSTRUMENTATION`（win+mac 共有）消失 → macOS 编
+        `libplatform/tracing/recorder-mac.cc` 直接 `#error`。
+    两平台时与本函数旧行为（win 独有 = win − linux）结果一致。
     """
     if len(per_plat_lists) == 1:
         return list(per_plat_lists[0]), [[]]
     sets = [set(x) for x in per_plat_lists]
     inter = set.intersection(*sets)
     common = [x for x in per_plat_lists[0] if x in inter]
-    per = []
-    for i, lst in enumerate(per_plat_lists):
-        others = set()
-        for j, s in enumerate(sets):
-            if j != i:
-                others |= s
-        per.append([x for x in lst if x not in others])
+    per = [[x for x in lst if x not in inter] for lst in per_plat_lists]
     return common, per
 
 

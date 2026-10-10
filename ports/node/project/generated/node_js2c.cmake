@@ -2,7 +2,7 @@
 #   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
 #   指纹    ：../gyp2vcpkg/resolve.py 34eb26e83830e71f
 #             ../gyp2vcpkg/collect.py 69a202ae8e388ee3
-#             ../gyp2vcpkg/generate.py e471cc445dfec174
+#             ../gyp2vcpkg/generate.py 99aeddd76277b094
 #             ../gyp2vcpkg/_dump_generator.py d3fe1a95334e65ee
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
@@ -47,10 +47,14 @@ set(NODE_PORT_V8_NODE_JS2C_DEFINES_WIN
 )
 set(NODE_PORT_V8_NODE_JS2C_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
+  "NODE_JS2C_USE_STRING_LITERALS"
+  "_LARGEFILE_SOURCE"
   "_POSIX_C_SOURCE=200112"
 )
 set(NODE_PORT_V8_NODE_JS2C_DEFINES_MAC
   "_DARWIN_USE_64_BIT_INODE=1"
+  "NODE_JS2C_USE_STRING_LITERALS"
+  "_LARGEFILE_SOURCE"
 )
 
 set(NODE_PORT_V8_NODE_JS2C_INCLUDE_DIRS
