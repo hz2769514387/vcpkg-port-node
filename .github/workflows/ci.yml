@@ -108,7 +108,9 @@ jobs:
         run: |
           # runner 预装了另一个版本的 vcpkg（C:\vcpkg）—— 我们要用自己的，顺手删掉省空间。
           Remove-Item -Recurse -Force C:\Android, C:\hostedtoolcache, C:\vcpkg, C:\tools\Android -ErrorAction SilentlyContinue
-          Get-PSDrive C | Select-Object Used,Free
+          # 打印**所有**盘：工作区与 vcpkg 其实在 D:（RUNNER_TEMP=`D:\a\_temp`），
+          # 只看 C: 会漏掉真正吃空间的那块盘。
+          Get-PSDrive -PSProvider FileSystem | Select-Object Name,Used,Free
 
       - name: 清理磁盘（macOS）
         if: runner.os == 'macOS'
