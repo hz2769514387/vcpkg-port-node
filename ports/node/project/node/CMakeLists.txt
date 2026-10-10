@@ -73,7 +73,8 @@ target_link_libraries(node_base PRIVATE
 # libnode（node_shared=false → 静态库；gyp 里它的"源"是 JS，不参与编译，故为 INTERFACE）。
 add_library(libnode INTERFACE)
 
-# V8 的静态库之间有**环**，GNU ld 单遍解析会漏 → 非 Windows 用 LINK_GROUP:RESCAN。
+# V8 的静态库之间有**环**：GNU ld 单遍解析会漏 → Linux 用 LINK_GROUP:RESCAN；
+# Apple 的链接器**不支持** RESCAN（用"库列表重复一遍"代替）；Windows 直接列。
 set(NODE_PORT_NODE_V8_STATIC_LIBS
   node_base
   v8_base_without_compiler
@@ -96,8 +97,18 @@ set(NODE_PORT_NODE_V8_INTERFACE_LIBS
   torque_runtime_support
   torque_generated_initializers)
 if(WIN32)
+  # Windows：MSVC 的 link.exe 不认 LINK_GROUP，直接列（它自己会按需重扫归档）。
   target_link_libraries(libnode INTERFACE ${NODE_PORT_NODE_V8_STATIC_LIBS} ${NODE_PORT_NODE_V8_INTERFACE_LIBS})
+elseif(APPLE)
+  # Apple：链接器**不支持** $<LINK_GROUP:RESCAN>（CMake 直接报
+  # "Feature 'RESCAN' … is not supported for the 'CXX' link language"，mac CI 实测）。
+  # 而 V8 这批静态库之间确实有环 —— 用"把库列表再列一遍"代替 rescan。
+  target_link_libraries(libnode INTERFACE
+    ${NODE_PORT_NODE_V8_STATIC_LIBS}
+    ${NODE_PORT_NODE_V8_INTERFACE_LIBS}
+    ${NODE_PORT_NODE_V8_STATIC_LIBS})
 else()
+  # Linux：GNU ld 单遍解析会漏掉环里的符号 → 用 LINK_GROUP:RESCAN（ld 支持它）。
   target_link_libraries(libnode INTERFACE
     "$<LINK_GROUP:RESCAN,${NODE_PORT_NODE_V8_STATIC_LIBS}>"
     ${NODE_PORT_NODE_V8_INTERFACE_LIBS})

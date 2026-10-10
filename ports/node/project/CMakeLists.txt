@@ -216,7 +216,8 @@ string(APPEND _cfg
   "find_library(_node_nghttp2 NAMES nghttp2 PATHS \"\${_node_lib}\" NO_DEFAULT_PATH)\n"
   "if(NOT _node_nghttp2)\n  set(_node_nghttp2 nghttp2)\nendif()\n")
 
-# V8 静态库之间有环（GNU ld 单遍解析会漏）→ 非 Windows 用 LINK_GROUP:RESCAN。
+# V8 静态库之间有环（GNU ld 单遍解析会漏）→ Linux 用 LINK_GROUP:RESCAN；
+# Apple 的链接器不支持 RESCAN → 库列表重复一遍；Windows 直接列。
 set(_static
   node::node_base node::v8_base_without_compiler node::v8_compiler
   node::v8_init node::v8_initializers node::v8_initializers_slow
@@ -239,6 +240,11 @@ if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
   string(APPEND _cfg
     "target_link_libraries(node::node INTERFACE"
     " \"$<LINK_GROUP:RESCAN,${_static}>\" ${_own_rest} ${_third} \"\${_node_nghttp2}\")\n")
+elseif(APPLE)
+  # Apple 不支持 $<LINK_GROUP:RESCAN>（见 src/node 的同一处说明）→ 库列表重复一遍。
+  string(APPEND _cfg
+    "target_link_libraries(node::node INTERFACE"
+    " ${_static} ${_own_rest} ${_third} \"\${_node_nghttp2}\" ${_static})\n")
 else()
   string(APPEND _cfg
     "target_link_libraries(node::node INTERFACE"

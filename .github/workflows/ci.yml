@@ -6,12 +6,20 @@
 #   2. 再用 test/ 里的消费端工程 find_package(node) + 链接 node::node + 真跑一段 JS；
 #   3. 覆盖三个平台：x64-linux / x64-windows / arm64-osx。
 #
-# 资源是头号约束（标准 runner 只有 4C/16G/14G 可用磁盘、单 job 6h；macos arm64 更只有 3C/7G）：
+# 资源约束（标准 runner 4C/16G/14G 可用磁盘、单 job 6h；macOS arm64 更只有 3C/7G）：
 #   * 先清 runner 预装的大件腾磁盘；
+#   * 用 `triplets/*-ci.cmake`（**只在 triplet 里设 VCPKG_BUILD_TYPE=release 才算数**，
+#     环境变量不生效 —— mac CI 实测会把 debug 也编一遍）；
 #   * `--clean-after-build`（每个包编完立即清 buildtrees/downloads/packages）；
-#   * 只编 Release（VCPKG_BUILD_TYPE=release，避免 debug+release 双份）；
-#   * 并发度收着用（VCPKG_MAX_CONCURRENCY），链接/重编译时内存尖峰不再叠乘。
-# 真正的磁盘/耗时实测数据以本工作流的首次运行为准（见 docs/调研文档.md §4.5）。
+#   * 并发度收着用（VCPKG_MAX_CONCURRENCY）。
+#
+# 首次运行的经验（2026-10-10，run #1）：
+#   * lint 用 `vcpkg x-ci-verify-versions` 是**误用** —— 那是给 vcpkg 自身仓库用的，
+#     要求在 vcpkg 源码的 git 仓库里跑；改成"校验我们自己的 versions/ports 一致性"；
+#   * Windows 上 GNU tar 会把 `-C D:\...` 当成远程主机（`Cannot connect to D:`）→
+#     改为先 cd 到 $RUNNER_TEMP 再用相对路径；
+#   * macOS 依赖与三平台片段生成都成功；唯一失败是 `$<LINK_GROUP:RESCAN>` Apple 不支持
+#     （已改为 Apple 走"库列表重复一遍"）。
 
 name: ci
 
@@ -23,14 +31,12 @@ on:
 env:
   # 指定版本：与本地 C:\work\vcpkg-2026.07.29.zip 同源（该 Release 无二进制附件，用源码包自举）。
   VCPKG_REF: "2026.07.29"
-  # 生产性/省资源相关的环境变量。
   VCPKG_DISABLE_METRICS: "1"
-  VCPKG_BUILD_TYPE: "release"
-  VCPKG_MAX_CONCURRENCY: "2"     # macos arm64 只有 3 核；linux/windows 也在 §4.5.2 的建议区间内
+  VCPKG_MAX_CONCURRENCY: "2"     # macos arm64 只有 3 核；linux/windows 也在调研 §4.5.2 的建议区间内
 
 jobs:
   # ---------------------------------------------------------------------------
-  # L1：静态校验（秒级、必跑）。不依赖编译，所以不受磁盘限制。
+  # L1：静态校验。不依赖编译，所以不受磁盘限制；**不是 build 的前置**（build 永远跑）。
   # ---------------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
@@ -44,38 +50,41 @@ jobs:
           for f in ports/node/vcpkg.json ports/node/portfile.cmake ports/node/usage; do
             test -f "$f" || { echo "缺文件：$f"; exit 1; }
           done
-          python3 -c "import json,sys; json.load(open('ports/node/vcpkg.json'))" && echo "vcpkg.json JSON 合法"
-          test -f versions/node.json -o -f versions/n-/node.json || { echo "缺 versions 版本库条目"; exit 1; }
+          python3 -c "import json;json.load(open('ports/node/vcpkg.json'))" && echo "vcpkg.json JSON 合法"
+          test -f versions/n-/node.json || { echo "缺 versions/n-/node.json"; exit 1; }
+          python3 -c "import json;json.load(open('versions/n-/node.json'))" && echo "versions 条目 JSON 合法"
 
-      - name: vcpkg 版本库一致性（x-ci-verify-versions，参考性、非阻断）
-        continue-on-error: true
+      - name: versions 记录的 git-tree 与 ports/node 实际内容一致
         shell: bash
         run: |
-          curl -L -o vcpkg.tar.gz "https://github.com/microsoft/vcpkg/archive/refs/tags/${VCPKG_REF}.tar.gz"
-          mkdir -p "$RUNNER_TEMP/vcpkg-src"
-          tar -xzf vcpkg.tar.gz -C "$RUNNER_TEMP/vcpkg-src" --strip-components=1
-          "$RUNNER_TEMP/vcpkg-src/bootstrap-vcpkg.sh" -disableMetrics
-          "$RUNNER_TEMP/vcpkg-src/vcpkg" x-ci-verify-versions --verbose
+          set -euo pipefail
+          want="$(python3 -c "import json;print(json.load(open('versions/n-/node.json'))['versions'][0]['git-tree'])")"
+          got="$(git rev-parse HEAD:ports/node)"
+          echo "versions 里记的：$want"
+          echo "HEAD 里的     ：$got"
+          if [ "$want" != "$got" ]; then
+            echo "::error::versions/n-/node.json 的 git-tree 与 ports/node 不一致 —— 改了 port 就要刷新它"
+            echo "刷新方式：git add ports/node && git write-tree  然后取 <root tree>:ports/node"
+            exit 1
+          fi
 
   # ---------------------------------------------------------------------------
   # L2 + L3：装依赖 + 编 port + 消费端冒烟。
   # ---------------------------------------------------------------------------
   build:
-    needs: lint
     strategy:
       fail-fast: false
       matrix:
         include:
           - os: ubuntu-latest
-            triplet: x64-linux
+            triplet: x64-linux-ci      # = 内置 x64-linux + 只出 Release
             allow_failure: false
           - os: windows-latest
-            triplet: x64-windows       # 对齐 vcpkg 默认：MSVC + 动态 CRT
+            triplet: x64-windows-ci    # = vcpkg 默认口径：MSVC + 动态 CRT（+ 只出 Release）
             allow_failure: false
           - os: macos-latest         # arm64（3C/7G）
-            triplet: arm64-osx
-            # macOS 的 gyp 细节（哪些目标/动作存在、embedded 产物形态）无法在本地验证，
-            # 首轮很可能需要迭代 —— 先允许失败，别挡住 linux/windows 的结论。
+            triplet: arm64-osx-ci
+            # macOS 的 gyp/链接细节仍在收敛（RESCAN 刚修）；先允许失败，别挡住 linux/windows。
             allow_failure: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.allow_failure }}
@@ -114,39 +123,43 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          curl -L -o "$RUNNER_TEMP/vcpkg.tar.gz" \
+          # 先 cd 到 $RUNNER_TEMP 再用**相对路径**：Windows 上 GNU tar 会把 `-C D:\...`
+          # 当成远程主机（`Cannot connect to D: resolve failed`）。
+          cd "$RUNNER_TEMP"
+          curl -L -o vcpkg.tar.gz \
             "https://github.com/microsoft/vcpkg/archive/refs/tags/${VCPKG_REF}.tar.gz"
-          mkdir -p "$RUNNER_TEMP/vcpkg-src"
-          tar -xzf "$RUNNER_TEMP/vcpkg.tar.gz" -C "$RUNNER_TEMP/vcpkg-src" --strip-components=1
+          mkdir -p vcpkg-src
+          tar -xzf vcpkg.tar.gz -C vcpkg-src --strip-components=1
           if [ "$RUNNER_OS" = "Windows" ]; then
             cmd.exe //c "$(cygpath -w "$RUNNER_TEMP/vcpkg-src/bootstrap-vcpkg.bat")" -disableMetrics
           else
-            "$RUNNER_TEMP/vcpkg-src/bootstrap-vcpkg.sh" -disableMetrics
+            ./vcpkg-src/bootstrap-vcpkg.sh -disableMetrics
           fi
-          "$RUNNER_TEMP/vcpkg-src/vcpkg" version
+          ./vcpkg-src/vcpkg version
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_ENV"
           echo "$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_PATH"
 
       # ---- macOS：导出 gyp 变量环境（darwin-arm64）--------------------------
       #
       # gyp2vcpkg 需要每个平台一份"官方式变量环境"（= 官方二进制导出的 process.config）。
-      # win/linux 两份已入库；macOS 这份按已授权方案在 mac runner 上现导出：
-      # 取官方 darwin-arm64 的 node，把它 `process.config` 落成 env/darwin-arm64.json。
-      # 有了它，port 构建期的 `gyp2vcpkg check` 会判定"片段没覆盖 mac 平台"→ 自动重新
-      # 生成三平台片段（check 里的平台覆盖判据）。
+      # win/linux 两份已入库；macOS 这份在 mac runner 上现导出：取官方 darwin-arm64 的 node，
+      # 把它的 `process.config` 落成 env/darwin-arm64.json。
+      # 有了它，port 构建期的 `gyp2vcpkg check` 会判定"片段没覆盖 mac 平台"→ 自动重新生成
+      # 三平台片段（check 里的平台覆盖判据）。
       - name: 导出 macOS 变量环境（darwin-arm64）
         if: runner.os == 'macOS'
         shell: bash
         run: |
           set -euo pipefail
+          cd "$RUNNER_TEMP"
           V="24.21.0"
-          curl -L -o "$RUNNER_TEMP/node-darwin.tar.gz" \
+          curl -L -o node-darwin.tar.gz \
             "https://nodejs.org/dist/v${V}/node-v${V}-darwin-arm64.tar.gz"
-          mkdir -p "$RUNNER_TEMP/node-darwin"
-          tar -xzf "$RUNNER_TEMP/node-darwin.tar.gz" -C "$RUNNER_TEMP/node-darwin" --strip-components=1
+          mkdir -p node-darwin
+          tar -xzf node-darwin.tar.gz -C node-darwin --strip-components=1
           "$RUNNER_TEMP/node-darwin/bin/node" -p "JSON.stringify(process.config, null, 2)" \
-            > ports/node/gyp2vcpkg/env/darwin-arm64.json
-          python3 -c "import json;d=json.load(open('ports/node/gyp2vcpkg/env/darwin-arm64.json'));print('variables:',len(d.get('variables',{})))"
+            > "$GITHUB_WORKSPACE/ports/node/gyp2vcpkg/env/darwin-arm64.json"
+          python3 -c "import json;d=json.load(open('$GITHUB_WORKSPACE/ports/node/gyp2vcpkg/env/darwin-arm64.json'));print('variables:',len(d.get('variables',{})))"
 
       # ---- L2：装 port（含 16 个官方依赖）-----------------------------------
       - name: 装 node port（overlay）
@@ -155,6 +168,7 @@ jobs:
           set -euo pipefail
           vcpkg install "node:${{ matrix.triplet }}" \
             --overlay-ports="$GITHUB_WORKSPACE/ports" \
+            --overlay-triplets="$GITHUB_WORKSPACE/triplets" \
             --clean-after-build
           df -h || true
 
@@ -167,6 +181,7 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET="${{ matrix.triplet }}" \
+            -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/triplets" \
             -DVCPKG_MANIFEST_MODE=OFF
           cmake --build build
           SMOKE=./build/smoke

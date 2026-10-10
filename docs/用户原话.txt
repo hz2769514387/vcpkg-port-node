@@ -13,7 +13,7 @@ b：为了方便以后推送到vcpkg中成为正式port，一开始就要按正�
 c：github actions上的runner环境是重点，我希望用当前的vcpkg版本（C:\work\vcpkg-2026.07.29.zip)，也就是在ci机器上装这个版本的vcpkg。
 8.先写调研文档，有什么疑问要主动多问我。
 
-
+ci的日志已经放仓库了。linux还在编译中。win和mac报错了。或者还需要如何看结果，告诉我去处理
 
 
 
