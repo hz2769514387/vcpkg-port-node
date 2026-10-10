@@ -28,6 +28,12 @@ on:
   pull_request:
   workflow_dispatch:
 
+# 同一个分支/PR 上只保留最新一次运行：新 push 会**取消**上一次还没跑完的任务
+# （每个账号的并发额度有限；本 port 一次要编 V8，绝不能几个旧 run 叠着占额度）。
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 env:
   # 指定版本：与本地 C:\work\vcpkg-2026.07.29.zip 同源（该 Release 无二进制附件，用源码包自举）。
   VCPKG_REF: "2026.07.29"
@@ -162,6 +168,17 @@ jobs:
           "$RUNNER_TEMP/node-darwin/bin/node" -p "JSON.stringify(process.config, null, 2)" \
             > "$GITHUB_WORKSPACE/ports/node/gyp2vcpkg/env/darwin-arm64.json"
           python3 -c "import json;d=json.load(open('$GITHUB_WORKSPACE/ports/node/gyp2vcpkg/env/darwin-arm64.json'));print('variables:',len(d.get('variables',{})))"
+
+      # 把导出的环境文件**上传成 artifact**：这样不需要自己有一台 mac —— 在 run 页面
+      # 下载它、提交进仓库，之后 CI 就可以不再现导出（那一步也能删掉），片段也能一次生成
+      # 三平台入库。失败也要传（if: always()）。
+      - name: 上传 darwin-arm64 变量环境（artifact）
+        if: always() && runner.os == 'macOS'
+        uses: actions/upload-artifact@v4
+        with:
+          name: darwin-arm64-env
+          path: ports/node/gyp2vcpkg/env/darwin-arm64.json
+          if-no-files-found: ignore
 
       # ---- L2：装 port（含 16 个官方依赖）-----------------------------------
       - name: 装 node port（overlay）
