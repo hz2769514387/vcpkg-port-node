@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/node.gyp（目标 node_text_start，gyp 里的类型 none）
-#   编译单元：win 0 / linux 1（另外 win 0、linux 0 个是头文件）
+#   编译单元：win 0 / linux 1 / mac 0（另外 win 0、linux 0、mac 0 个是头文件）
 
 set(NODE_PORT_V8_NODE_TEXT_START_IS_INTERFACE TRUE)
 set(NODE_PORT_V8_NODE_TEXT_START_IS_EXECUTABLE FALSE)
@@ -17,6 +18,8 @@ set(NODE_PORT_V8_NODE_TEXT_START_SOURCES_WIN
 )
 set(NODE_PORT_V8_NODE_TEXT_START_SOURCES_LINUX
   ${NODE_ROOT}/src/large_pages/node_text_start.S
+)
+set(NODE_PORT_V8_NODE_TEXT_START_SOURCES_MAC
 )
 
 set(NODE_PORT_V8_NODE_TEXT_START_DEFINES
@@ -37,12 +40,17 @@ set(NODE_PORT_V8_NODE_TEXT_START_DEFINES_WIN
 set(NODE_PORT_V8_NODE_TEXT_START_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
 )
+set(NODE_PORT_V8_NODE_TEXT_START_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+)
 
 set(NODE_PORT_V8_NODE_TEXT_START_INCLUDE_DIRS
 )
 set(NODE_PORT_V8_NODE_TEXT_START_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_NODE_TEXT_START_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_NODE_TEXT_START_INCLUDE_DIRS_MAC
 )
 
 set(NODE_PORT_V8_NODE_TEXT_START_CFLAGS_LINUX
@@ -57,6 +65,13 @@ set(NODE_PORT_V8_NODE_TEXT_START_CFLAGS_LINUX
   "-m64"
   "-O3"
   "-fno-omit-frame-pointer"
+)
+set(NODE_PORT_V8_NODE_TEXT_START_CFLAGS_MAC
+  "-Wall"
+  "-Wextra"
+  "-Wno-unused-parameter"
+  "-mbranch-protection=standard"
+  "-O3"
 )
 set(NODE_PORT_V8_NODE_TEXT_START_CFLAGS_CC_LINUX
   "-fno-rtti"

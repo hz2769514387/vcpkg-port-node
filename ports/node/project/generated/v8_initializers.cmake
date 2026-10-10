@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/tools/v8_gypfiles/v8.gyp（目标 v8_initializers，gyp 里的类型 static_library）
-#   编译单元：win 295 / linux 294（另外 win 289、linux 288 个是头文件）
+#   编译单元：win 295 / linux 294 / mac 294（另外 win 289、linux 288、mac 288 个是头文件）
 
 set(NODE_PORT_V8_V8_INITIALIZERS_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_V8_INITIALIZERS_IS_EXECUTABLE FALSE)
@@ -606,6 +607,302 @@ set(NODE_PORT_V8_V8_INITIALIZERS_SOURCES_LINUX
   ${NODE_PORT_V8_GENERATED}/torque-generated/src/debug/debug-wasm-objects-tq-csa.cc
   ${NODE_PORT_V8_GENERATED}/torque-generated/src/wasm/wasm-objects-tq-csa.cc
 )
+set(NODE_PORT_V8_V8_INITIALIZERS_SOURCES_MAC
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-array-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-async-function-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-async-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-async-generator-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-async-iterator-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-bigint-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-call-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-collections-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-constructor-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-conversion-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-date-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-generator-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-global-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-handler-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-ic-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-internal-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-interpreter-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-intl-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-iterator-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-lazy-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-microtask-queue-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-number-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-number-tsa.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-object-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-promise-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-proxy-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-regexp-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-shadow-realm-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-sharedarraybuffer-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-string-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-string-tsa.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-temporal-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-typed-array-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/growable-fixed-array-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/profile-data-reader.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/setup-builtins-internal.cc
+  ${NODE_PORT_V8_ROOT}/src/codegen/code-stub-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/builtin-compiler.cc
+  ${NODE_PORT_V8_ROOT}/src/heap/setup-heap-internal.cc
+  ${NODE_PORT_V8_ROOT}/src/ic/accessor-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/ic/binary-op-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/ic/keyed-store-generic.cc
+  ${NODE_PORT_V8_ROOT}/src/ic/unary-op-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/interpreter/interpreter-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/interpreter/interpreter-generator-tsa.cc
+  ${NODE_PORT_V8_ROOT}/src/interpreter/interpreter-generator.cc
+  ${NODE_PORT_V8_ROOT}/src/interpreter/interpreter-intrinsics-generator.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/builtins-wasm-gen.cc
+  ${NODE_PORT_V8_ROOT}/src/builtins/arm64/builtins-arm64.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/enum-verifiers.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/exported-macros-assembler.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/aggregate-error-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-at-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-concat-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-copywithin-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-every-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-filter-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-find-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-findindex-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-findlast-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-findlastindex-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-flat-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-foreach-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-from-async-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-from-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-isarray-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-join-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-lastindexof-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-map-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-of-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-reduce-right-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-reduce-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-reverse-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-shift-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-slice-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-some-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-splice-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-to-reversed-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-to-sorted-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-to-spliced-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-unshift-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-with-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/arraybuffer-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/base-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/boolean-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/builtins-bigint-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/builtins-string-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/cast-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/collections-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/constructor-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/conversion-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/convert-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/console-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/data-view-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/finalization-registry-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/frames-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/frame-arguments-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/function-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/growable-fixed-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/ic-callable-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/ic-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/internal-coverage-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/internal-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/iterator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/iterator-from-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/iterator-helpers-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/map-groupby-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/math-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/number-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/object-fromentries-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/object-groupby-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/object-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-abstract-operations-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-all-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-all-element-closure-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-any-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-constructor-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-finally-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-jobs-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-misc-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-race-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-reaction-job-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-resolve-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-then-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-try-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/promise-withresolvers-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-constructor-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-delete-property-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-get-property-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-get-prototype-of-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-has-property-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-is-extensible-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-prevent-extensions-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-revocable-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-revoke-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-set-property-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-set-prototype-of-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/proxy-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/reflect-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-exec-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-match-all-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-match-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-replace-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-search-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-source-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-split-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-test-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/regexp-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/set-difference-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/set-intersection-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/set-is-disjoint-from-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/set-is-subset-of-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/set-is-superset-of-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/set-symmetric-difference-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/set-union-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-at-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-endswith-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-html-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-includes-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-indexof-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-iswellformed-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-iterator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-match-search-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-pad-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-repeat-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-replaceall-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-slice-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-startswith-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-substr-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-substring-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-towellformed-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/string-trim-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/suppressed-error-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/symbol-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/torque-internal-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-at-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-createtypedarray-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-every-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-entries-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-filter-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-find-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-findindex-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-findlast-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-findlastindex-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-foreach-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-from-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-keys-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-of-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-reduce-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-reduceright-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-set-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-slice-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-some-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-sort-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-subarray-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-to-reversed-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-to-sorted-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-values-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-with-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/typed-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/weak-ref-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/ic/handler-configuration-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/allocation-site-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/api-callbacks-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/arguments-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/bigint-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/call-site-info-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/cell-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/bytecode-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/contexts-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/data-handler-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/debug-objects-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/descriptor-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/embedder-data-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/feedback-cell-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/feedback-vector-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/fixed-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/foreign-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/free-space-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/heap-number-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/heap-object-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-array-buffer-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-atomics-synchronization-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-collection-iterator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-collection-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-disposable-stack-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-function-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-generator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-iterator-helpers-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-objects-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-promise-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-proxy-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-raw-json-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-regexp-string-iterator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-regexp-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-shadow-realm-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-shared-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-struct-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-temporal-objects-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-weak-refs-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/literal-objects-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/map-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/megadom-handler-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/microtask-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/module-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/name-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/oddball-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/hole-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/trusted-object-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/ordered-hash-table-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/primitive-heap-object-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/promise-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/property-array-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/property-cell-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/property-descriptor-object-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/prototype-info-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/regexp-match-info-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/scope-info-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/script-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/shared-function-info-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/source-text-module-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/string-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/struct-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/swiss-hash-table-helpers-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/swiss-name-dictionary-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/synthetic-module-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/template-objects-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/templates-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/torque-defined-classes-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/turbofan-types-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/turboshaft-types-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/test/torque/test-torque-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/third_party/v8/builtins/array-sort-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/intl-objects-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-break-iterator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-collator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-date-time-format-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-display-names-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-duration-format-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-list-format-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-locale-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-number-format-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-plural-rules-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-relative-time-format-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-segment-iterator-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-segmenter-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/objects/js-segments-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/js-to-js-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/wasm-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/builtins/wasm-strings-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/debug/debug-wasm-objects-tq-csa.cc
+  ${NODE_PORT_V8_GENERATED}/torque-generated/src/wasm/wasm-objects-tq-csa.cc
+)
 
 set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES
   "_GLIBCXX_USE_CXX11_ABI=1"
@@ -616,12 +913,10 @@ set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES
   "BUILDING_V8_PLATFORM_SHARED"
   "OPENSSL_NO_PINSHARED"
   "OPENSSL_THREADS"
-  "V8_TARGET_ARCH_X64"
   "V8_HAVE_TARGET_OS"
   "V8_EMBEDDER_STRING=\"-node.53\""
   "ENABLE_DISASSEMBLER"
   "V8_PROMISE_INTERNAL_FIELD_COUNT=1"
-  "V8_SHORT_BUILTIN_CALLS"
   "OBJECT_PRINT"
   "V8_INTL_SUPPORT"
   "V8_ATOMIC_OBJECT_FIELD_WRITES"
@@ -642,7 +937,6 @@ set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES
   "V8_ALLOCATION_FOLDING"
   "V8_ALLOCATION_SITE_TRACKING"
   "V8_ADVANCED_BIGINT_ALGORITHMS"
-  "V8_ENABLE_WASM_SIMD256_REVEC"
 )
 set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES_WIN
   "WIN32"
@@ -655,7 +949,6 @@ set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES_WIN
   "_WIN32_WINNT=0x0A00"
   "_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS"
   "V8_TARGET_OS_WIN"
-  "V8_ENABLE_SYSTEM_INSTRUMENTATION"
   "V8_ENABLE_ETW_STACK_WALKING"
 )
 set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES_LINUX
@@ -663,6 +956,11 @@ set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES_LINUX
   "V8_TARGET_OS_LINUX"
   "ENABLE_GDB_JIT_INTERFACE"
   "V8_ENABLE_PRIVATE_MAPPING_FORK_OPTIMIZATION"
+)
+set(NODE_PORT_V8_V8_INITIALIZERS_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+  "V8_TARGET_ARCH_ARM64"
+  "V8_TARGET_OS_MACOS"
 )
 
 set(NODE_PORT_V8_V8_INITIALIZERS_INCLUDE_DIRS
@@ -676,6 +974,8 @@ set(NODE_PORT_V8_V8_INITIALIZERS_INCLUDE_DIRS
 set(NODE_PORT_V8_V8_INITIALIZERS_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_V8_INITIALIZERS_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_V8_INITIALIZERS_INCLUDE_DIRS_MAC
 )
 
 # gyp 的 `dependencies`（跨平台取并集；按名字去重，调用方自己映射）
@@ -714,12 +1014,19 @@ set(NODE_PORT_V8_V8_INITIALIZERS_CFLAGS_LINUX
   "-ffunction-sections"
   "-O3"
 )
+set(NODE_PORT_V8_V8_INITIALIZERS_CFLAGS_MAC
+  "-O3"
+)
 set(NODE_PORT_V8_V8_INITIALIZERS_CFLAGS_CC_LINUX
   "-fno-rtti"
   "-fno-exceptions"
   "-fno-strict-aliasing"
   "-std=gnu++20"
   "-Wno-invalid-offsetof"
+)
+set(NODE_PORT_V8_V8_INITIALIZERS_CFLAGS_CC_MAC
+  "-Wno-invalid-offsetof"
+  "-Wno-nullability-completeness"
 )
 set(NODE_PORT_V8_V8_INITIALIZERS_LDFLAGS_LINUX
   "-pthread"

@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/deps/inspector_protocol/inspector_protocol.gyp（目标 crdtp，gyp 里的类型 static_library）
-#   编译单元：win 9 / linux 9（另外 win 13、linux 13 个是头文件）
+#   编译单元：win 9 / linux 9 / mac 9（另外 win 13、linux 13、mac 13 个是头文件）
 
 set(NODE_PORT_V8_CRDTP_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_CRDTP_IS_EXECUTABLE FALSE)
@@ -25,6 +26,17 @@ set(NODE_PORT_V8_CRDTP_SOURCES_WIN
   ${NODE_ROOT}/deps/inspector_protocol/crdtp/status.cc
 )
 set(NODE_PORT_V8_CRDTP_SOURCES_LINUX
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/cbor.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/dispatch.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/error_support.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/json.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/json_platform.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/protocol_core.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/serializable.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/span.cc
+  ${NODE_ROOT}/deps/inspector_protocol/crdtp/status.cc
+)
+set(NODE_PORT_V8_CRDTP_SOURCES_MAC
   ${NODE_ROOT}/deps/inspector_protocol/crdtp/cbor.cc
   ${NODE_ROOT}/deps/inspector_protocol/crdtp/dispatch.cc
   ${NODE_ROOT}/deps/inspector_protocol/crdtp/error_support.cc
@@ -54,6 +66,9 @@ set(NODE_PORT_V8_CRDTP_DEFINES_WIN
 set(NODE_PORT_V8_CRDTP_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
 )
+set(NODE_PORT_V8_CRDTP_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+)
 
 set(NODE_PORT_V8_CRDTP_INCLUDE_DIRS
   ${NODE_ROOT}/deps/inspector_protocol
@@ -61,6 +76,8 @@ set(NODE_PORT_V8_CRDTP_INCLUDE_DIRS
 set(NODE_PORT_V8_CRDTP_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_CRDTP_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_CRDTP_INCLUDE_DIRS_MAC
 )
 
 set(NODE_PORT_V8_CRDTP_CFLAGS_LINUX
@@ -71,6 +88,9 @@ set(NODE_PORT_V8_CRDTP_CFLAGS_LINUX
   "-m64"
   "-O3"
   "-fno-omit-frame-pointer"
+)
+set(NODE_PORT_V8_CRDTP_CFLAGS_MAC
+  "-O3"
 )
 set(NODE_PORT_V8_CRDTP_CFLAGS_CC_LINUX
   "-fno-rtti"

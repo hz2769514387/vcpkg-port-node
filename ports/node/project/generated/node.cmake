@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/node.gyp（目标 node，gyp 里的类型 executable）
-#   编译单元：win 2 / linux 1（另外 win 3、linux 0 个是头文件）
+#   编译单元：win 2 / linux 1 / mac 1（另外 win 3、linux 0、mac 0 个是头文件）
 
 set(NODE_PORT_V8_NODE_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_NODE_IS_EXECUTABLE TRUE)
@@ -20,13 +21,15 @@ set(NODE_PORT_V8_NODE_SOURCES_WIN
 set(NODE_PORT_V8_NODE_SOURCES_LINUX
   ${NODE_ROOT}/src/node_main.cc
 )
+set(NODE_PORT_V8_NODE_SOURCES_MAC
+  ${NODE_ROOT}/src/node_main.cc
+)
 
 set(NODE_PORT_V8_NODE_DEFINES
   "_GLIBCXX_USE_CXX11_ABI=1"
   "_FILE_OFFSET_BITS=64"
   "OPENSSL_NO_PINSHARED"
   "OPENSSL_THREADS"
-  "NODE_ARCH=\"x64\""
   "NODE_WANT_INTERNALS=1"
   "NODE_USE_V8_PLATFORM=1"
   "NODE_HAVE_I18N_SUPPORT=1"
@@ -43,27 +46,17 @@ set(NODE_PORT_V8_NODE_DEFINES
   "NGHTTP2_STATICLIB"
   "NDEBUG"
   "OPENSSL_BUILDING_OPENSSL"
-  "AES_ASM"
   "BSAES_ASM"
-  "CMLL_ASM"
   "ECP_NISTZ256_ASM"
-  "GHASH_ASM"
   "KECCAK1600_ASM"
   "MD5_ASM"
-  "OPENSSL_BN_ASM_GF2m"
   "OPENSSL_BN_ASM_MONT"
-  "OPENSSL_BN_ASM_MONT5"
   "OPENSSL_CPUID_OBJ"
-  "OPENSSL_IA32_SSE2"
-  "PADLOCK_ASM"
   "POLY1305_ASM"
-  "RC4_ASM"
   "SHA1_ASM"
   "SHA256_ASM"
   "SHA512_ASM"
   "VPAES_ASM"
-  "WHIRLPOOL_ASM"
-  "X25519_ASM"
   "OPENSSL_PIC"
 )
 set(NODE_PORT_V8_NODE_DEFINES_WIN
@@ -86,11 +79,18 @@ set(NODE_PORT_V8_NODE_DEFINES_WIN
 set(NODE_PORT_V8_NODE_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
   "NODE_PLATFORM=\"linux\""
-  "__POSIX__"
-  "_LARGEFILE_SOURCE"
   "_POSIX_C_SOURCE=200112"
   "OPENSSL_USE_NODELETE"
-  "L_ENDIAN"
+)
+set(NODE_PORT_V8_NODE_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+  "NODE_ARCH=\"arm64\""
+  "NODE_RELEASE_URLBASE=\"https://nodejs.org/download/release/\""
+  "NODE_PLATFORM=\"darwin\""
+  "ECP_SM2P256_ASM"
+  "OPENSSL_SM3_ASM"
+  "SM4_ASM"
+  "VPSM4_ASM"
 )
 
 set(NODE_PORT_V8_NODE_INCLUDE_DIRS
@@ -122,6 +122,10 @@ set(NODE_PORT_V8_NODE_INCLUDE_DIRS_WIN
 set(NODE_PORT_V8_NODE_INCLUDE_DIRS_LINUX
   ${NODE_ROOT}/deps/openssl/config/archs/linux-x86_64/asm/include
   ${NODE_ROOT}/deps/openssl/config/archs/linux-x86_64/asm
+)
+set(NODE_PORT_V8_NODE_INCLUDE_DIRS_MAC
+  ${NODE_ROOT}/deps/openssl/config/archs/darwin64-arm64-cc/asm/include
+  ${NODE_ROOT}/deps/openssl/config/archs/darwin64-arm64-cc/asm
 )
 
 # gyp 的 `dependencies`（跨平台取并集；按名字去重，调用方自己映射）
@@ -164,6 +168,17 @@ set(NODE_PORT_V8_NODE_CFLAGS_LINUX
   "-O3"
   "-fno-omit-frame-pointer"
 )
+set(NODE_PORT_V8_NODE_CFLAGS_MAC
+  "-Wall"
+  "-Wextra"
+  "-Wno-unused-parameter"
+  "-Werror=undefined-inline"
+  "-Werror=extra-semi"
+  "-Werror=ctad-maybe-unsupported"
+  "-Wno-error=deprecated-declarations"
+  "-mbranch-protection=standard"
+  "-O3"
+)
 set(NODE_PORT_V8_NODE_CFLAGS_CC_LINUX
   "-fno-rtti"
   "-fno-exceptions"
@@ -179,6 +194,10 @@ set(NODE_PORT_V8_NODE_LDFLAGS_LINUX
   "-Wl,-z,now"
   "-pthread"
   "-m64"
+)
+#   gyp 的 ldflags 里有 6 项是把构建产物整份塞进链接的写法（-Wl,--whole-archive…），翻不成 CMake，调用方要自己写 $<LINK_LIBRARY:WHOLE_ARCHIVE,…>
+set(NODE_PORT_V8_NODE_LDFLAGS_MAC
+  "-pthread"
 )
 
 set(NODE_PORT_V8_NODE_EXCEPTIONS FALSE)

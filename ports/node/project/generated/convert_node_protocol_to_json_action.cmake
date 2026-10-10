@@ -7,6 +7,7 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/node.gyp 里 node_base 的 action「convert_node_protocol_to_json」
 #   输入 9 个；输出 1 个（1 个目录）
 

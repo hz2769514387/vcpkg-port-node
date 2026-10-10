@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/deps/uvwasi/uvwasi.gyp（目标 uvwasi，gyp 里的类型 static_library）
-#   编译单元：win 9 / linux 9（另外 win 0、linux 0 个是头文件）
+#   编译单元：win 9 / linux 9 / mac 9（另外 win 0、linux 0、mac 0 个是头文件）
 
 set(NODE_PORT_V8_UVWASI_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_UVWASI_IS_EXECUTABLE FALSE)
@@ -25,6 +26,17 @@ set(NODE_PORT_V8_UVWASI_SOURCES_WIN
   ${NODE_ROOT}/deps/uvwasi/src/wasi_serdes.c
 )
 set(NODE_PORT_V8_UVWASI_SOURCES_LINUX
+  ${NODE_ROOT}/deps/uvwasi/src/clocks.c
+  ${NODE_ROOT}/deps/uvwasi/src/fd_table.c
+  ${NODE_ROOT}/deps/uvwasi/src/path_resolver.c
+  ${NODE_ROOT}/deps/uvwasi/src/poll_oneoff.c
+  ${NODE_ROOT}/deps/uvwasi/src/sync_helpers.c
+  ${NODE_ROOT}/deps/uvwasi/src/uv_mapping.c
+  ${NODE_ROOT}/deps/uvwasi/src/uvwasi.c
+  ${NODE_ROOT}/deps/uvwasi/src/wasi_rights.c
+  ${NODE_ROOT}/deps/uvwasi/src/wasi_serdes.c
+)
+set(NODE_PORT_V8_UVWASI_SOURCES_MAC
   ${NODE_ROOT}/deps/uvwasi/src/clocks.c
   ${NODE_ROOT}/deps/uvwasi/src/fd_table.c
   ${NODE_ROOT}/deps/uvwasi/src/path_resolver.c
@@ -55,7 +67,9 @@ set(NODE_PORT_V8_UVWASI_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
   "_GNU_SOURCE"
   "_POSIX_C_SOURCE=200112"
-  "_LARGEFILE_SOURCE"
+)
+set(NODE_PORT_V8_UVWASI_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
 )
 
 set(NODE_PORT_V8_UVWASI_INCLUDE_DIRS
@@ -65,6 +79,8 @@ set(NODE_PORT_V8_UVWASI_INCLUDE_DIRS
 set(NODE_PORT_V8_UVWASI_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_UVWASI_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_UVWASI_INCLUDE_DIRS_MAC
 )
 
 # gyp 的 `dependencies`（跨平台取并集；按名字去重，调用方自己映射）
@@ -81,6 +97,10 @@ set(NODE_PORT_V8_UVWASI_CFLAGS_LINUX
   "-m64"
   "-O3"
   "-fno-omit-frame-pointer"
+)
+set(NODE_PORT_V8_UVWASI_CFLAGS_MAC
+  "-fvisibility=hidden"
+  "-O3"
 )
 set(NODE_PORT_V8_UVWASI_CFLAGS_CC_LINUX
   "-fno-rtti"

@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/node.gyp（目标 node_js2c，gyp 里的类型 executable）
-#   编译单元：win 3 / linux 3（另外 win 3、linux 3 个是头文件）
+#   编译单元：win 3 / linux 3 / mac 3（另外 win 3、linux 3、mac 3 个是头文件）
 
 set(NODE_PORT_V8_NODE_JS2C_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_NODE_JS2C_IS_EXECUTABLE TRUE)
@@ -19,6 +20,11 @@ set(NODE_PORT_V8_NODE_JS2C_SOURCES_WIN
   ${NODE_ROOT}/src/builtin_info.cc
 )
 set(NODE_PORT_V8_NODE_JS2C_SOURCES_LINUX
+  ${NODE_ROOT}/tools/js2c.cc
+  ${NODE_ROOT}/src/embedded_data.cc
+  ${NODE_ROOT}/src/builtin_info.cc
+)
+set(NODE_PORT_V8_NODE_JS2C_SOURCES_MAC
   ${NODE_ROOT}/tools/js2c.cc
   ${NODE_ROOT}/src/embedded_data.cc
   ${NODE_ROOT}/src/builtin_info.cc
@@ -41,9 +47,10 @@ set(NODE_PORT_V8_NODE_JS2C_DEFINES_WIN
 )
 set(NODE_PORT_V8_NODE_JS2C_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
-  "NODE_JS2C_USE_STRING_LITERALS"
-  "_LARGEFILE_SOURCE"
   "_POSIX_C_SOURCE=200112"
+)
+set(NODE_PORT_V8_NODE_JS2C_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
 )
 
 set(NODE_PORT_V8_NODE_JS2C_INCLUDE_DIRS
@@ -55,6 +62,8 @@ set(NODE_PORT_V8_NODE_JS2C_INCLUDE_DIRS
 set(NODE_PORT_V8_NODE_JS2C_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_NODE_JS2C_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_NODE_JS2C_INCLUDE_DIRS_MAC
 )
 
 # gyp 的 `dependencies`（跨平台取并集；按名字去重，调用方自己映射）
@@ -76,6 +85,13 @@ set(NODE_PORT_V8_NODE_JS2C_CFLAGS_LINUX
   "-O3"
   "-fno-omit-frame-pointer"
 )
+set(NODE_PORT_V8_NODE_JS2C_CFLAGS_MAC
+  "-Wall"
+  "-Wextra"
+  "-Wno-unused-parameter"
+  "-mbranch-protection=standard"
+  "-O3"
+)
 set(NODE_PORT_V8_NODE_JS2C_CFLAGS_CC_LINUX
   "-fno-rtti"
   "-fno-exceptions"
@@ -87,6 +103,9 @@ set(NODE_PORT_V8_NODE_JS2C_LDFLAGS_LINUX
   "-rdynamic"
   "-pthread"
   "-m64"
+)
+set(NODE_PORT_V8_NODE_JS2C_LDFLAGS_MAC
+  "-pthread"
 )
 
 set(NODE_PORT_V8_NODE_JS2C_EXCEPTIONS FALSE)

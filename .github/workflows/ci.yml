@@ -147,38 +147,15 @@ jobs:
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_ENV"
           echo "$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_PATH"
 
-      # ---- macOS：导出 gyp 变量环境（darwin-arm64）--------------------------
+      # ---- macOS 的 gyp 变量环境已入库 --------------------------------------
       #
-      # gyp2vcpkg 需要每个平台一份"官方式变量环境"（= 官方二进制导出的 process.config）。
-      # win/linux 两份已入库；macOS 这份在 mac runner 上现导出：取官方 darwin-arm64 的 node，
-      # 把它的 `process.config` 落成 env/darwin-arm64.json。
-      # 有了它，port 构建期的 `gyp2vcpkg check` 会判定"片段没覆盖 mac 平台"→ 自动重新生成
-      # 三平台片段（check 里的平台覆盖判据）。
-      - name: 导出 macOS 变量环境（darwin-arm64）
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          set -euo pipefail
-          cd "$RUNNER_TEMP"
-          V="24.21.0"
-          curl -L -o node-darwin.tar.gz \
-            "https://nodejs.org/dist/v${V}/node-v${V}-darwin-arm64.tar.gz"
-          mkdir -p node-darwin
-          tar -xzf node-darwin.tar.gz -C node-darwin --strip-components=1
-          "$RUNNER_TEMP/node-darwin/bin/node" -p "JSON.stringify(process.config, null, 2)" \
-            > "$GITHUB_WORKSPACE/ports/node/gyp2vcpkg/env/darwin-arm64.json"
-          python3 -c "import json;d=json.load(open('$GITHUB_WORKSPACE/ports/node/gyp2vcpkg/env/darwin-arm64.json'));print('variables:',len(d.get('variables',{})))"
-
-      # 把导出的环境文件**上传成 artifact**：这样不需要自己有一台 mac —— 在 run 页面
-      # 下载它、提交进仓库，之后 CI 就可以不再现导出（那一步也能删掉），片段也能一次生成
-      # 三平台入库。失败也要传（if: always()）。
-      - name: 上传 darwin-arm64 变量环境（artifact）
-        if: always() && runner.os == 'macOS'
-        uses: actions/upload-artifact@v4
-        with:
-          name: darwin-arm64-env
-          path: ports/node/gyp2vcpkg/env/darwin-arm64.json
-          if-no-files-found: ignore
+      # `ports/node/gyp2vcpkg/env/darwin-arm64.json` 现在是**仓库自带**的（取自官方
+      # darwin-arm64 node v24.21.0 的 `process.config`），与 win/linux 两份同构。
+      # 因此：
+      #   * CI 不再需要每次现场导出（省一步、且片段入库即可三平台对齐）；
+      #   * 入库的 `generated/*.cmake` 已经是**三平台**片段，`gyp2vcpkg check` 直接通过，
+      #     port 构建期不会重新生成。
+      # 若将来要换 macOS 环境（换版本/换架构），再按同样方式导出后替换该文件即可。
 
       # ---- L2：装 port（含 16 个官方依赖）-----------------------------------
       - name: 装 node port（overlay）

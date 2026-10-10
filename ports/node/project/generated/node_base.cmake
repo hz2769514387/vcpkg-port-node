@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/node.gyp（目标 node_base，gyp 里的类型 static_library）
-#   编译单元：win 185 / linux 184（另外 win 200、linux 199 个是头文件）
+#   编译单元：win 185 / linux 184 / mac 184（另外 win 200、linux 199、mac 199 个是头文件）
 
 set(NODE_PORT_V8_NODE_BASE_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_NODE_BASE_IS_EXECUTABLE FALSE)
@@ -386,13 +387,198 @@ set(NODE_PORT_V8_NODE_BASE_SOURCES_LINUX
   ${NODE_ROOT}/src/crypto/crypto_x509.cc
   ${NODE_ROOT}/src/node_crypto.cc
 )
+set(NODE_PORT_V8_NODE_BASE_SOURCES_MAC
+  ${NODE_ROOT}/src/api/async_resource.cc
+  ${NODE_ROOT}/src/api/callback.cc
+  ${NODE_ROOT}/src/api/embed_helpers.cc
+  ${NODE_ROOT}/src/api/encoding.cc
+  ${NODE_ROOT}/src/api/environment.cc
+  ${NODE_ROOT}/src/api/exceptions.cc
+  ${NODE_ROOT}/src/api/hooks.cc
+  ${NODE_ROOT}/src/api/utils.cc
+  ${NODE_ROOT}/src/async_context_frame.cc
+  ${NODE_ROOT}/src/async_wrap.cc
+  ${NODE_ROOT}/src/base_object.cc
+  ${NODE_ROOT}/src/builtin_info.cc
+  ${NODE_ROOT}/src/cares_wrap.cc
+  ${NODE_ROOT}/src/cleanup_queue.cc
+  ${NODE_ROOT}/src/compile_cache.cc
+  ${NODE_ROOT}/src/connect_wrap.cc
+  ${NODE_ROOT}/src/connection_wrap.cc
+  ${NODE_ROOT}/src/dataqueue/queue.cc
+  ${NODE_ROOT}/src/debug_utils.cc
+  ${NODE_ROOT}/src/embedded_data.cc
+  ${NODE_ROOT}/src/encoding_binding.cc
+  ${NODE_ROOT}/src/env.cc
+  ${NODE_ROOT}/src/fs_event_wrap.cc
+  ${NODE_ROOT}/src/handle_wrap.cc
+  ${NODE_ROOT}/src/heap_utils.cc
+  ${NODE_ROOT}/src/histogram.cc
+  ${NODE_ROOT}/src/internal_only_v8.cc
+  ${NODE_ROOT}/src/js_native_api_v8.cc
+  ${NODE_ROOT}/src/js_stream.cc
+  ${NODE_ROOT}/src/json_utils.cc
+  ${NODE_ROOT}/src/js_udp_wrap.cc
+  ${NODE_ROOT}/src/module_wrap.cc
+  ${NODE_ROOT}/src/node.cc
+  ${NODE_ROOT}/src/node_api.cc
+  ${NODE_ROOT}/src/node_binding.cc
+  ${NODE_ROOT}/src/node_blob.cc
+  ${NODE_ROOT}/src/node_buffer.cc
+  ${NODE_ROOT}/src/node_builtins.cc
+  ${NODE_ROOT}/src/node_config.cc
+  ${NODE_ROOT}/src/node_config_file.cc
+  ${NODE_ROOT}/src/node_constants.cc
+  ${NODE_ROOT}/src/node_cjs_lexer.cc
+  ${NODE_ROOT}/src/node_contextify.cc
+  ${NODE_ROOT}/src/node_credentials.cc
+  ${NODE_ROOT}/src/node_debug.cc
+  ${NODE_ROOT}/src/node_dir.cc
+  ${NODE_ROOT}/src/node_dotenv.cc
+  ${NODE_ROOT}/src/node_env_var.cc
+  ${NODE_ROOT}/src/node_errors.cc
+  ${NODE_ROOT}/src/node_external_reference.cc
+  ${NODE_ROOT}/src/node_file.cc
+  ${NODE_ROOT}/src/node_http_parser.cc
+  ${NODE_ROOT}/src/node_http2.cc
+  ${NODE_ROOT}/src/node_i18n.cc
+  ${NODE_ROOT}/src/node_ipc_serdes.cc
+  ${NODE_ROOT}/src/node_locks.cc
+  ${NODE_ROOT}/src/node_main_instance.cc
+  ${NODE_ROOT}/src/node_messaging.cc
+  ${NODE_ROOT}/src/node_metadata.cc
+  ${NODE_ROOT}/src/node_diagnostics_channel.cc
+  ${NODE_ROOT}/src/node_modules.cc
+  ${NODE_ROOT}/src/node_options.cc
+  ${NODE_ROOT}/src/node_os.cc
+  ${NODE_ROOT}/src/node_perf.cc
+  ${NODE_ROOT}/src/node_platform.cc
+  ${NODE_ROOT}/src/node_profiling.cc
+  ${NODE_ROOT}/src/node_postmortem_metadata.cc
+  ${NODE_ROOT}/src/node_process_events.cc
+  ${NODE_ROOT}/src/node_process_methods.cc
+  ${NODE_ROOT}/src/node_process_object.cc
+  ${NODE_ROOT}/src/node_realm.cc
+  ${NODE_ROOT}/src/node_report.cc
+  ${NODE_ROOT}/src/node_report_module.cc
+  ${NODE_ROOT}/src/node_report_utils.cc
+  ${NODE_ROOT}/src/node_sea.cc
+  ${NODE_ROOT}/src/node_sea_bin.cc
+  ${NODE_ROOT}/src/node_serdes.cc
+  ${NODE_ROOT}/src/node_shadow_realm.cc
+  ${NODE_ROOT}/src/node_snapshotable.cc
+  ${NODE_ROOT}/src/node_sockaddr.cc
+  ${NODE_ROOT}/src/node_stat_watcher.cc
+  ${NODE_ROOT}/src/node_symbols.cc
+  ${NODE_ROOT}/src/node_task_queue.cc
+  ${NODE_ROOT}/src/node_task_runner.cc
+  ${NODE_ROOT}/src/node_trace_events.cc
+  ${NODE_ROOT}/src/node_types.cc
+  ${NODE_ROOT}/src/node_url.cc
+  ${NODE_ROOT}/src/node_url_pattern.cc
+  ${NODE_ROOT}/src/node_util.cc
+  ${NODE_ROOT}/src/node_v8.cc
+  ${NODE_ROOT}/src/node_wasi.cc
+  ${NODE_ROOT}/src/node_wasm_web_api.cc
+  ${NODE_ROOT}/src/node_watchdog.cc
+  ${NODE_ROOT}/src/node_worker.cc
+  ${NODE_ROOT}/src/node_zlib.cc
+  ${NODE_ROOT}/src/path.cc
+  ${NODE_ROOT}/src/permission/child_process_permission.cc
+  ${NODE_ROOT}/src/permission/openssl_store_permission.cc
+  ${NODE_ROOT}/src/permission/fs_permission.cc
+  ${NODE_ROOT}/src/permission/inspector_permission.cc
+  ${NODE_ROOT}/src/permission/permission.cc
+  ${NODE_ROOT}/src/permission/wasi_permission.cc
+  ${NODE_ROOT}/src/permission/worker_permission.cc
+  ${NODE_ROOT}/src/permission/addon_permission.cc
+  ${NODE_ROOT}/src/pipe_wrap.cc
+  ${NODE_ROOT}/src/process_wrap.cc
+  ${NODE_ROOT}/src/signal_wrap.cc
+  ${NODE_ROOT}/src/spawn_sync.cc
+  ${NODE_ROOT}/src/stream_base.cc
+  ${NODE_ROOT}/src/stream_pipe.cc
+  ${NODE_ROOT}/src/stream_wrap.cc
+  ${NODE_ROOT}/src/string_bytes.cc
+  ${NODE_ROOT}/src/string_decoder.cc
+  ${NODE_ROOT}/src/tcp_wrap.cc
+  ${NODE_ROOT}/src/timers.cc
+  ${NODE_ROOT}/src/timer_wrap.cc
+  ${NODE_ROOT}/src/tracing/agent.cc
+  ${NODE_ROOT}/src/tracing/agent_legacy.cc
+  ${NODE_ROOT}/src/tracing/node_trace_buffer.cc
+  ${NODE_ROOT}/src/tracing/node_trace_writer.cc
+  ${NODE_ROOT}/src/tracing/trace_event.cc
+  ${NODE_ROOT}/src/tracing/traced_value.cc
+  ${NODE_ROOT}/src/tty_wrap.cc
+  ${NODE_ROOT}/src/udp_wrap.cc
+  ${NODE_ROOT}/src/util.cc
+  ${NODE_ROOT}/src/uv.cc
+  ${NODE_ROOT}/src/cppgc_helpers.cc
+  ${NODE_ROOT}/src/large_pages/node_large_page.cc
+  ${NODE_ROOT}/src/node_sqlite.cc
+  ${NODE_ROOT}/src/node_webstorage.cc
+  ${NODE_ROOT}/src/inspector_agent.cc
+  ${NODE_ROOT}/src/inspector_io.cc
+  ${NODE_ROOT}/src/inspector_profiler.cc
+  ${NODE_ROOT}/src/inspector_js_api.cc
+  ${NODE_ROOT}/src/inspector_socket.cc
+  ${NODE_ROOT}/src/inspector_socket_server.cc
+  ${NODE_ROOT}/src/inspector/main_thread_interface.cc
+  ${NODE_ROOT}/src/inspector/node_json.cc
+  ${NODE_ROOT}/src/inspector/node_string.cc
+  ${NODE_ROOT}/src/inspector/runtime_agent.cc
+  ${NODE_ROOT}/src/inspector/tracing_agent.cc
+  ${NODE_ROOT}/src/inspector/worker_agent.cc
+  ${NODE_ROOT}/src/inspector/network_inspector.cc
+  ${NODE_ROOT}/src/inspector/network_agent.cc
+  ${NODE_ROOT}/src/inspector/target_manager.cc
+  ${NODE_ROOT}/src/inspector/target_agent.cc
+  ${NODE_ROOT}/src/inspector/worker_inspector.cc
+  ${NODE_ROOT}/src/inspector/io_agent.cc
+  ${NODE_ROOT}/src/inspector/network_resource_manager.cc
+  ${NODE_ROOT}/src/inspector/dom_storage_agent.cc
+  ${NODE_ROOT}/src/inspector/inspector_object_utils.cc
+  ${NODE_ROOT}/src/inspector/storage_agent.cc
+  ${NODE_ROOT}/src/inspector/notification_emitter.cc
+  ${NODE_ROOT}/src/crypto/crypto_aes.cc
+  ${NODE_ROOT}/src/crypto/crypto_argon2.cc
+  ${NODE_ROOT}/src/crypto/crypto_bio.cc
+  ${NODE_ROOT}/src/crypto/crypto_chacha20_poly1305.cc
+  ${NODE_ROOT}/src/crypto/crypto_common.cc
+  ${NODE_ROOT}/src/crypto/crypto_dsa.cc
+  ${NODE_ROOT}/src/crypto/crypto_hkdf.cc
+  ${NODE_ROOT}/src/crypto/crypto_pbkdf2.cc
+  ${NODE_ROOT}/src/crypto/crypto_sig.cc
+  ${NODE_ROOT}/src/crypto/crypto_timing.cc
+  ${NODE_ROOT}/src/crypto/crypto_cipher.cc
+  ${NODE_ROOT}/src/crypto/crypto_context.cc
+  ${NODE_ROOT}/src/crypto/crypto_ec.cc
+  ${NODE_ROOT}/src/crypto/crypto_pqc.cc
+  ${NODE_ROOT}/src/crypto/crypto_kem.cc
+  ${NODE_ROOT}/src/crypto/crypto_hmac.cc
+  ${NODE_ROOT}/src/crypto/crypto_kmac.cc
+  ${NODE_ROOT}/src/crypto/crypto_turboshake.cc
+  ${NODE_ROOT}/src/crypto/crypto_random.cc
+  ${NODE_ROOT}/src/crypto/crypto_rsa.cc
+  ${NODE_ROOT}/src/crypto/crypto_spkac.cc
+  ${NODE_ROOT}/src/crypto/crypto_util.cc
+  ${NODE_ROOT}/src/crypto/crypto_clienthello.cc
+  ${NODE_ROOT}/src/crypto/crypto_dh.cc
+  ${NODE_ROOT}/src/crypto/crypto_hash.cc
+  ${NODE_ROOT}/src/crypto/crypto_keys.cc
+  ${NODE_ROOT}/src/crypto/crypto_keygen.cc
+  ${NODE_ROOT}/src/crypto/crypto_scrypt.cc
+  ${NODE_ROOT}/src/crypto/crypto_tls.cc
+  ${NODE_ROOT}/src/crypto/crypto_x509.cc
+  ${NODE_ROOT}/src/node_crypto.cc
+)
 
 set(NODE_PORT_V8_NODE_BASE_DEFINES
   "_GLIBCXX_USE_CXX11_ABI=1"
   "_FILE_OFFSET_BITS=64"
   "OPENSSL_NO_PINSHARED"
   "OPENSSL_THREADS"
-  "NODE_ARCH=\"x64\""
   "NODE_WANT_INTERNALS=1"
   "NAPI_EXPERIMENTAL=1"
   "NODE_API_EXPERIMENTAL_NO_WARNING=1"
@@ -417,27 +603,17 @@ set(NODE_PORT_V8_NODE_BASE_DEFINES
   "NGHTTP2_STATICLIB"
   "NDEBUG"
   "OPENSSL_BUILDING_OPENSSL"
-  "AES_ASM"
   "BSAES_ASM"
-  "CMLL_ASM"
   "ECP_NISTZ256_ASM"
-  "GHASH_ASM"
   "KECCAK1600_ASM"
   "MD5_ASM"
-  "OPENSSL_BN_ASM_GF2m"
   "OPENSSL_BN_ASM_MONT"
-  "OPENSSL_BN_ASM_MONT5"
   "OPENSSL_CPUID_OBJ"
-  "OPENSSL_IA32_SSE2"
-  "PADLOCK_ASM"
   "POLY1305_ASM"
-  "RC4_ASM"
   "SHA1_ASM"
   "SHA256_ASM"
   "SHA512_ASM"
   "VPAES_ASM"
-  "WHIRLPOOL_ASM"
-  "X25519_ASM"
   "OPENSSL_PIC"
 )
 set(NODE_PORT_V8_NODE_BASE_DEFINES_WIN
@@ -461,11 +637,18 @@ set(NODE_PORT_V8_NODE_BASE_DEFINES_LINUX
   "__STDC_FORMAT_MACROS"
   "NODE_PLATFORM=\"linux\""
   "NODE_ENABLE_LARGE_CODE_PAGES=1"
-  "__POSIX__"
-  "_LARGEFILE_SOURCE"
   "_POSIX_C_SOURCE=200112"
   "OPENSSL_USE_NODELETE"
-  "L_ENDIAN"
+)
+set(NODE_PORT_V8_NODE_BASE_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+  "NODE_ARCH=\"arm64\""
+  "NODE_RELEASE_URLBASE=\"https://nodejs.org/download/release/\""
+  "NODE_PLATFORM=\"darwin\""
+  "ECP_SM2P256_ASM"
+  "OPENSSL_SM3_ASM"
+  "SM4_ASM"
+  "VPSM4_ASM"
 )
 
 set(NODE_PORT_V8_NODE_BASE_INCLUDE_DIRS
@@ -506,6 +689,10 @@ set(NODE_PORT_V8_NODE_BASE_INCLUDE_DIRS_WIN
 set(NODE_PORT_V8_NODE_BASE_INCLUDE_DIRS_LINUX
   ${NODE_ROOT}/deps/openssl/config/archs/linux-x86_64/asm/include
   ${NODE_ROOT}/deps/openssl/config/archs/linux-x86_64/asm
+)
+set(NODE_PORT_V8_NODE_BASE_INCLUDE_DIRS_MAC
+  ${NODE_ROOT}/deps/openssl/config/archs/darwin64-arm64-cc/asm/include
+  ${NODE_ROOT}/deps/openssl/config/archs/darwin64-arm64-cc/asm
 )
 
 # gyp 的 `dependencies`（跨平台取并集；按名字去重，调用方自己映射）
@@ -553,6 +740,18 @@ set(NODE_PORT_V8_NODE_BASE_CFLAGS_LINUX
   "-m64"
   "-O3"
   "-fno-omit-frame-pointer"
+)
+set(NODE_PORT_V8_NODE_BASE_CFLAGS_MAC
+  "-Wall"
+  "-Wextra"
+  "-Wno-unused-parameter"
+  "-Werror=unused-result"
+  "-Werror=undefined-inline"
+  "-Werror=extra-semi"
+  "-Werror=ctad-maybe-unsupported"
+  "-Wno-error=deprecated-declarations"
+  "-mbranch-protection=standard"
+  "-O3"
 )
 set(NODE_PORT_V8_NODE_BASE_CFLAGS_CC_LINUX
   "-fno-rtti"

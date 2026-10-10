@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/tools/v8_gypfiles/v8.gyp（目标 v8_zlib，gyp 里的类型 static_library）
-#   编译单元：win 17 / linux 17（另外 win 15、linux 15 个是头文件）
+#   编译单元：win 17 / linux 17 / mac 17（另外 win 15、linux 15、mac 15 个是头文件）
 
 set(NODE_PORT_V8_V8_ZLIB_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_V8_ZLIB_IS_EXECUTABLE FALSE)
@@ -51,6 +52,25 @@ set(NODE_PORT_V8_V8_ZLIB_SOURCES_LINUX
   ${NODE_PORT_V8_ROOT}/third_party/zlib/zutil.c
   ${NODE_PORT_V8_ROOT}/third_party/zlib/google/compression_utils_portable.cc
 )
+set(NODE_PORT_V8_V8_ZLIB_SOURCES_MAC
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/adler32.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/compress.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/cpu_features.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/crc32.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/deflate.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/gzclose.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/gzlib.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/gzread.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/gzwrite.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/infback.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/inffast.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/inflate.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/inftrees.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/trees.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/uncompr.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/zutil.c
+  ${NODE_PORT_V8_ROOT}/third_party/zlib/google/compression_utils_portable.cc
+)
 
 set(NODE_PORT_V8_V8_ZLIB_DEFINES
   "_GLIBCXX_USE_CXX11_ABI=1"
@@ -61,12 +81,10 @@ set(NODE_PORT_V8_V8_ZLIB_DEFINES
   "BUILDING_V8_PLATFORM_SHARED"
   "OPENSSL_NO_PINSHARED"
   "OPENSSL_THREADS"
-  "V8_TARGET_ARCH_X64"
   "V8_HAVE_TARGET_OS"
   "V8_EMBEDDER_STRING=\"-node.53\""
   "ENABLE_DISASSEMBLER"
   "V8_PROMISE_INTERNAL_FIELD_COUNT=1"
-  "V8_SHORT_BUILTIN_CALLS"
   "OBJECT_PRINT"
   "V8_INTL_SUPPORT"
   "V8_ATOMIC_OBJECT_FIELD_WRITES"
@@ -87,7 +105,6 @@ set(NODE_PORT_V8_V8_ZLIB_DEFINES
   "V8_ALLOCATION_FOLDING"
   "V8_ALLOCATION_SITE_TRACKING"
   "V8_ADVANCED_BIGINT_ALGORITHMS"
-  "V8_ENABLE_WASM_SIMD256_REVEC"
   "ZLIB_IMPLEMENTATION"
 )
 set(NODE_PORT_V8_V8_ZLIB_DEFINES_WIN
@@ -101,7 +118,6 @@ set(NODE_PORT_V8_V8_ZLIB_DEFINES_WIN
   "_WIN32_WINNT=0x0A00"
   "_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS"
   "V8_TARGET_OS_WIN"
-  "V8_ENABLE_SYSTEM_INSTRUMENTATION"
   "V8_ENABLE_ETW_STACK_WALKING"
   "X86_WINDOWS"
 )
@@ -110,6 +126,11 @@ set(NODE_PORT_V8_V8_ZLIB_DEFINES_LINUX
   "V8_TARGET_OS_LINUX"
   "ENABLE_GDB_JIT_INTERFACE"
   "V8_ENABLE_PRIVATE_MAPPING_FORK_OPTIMIZATION"
+)
+set(NODE_PORT_V8_V8_ZLIB_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+  "V8_TARGET_ARCH_ARM64"
+  "V8_TARGET_OS_MACOS"
 )
 
 set(NODE_PORT_V8_V8_ZLIB_INCLUDE_DIRS
@@ -121,6 +142,8 @@ set(NODE_PORT_V8_V8_ZLIB_INCLUDE_DIRS
 set(NODE_PORT_V8_V8_ZLIB_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_V8_ZLIB_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_V8_ZLIB_INCLUDE_DIRS_MAC
 )
 
 set(NODE_PORT_V8_V8_ZLIB_CFLAGS_LINUX
@@ -146,12 +169,19 @@ set(NODE_PORT_V8_V8_ZLIB_CFLAGS_LINUX
   "-ffunction-sections"
   "-O3"
 )
+set(NODE_PORT_V8_V8_ZLIB_CFLAGS_MAC
+  "-O3"
+)
 set(NODE_PORT_V8_V8_ZLIB_CFLAGS_CC_LINUX
   "-fno-rtti"
   "-fno-exceptions"
   "-fno-strict-aliasing"
   "-std=gnu++20"
   "-Wno-invalid-offsetof"
+)
+set(NODE_PORT_V8_V8_ZLIB_CFLAGS_CC_MAC
+  "-Wno-invalid-offsetof"
+  "-Wno-nullability-completeness"
 )
 set(NODE_PORT_V8_V8_ZLIB_LDFLAGS_LINUX
   "-pthread"

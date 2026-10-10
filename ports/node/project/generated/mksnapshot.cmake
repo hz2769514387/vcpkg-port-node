@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/tools/v8_gypfiles/v8.gyp（目标 mksnapshot，gyp 里的类型 executable）
-#   编译单元：win 12 / linux 11（另外 win 9、linux 8 个是头文件）
+#   编译单元：win 12 / linux 11 / mac 11（另外 win 9、linux 8、mac 8 个是头文件）
 
 set(NODE_PORT_V8_MKSNAPSHOT_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_MKSNAPSHOT_IS_EXECUTABLE TRUE)
@@ -40,6 +41,19 @@ set(NODE_PORT_V8_MKSNAPSHOT_SOURCES_LINUX
   ${NODE_PORT_V8_ROOT}/src/snapshot/snapshot-empty.cc
   ${NODE_PORT_V8_ROOT}/src/snapshot/static-roots-gen.cc
 )
+set(NODE_PORT_V8_MKSNAPSHOT_SOURCES_MAC
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/embedded-empty.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/embedded-file-writer.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/platform-embedded-file-writer-aix.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/platform-embedded-file-writer-base.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/platform-embedded-file-writer-generic.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/platform-embedded-file-writer-mac.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/platform-embedded-file-writer-win.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/embedded/platform-embedded-file-writer-zos.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/mksnapshot.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/snapshot-empty.cc
+  ${NODE_PORT_V8_ROOT}/src/snapshot/static-roots-gen.cc
+)
 
 set(NODE_PORT_V8_MKSNAPSHOT_DEFINES
   "_GLIBCXX_USE_CXX11_ABI=1"
@@ -50,12 +64,10 @@ set(NODE_PORT_V8_MKSNAPSHOT_DEFINES
   "BUILDING_V8_PLATFORM_SHARED"
   "OPENSSL_NO_PINSHARED"
   "OPENSSL_THREADS"
-  "V8_TARGET_ARCH_X64"
   "V8_HAVE_TARGET_OS"
   "V8_EMBEDDER_STRING=\"-node.53\""
   "ENABLE_DISASSEMBLER"
   "V8_PROMISE_INTERNAL_FIELD_COUNT=1"
-  "V8_SHORT_BUILTIN_CALLS"
   "OBJECT_PRINT"
   "V8_INTL_SUPPORT"
   "V8_ATOMIC_OBJECT_FIELD_WRITES"
@@ -76,7 +88,6 @@ set(NODE_PORT_V8_MKSNAPSHOT_DEFINES
   "V8_ALLOCATION_FOLDING"
   "V8_ALLOCATION_SITE_TRACKING"
   "V8_ADVANCED_BIGINT_ALGORITHMS"
-  "V8_ENABLE_WASM_SIMD256_REVEC"
 )
 set(NODE_PORT_V8_MKSNAPSHOT_DEFINES_WIN
   "WIN32"
@@ -89,7 +100,6 @@ set(NODE_PORT_V8_MKSNAPSHOT_DEFINES_WIN
   "_WIN32_WINNT=0x0A00"
   "_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS"
   "V8_TARGET_OS_WIN"
-  "V8_ENABLE_SYSTEM_INSTRUMENTATION"
   "V8_ENABLE_ETW_STACK_WALKING"
 )
 set(NODE_PORT_V8_MKSNAPSHOT_DEFINES_LINUX
@@ -97,6 +107,11 @@ set(NODE_PORT_V8_MKSNAPSHOT_DEFINES_LINUX
   "V8_TARGET_OS_LINUX"
   "ENABLE_GDB_JIT_INTERFACE"
   "V8_ENABLE_PRIVATE_MAPPING_FORK_OPTIMIZATION"
+)
+set(NODE_PORT_V8_MKSNAPSHOT_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+  "V8_TARGET_ARCH_ARM64"
+  "V8_TARGET_OS_MACOS"
 )
 
 set(NODE_PORT_V8_MKSNAPSHOT_INCLUDE_DIRS
@@ -110,6 +125,8 @@ set(NODE_PORT_V8_MKSNAPSHOT_INCLUDE_DIRS
 set(NODE_PORT_V8_MKSNAPSHOT_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_MKSNAPSHOT_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_MKSNAPSHOT_INCLUDE_DIRS_MAC
 )
 
 # gyp 的 `dependencies`（跨平台取并集；按名字去重，调用方自己映射）
@@ -148,12 +165,19 @@ set(NODE_PORT_V8_MKSNAPSHOT_CFLAGS_LINUX
   "-ffunction-sections"
   "-O3"
 )
+set(NODE_PORT_V8_MKSNAPSHOT_CFLAGS_MAC
+  "-O3"
+)
 set(NODE_PORT_V8_MKSNAPSHOT_CFLAGS_CC_LINUX
   "-fno-rtti"
   "-fno-exceptions"
   "-fno-strict-aliasing"
   "-std=gnu++20"
   "-Wno-invalid-offsetof"
+)
+set(NODE_PORT_V8_MKSNAPSHOT_CFLAGS_CC_MAC
+  "-Wno-invalid-offsetof"
+  "-Wno-nullability-completeness"
 )
 set(NODE_PORT_V8_MKSNAPSHOT_LDFLAGS_LINUX
   "-pthread"

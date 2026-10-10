@@ -7,8 +7,9 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/tools/v8_gypfiles/v8.gyp（目标 v8_compiler，gyp 里的类型 static_library）
-#   编译单元：win 181 / linux 180（另外 win 1205、linux 1203 个是头文件）
+#   编译单元：win 181 / linux 180 / mac 176（另外 win 1205、linux 1203、mac 1201 个是头文件）
 
 set(NODE_PORT_V8_V8_COMPILER_IS_INTERFACE FALSE)
 set(NODE_PORT_V8_V8_COMPILER_IS_EXECUTABLE FALSE)
@@ -378,6 +379,184 @@ set(NODE_PORT_V8_V8_COMPILER_SOURCES_LINUX
   ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-revec-phase.cc
   ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-revec-reducer.cc
 )
+set(NODE_PORT_V8_V8_COMPILER_SOURCES_MAC
+  ${NODE_PORT_V8_ROOT}/src/compiler/access-builder.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/access-info.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/add-type-assertions-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/all-nodes.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/bitcast-elider.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/code-generator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/frame-elider.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/gap-resolver.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/instruction-scheduler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/instruction-selector.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/instruction.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/jump-threading.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/move-optimizer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/register-allocator-verifier.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/register-allocator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/spill-placer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/basic-block-instrumentor.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/branch-elimination.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/bytecode-analysis.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/bytecode-graph-builder.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/bytecode-liveness-map.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/c-linkage.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/checkpoint-elimination.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/code-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/common-node-cache.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/common-operator-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/common-operator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/compilation-dependencies.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/compiler-source-position-table.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/constant-folding-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/control-equivalence.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/csa-load-elimination.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/dead-code-elimination.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/escape-analysis-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/escape-analysis.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/fast-api-calls.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/feedback-source.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/frame-states.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/frame.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/graph-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/graph-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/graph-trimmer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/heap-refs.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-call-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-context-specialization.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-create-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-generic-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-graph.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-heap-broker.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-inlining-heuristic.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-inlining.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-intrinsic-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-native-context-specialization.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-operator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-type-hint-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/js-typed-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/late-escape-analysis.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/linkage.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/load-elimination.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/loop-analysis.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/loop-peeling.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/loop-unrolling.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/loop-variable-optimizer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/machine-graph-verifier.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/machine-graph.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/machine-operator-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/machine-operator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/map-inference.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/memory-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/memory-optimizer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/node-marker.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/node-matchers.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/node-observer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/node-origin-table.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/node-properties.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/node.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/opcodes.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/operation-typer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/operator-properties.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/operator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/osr.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/pair-load-store-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/pipeline-statistics.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/pipeline.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/property-access-builder.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/raw-machine-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/redundancy-elimination.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/refs-map.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/representation-change.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/schedule.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/scheduler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/select-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/simplified-lowering-verifier.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/simplified-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/simplified-operator-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/simplified-operator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/state-values-utils.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/string-builder-optimizer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turbofan-enabled.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turbofan-graph-visualizer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turbofan-graph.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turbofan-typer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turbofan-types.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/analyzer-iterator.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/block-instrumentation-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/block-instrumentation-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/build-graph-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/code-elimination-and-simplification-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/copying-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/csa-optimize-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/debug-feature-lowering-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/decompression-optimization-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/decompression-optimization.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/graph-builder.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/graph-visualizer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/graph.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/instruction-selection-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/late-escape-analysis-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/late-load-elimination-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/loop-finder.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/loop-peeling-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/loop-unrolling-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/loop-unrolling-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/machine-lowering-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/memory-optimization-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/operations.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/optimize-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/pipelines.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/pretenuring-propagation-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/representations.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/sidetable.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/simplify-tf-loops.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/store-store-elimination-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/string-escape-analysis-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/turbolev-graph-builder.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/type-assertions-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/type-parser.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/typed-optimizations-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/typer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/types.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/use-map.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/utils.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/type-cache.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/type-narrowing-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/typed-optimization.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/value-numbering-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/verifier.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/zone-stats.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/arm64/code-generator-arm64.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/arm64/instruction-scheduler-arm64.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/arm64/instruction-selector-arm64.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/backend/arm64/unwinding-info-writer-arm64.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/int64-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/int64-lowering-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-debug-memory-lowering-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-gc-optimize-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-gc-typed-optimization-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-in-js-inlining-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-lowering-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-optimize-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-shuffle-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-simd-phase.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/turboshaft/wasm-turboshaft-compiler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-address-reassociation.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-call-descriptors.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-compiler-definitions.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-compiler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-escape-analysis.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-gc-lowering.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-gc-operator-reducer.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-graph-assembler.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-inlining-into-js.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-load-elimination.cc
+  ${NODE_PORT_V8_ROOT}/src/compiler/wasm-typer.cc
+)
 
 set(NODE_PORT_V8_V8_COMPILER_DEFINES
   "_GLIBCXX_USE_CXX11_ABI=1"
@@ -388,12 +567,10 @@ set(NODE_PORT_V8_V8_COMPILER_DEFINES
   "BUILDING_V8_PLATFORM_SHARED"
   "OPENSSL_NO_PINSHARED"
   "OPENSSL_THREADS"
-  "V8_TARGET_ARCH_X64"
   "V8_HAVE_TARGET_OS"
   "V8_EMBEDDER_STRING=\"-node.53\""
   "ENABLE_DISASSEMBLER"
   "V8_PROMISE_INTERNAL_FIELD_COUNT=1"
-  "V8_SHORT_BUILTIN_CALLS"
   "OBJECT_PRINT"
   "V8_INTL_SUPPORT"
   "V8_ATOMIC_OBJECT_FIELD_WRITES"
@@ -414,7 +591,6 @@ set(NODE_PORT_V8_V8_COMPILER_DEFINES
   "V8_ALLOCATION_FOLDING"
   "V8_ALLOCATION_SITE_TRACKING"
   "V8_ADVANCED_BIGINT_ALGORITHMS"
-  "V8_ENABLE_WASM_SIMD256_REVEC"
 )
 set(NODE_PORT_V8_V8_COMPILER_DEFINES_WIN
   "WIN32"
@@ -427,7 +603,6 @@ set(NODE_PORT_V8_V8_COMPILER_DEFINES_WIN
   "_WIN32_WINNT=0x0A00"
   "_SILENCE_ALL_CXX20_DEPRECATION_WARNINGS"
   "V8_TARGET_OS_WIN"
-  "V8_ENABLE_SYSTEM_INSTRUMENTATION"
   "V8_ENABLE_ETW_STACK_WALKING"
 )
 set(NODE_PORT_V8_V8_COMPILER_DEFINES_LINUX
@@ -435,6 +610,11 @@ set(NODE_PORT_V8_V8_COMPILER_DEFINES_LINUX
   "V8_TARGET_OS_LINUX"
   "ENABLE_GDB_JIT_INTERFACE"
   "V8_ENABLE_PRIVATE_MAPPING_FORK_OPTIMIZATION"
+)
+set(NODE_PORT_V8_V8_COMPILER_DEFINES_MAC
+  "_DARWIN_USE_64_BIT_INODE=1"
+  "V8_TARGET_ARCH_ARM64"
+  "V8_TARGET_OS_MACOS"
 )
 
 set(NODE_PORT_V8_V8_COMPILER_INCLUDE_DIRS
@@ -448,6 +628,8 @@ set(NODE_PORT_V8_V8_COMPILER_INCLUDE_DIRS
 set(NODE_PORT_V8_V8_COMPILER_INCLUDE_DIRS_WIN
 )
 set(NODE_PORT_V8_V8_COMPILER_INCLUDE_DIRS_LINUX
+)
+set(NODE_PORT_V8_V8_COMPILER_INCLUDE_DIRS_MAC
 )
 
 # gyp 的 `dependencies`（跨平台取并集；按名字去重，调用方自己映射）
@@ -488,12 +670,19 @@ set(NODE_PORT_V8_V8_COMPILER_CFLAGS_LINUX
   "-ffunction-sections"
   "-O3"
 )
+set(NODE_PORT_V8_V8_COMPILER_CFLAGS_MAC
+  "-O3"
+)
 set(NODE_PORT_V8_V8_COMPILER_CFLAGS_CC_LINUX
   "-fno-rtti"
   "-fno-exceptions"
   "-fno-strict-aliasing"
   "-std=gnu++20"
   "-Wno-invalid-offsetof"
+)
+set(NODE_PORT_V8_V8_COMPILER_CFLAGS_CC_MAC
+  "-Wno-invalid-offsetof"
+  "-Wno-nullability-completeness"
 )
 set(NODE_PORT_V8_V8_COMPILER_LDFLAGS_LINUX
   "-pthread"

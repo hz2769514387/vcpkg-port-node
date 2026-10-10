@@ -7,6 +7,7 @@
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
+#             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
 #   蓝本    ：node-v24.21.0/tools/v8_gypfiles/v8.gyp 里 v8_inspector_headers 的 action「protocol_compatibility」
 #   输入 1 个；输出 1 个（1 个目录）
 
