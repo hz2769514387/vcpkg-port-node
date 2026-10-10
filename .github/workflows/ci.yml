@@ -144,9 +144,12 @@ jobs:
             --overlay-ports="$GITHUB_WORKSPACE/ports" \
             --overlay-triplets="$GITHUB_WORKSPACE/triplets"
 
-      # vcpkg 的失败摘要会把构建 out.log 截断（`Skipped N lines`）——**第一条 error**
-      # 常被截掉，只剩一堆级联报错。这里把首错直接打出来（没有 error 行就退回尾部）。
-      - name: 失败时打印构建日志的首错
+      # vcpkg 的失败摘要会把 out.log 截断（`Skipped N lines`）——**第一条 error**
+      # 常被截掉，只剩一堆级联报错。这里：①把首错直接打进 job 日志（免下载就能看）；
+      # ②把所有日志**收集并上传成 artifact** —— 配置期的
+      # `config-*-out.log` / `config-*-CMakeCache.txt.log` / `config-*-CMakeConfigureLog.yaml.log`
+      # 才是真因所在，它们原本只躺在 runner 的 buildtrees 里，外部拿不到。
+      - name: 失败时打印首错
         if: failure()
         shell: bash
         run: |
@@ -155,6 +158,31 @@ jobs:
             echo "===== $f ====="
             grep -n -m 25 -E "error:|fatal error|^FAILED|Error [0-9]+" "$f" || tail -n 60 "$f"
           done
+          # 配置期日志通常更短、离真因更近 —— 尾部直接打全。
+          for f in "$VCPKG_ROOT"/buildtrees/node/config-*-out.log; do
+            [ -f "$f" ] || continue
+            echo "===== $f（tail 120）====="
+            tail -n 120 "$f"
+          done
+
+      - name: 收集日志
+        if: always()
+        shell: bash
+        run: |
+          mkdir -p "$RUNNER_TEMP/ci-logs"
+          for f in "$VCPKG_ROOT"/buildtrees/node/*.log; do
+            [ -f "$f" ] && cp "$f" "$RUNNER_TEMP/ci-logs/$(basename "$f")"
+          done
+          ls -la "$RUNNER_TEMP/ci-logs" || true
+
+      - name: 上传日志 artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: vcpkg-logs-${{ matrix.triplet }}
+          path: ${{ runner.temp }}/ci-logs
+          if-no-files-found: ignore
+          retention-days: 7
 
       # ---- L3：消费端冒烟（find_package + 链接 + 真跑 JS）-------------------
       - name: 构建并运行消费端冒烟
