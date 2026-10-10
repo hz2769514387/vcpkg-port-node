@@ -50,7 +50,7 @@ node_port_add_v8_target(crdtp)
 # 只剩"链 vcpkg 的 libuv"这一条是我们自己的决定。
 # ---------------------------------------------------------------------------
 node_port_add_v8_target(uvwasi)
-node_port_uv_lib(_node_uv)
+node_port_pick_target(_node_uv libuv::uv_a libuv::uv)
 target_link_libraries(uvwasi PUBLIC ${_node_uv})
 
 # ---------------------------------------------------------------------------

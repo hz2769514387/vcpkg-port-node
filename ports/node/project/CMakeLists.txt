@@ -221,11 +221,28 @@ string(APPEND _cfg
   "find_library(_node_nghttp2 NAMES nghttp2 PATHS \"\${_node_lib}\" NO_DEFAULT_PATH)\n"
   "if(NOT _node_nghttp2)\n  set(_node_nghttp2 nghttp2)\nendif()\n")
 
-# libuv 的目标名随口径变（见 consume.cmake 的 `node_port_uv_lib`）。这里（顶层）看不到
-# 导入目标 —— 各子目录自己 find_package —— 所以把解析放进**生成的配置**，由消费方在
-# 自己的环境里定夺用哪个名字。
-string(APPEND _cfg
-  "if(TARGET libuv::uv_a)\n  set(_node_uv libuv::uv_a)\nelse()\n  set(_node_uv libuv::uv)\nendif()\n")
+# 有几个包的目标名随口径变（静态带 `_static`，动态不带；见 consume.cmake 的
+# `node_port_pick_target`）。这里（顶层）看不到导入目标 —— 各子目录自己
+# find_package —— 所以把"挑第一个存在的"这段放进**生成的配置**，由消费方定夺。
+# ⚠ 条目里**不能**用 `;` 分隔 —— `foreach IN LISTS` 会把 `;` 当列表分隔符摊平，
+# 于是"变量名/候选"全散成一个个元素（实测生成出一堆 `set(libuv::uv_a "")`）。
+# 用 `=` 分变量名、空格分候选。
+set(_volatile_targets
+  "_node_uv=libuv::uv_a libuv::uv"
+  "_node_llhttp=llhttp::llhttp_static llhttp::llhttp"
+  "_node_ngtcp2=ngtcp2::ngtcp2_static ngtcp2::ngtcp2"
+  "_node_zstd=zstd::libzstd_static zstd::libzstd_shared zstd::libzstd"
+  "_node_hdr=hdr_histogram::hdr_histogram_static hdr_histogram::hdr_histogram")
+foreach(_entry IN LISTS _volatile_targets)
+  string(REPLACE "=" ";" _parts "${_entry}")
+  list(GET _parts 0 _var)
+  string(REPLACE " " ";" _cands "${_parts}")
+  list(REMOVE_AT _cands 0)
+  string(APPEND _cfg "set(${_var} \"\")\n")
+  foreach(_c IN LISTS _cands)
+    string(APPEND _cfg "if(NOT ${_var} AND TARGET ${_c})\n  set(${_var} ${_c})\nendif()\n")
+  endforeach()
+endforeach()
 
 # V8 静态库之间有环（GNU ld 单遍解析会漏）→ Linux 用 LINK_GROUP:RESCAN；
 # Apple 的链接器不支持 RESCAN → 库列表重复一遍；Windows 直接列。
@@ -238,10 +255,10 @@ set(_own_rest
   node::node_main node::ncrypto node::ncrypto_engine
   node::nbytes node::merve node::uvwasi node::crdtp)
 set(_third
-  OpenSSL::SSL OpenSSL::Crypto "\${_node_uv}" llhttp::llhttp_static c-ares::cares
+  OpenSSL::SSL OpenSSL::Crypto "\${_node_uv}" "\${_node_llhttp}" c-ares::cares
   unofficial::brotli::brotlidec unofficial::brotli::brotlienc unofficial::brotli::brotlicommon
-  ZLIB::ZLIB ada::ada simdjson::simdjson ngtcp2::ngtcp2_static zstd::libzstd_static
-  ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3 hdr_histogram::hdr_histogram_static)
+  ZLIB::ZLIB ada::ada simdjson::simdjson "\${_node_ngtcp2}" "\${_node_zstd}"
+  ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3 "\${_node_hdr}")
 
 string(APPEND _cfg "add_library(node::node INTERFACE IMPORTED)\n")
 string(APPEND _cfg

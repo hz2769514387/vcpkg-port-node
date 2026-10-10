@@ -42,18 +42,28 @@ endfunction()
 # gyp 的 'none'（头文件集，作用是把设置下发给依赖方）→ CMake 的 INTERFACE 库；
 # 'static_library' → 静态库（工程约定第 1 条：静态单 exe，V8 也不编成 DLL）。
 #
-# vcpkg 的 libuv，目标名**随口径变**：动态口径（`x64-windows` 等）只给 `libuv::uv`，
-# 静态口径才另给 `libuv::uv_a`。node 的 gyp 里链的是"静态那份"，但把名字写死会在动态
-# 口径下直接配置失败（CI 的 `x64-windows` 实测：`libuv::uv_a` not found，连 `tools` /
-# `vendored` / `node` 三处链接一起报）。统一在这里解析成一个名字，调用点只认它。
-function(node_port_uv_lib out)
-  if(TARGET libuv::uv_a)
-    set(${out} libuv::uv_a PARENT_SCOPE)
-  elseif(TARGET libuv::uv)
-    set(${out} libuv::uv PARENT_SCOPE)
-  else()
-    message(FATAL_ERROR "找不到 vcpkg 的 libuv 目标（libuv::uv_a 与 libuv::uv 都没有）")
-  endif()
+# 有些 vcpkg 包的**目标名随口径变**：静态口径给 `X::X_static`，动态口径（`x64-windows`
+# 等）只给 `X::X`；libuv 则是 `uv_a` / `uv`。名字写死会在动态口径下直接配置失败
+# （CI 实测：`libuv::uv_a`、`ngtcp2::ngtcp2_static` 都这么炸过）。
+# 调用点给一串候选（**静态优先**），这里挑第一个存在的。
+function(node_port_pick_target out)
+  foreach(_t IN LISTS ARGN)
+    if(TARGET ${_t})
+      set(${out} ${_t} PARENT_SCOPE)
+      return()
+    endif()
+  endforeach()
+  # 一个都不存在：把"同前缀且确实存在"的目标列出来 —— 省得靠猜（CI 上尤其值钱）。
+  list(GET ARGN 0 _first)
+  string(REGEX REPLACE "::.*$" "::" _pfx "${_first}")
+  set(_have "")
+  get_property(_tgts DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+  foreach(_t IN LISTS _tgts)
+    if(_t MATCHES "^${_pfx}")
+      string(APPEND _have " ${_t}")
+    endif()
+  endforeach()
+  message(FATAL_ERROR "候选目标都不存在：${ARGN}；当前目录里同前缀的真实目标：${_have}")
 endfunction()
 
 

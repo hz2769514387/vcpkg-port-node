@@ -131,13 +131,19 @@ find_package(unofficial-sqlite3 CONFIG REQUIRED)
 find_library(NODE_PORT_NGHTTP2_LIB nghttp2 PATHS
   "${VCPKG_INSTALLED_DIR}/${VCPKG_TARGET_TRIPLET}/lib" NO_DEFAULT_PATH REQUIRED)
 
-node_port_uv_lib(_node_uv)
+# 目标名随口径变的那几个（静态 `_static` / 动态不带）—— 见 consume.cmake 的
+# `node_port_pick_target`。CI 的 `x64-windows`（动态）实测炸过 `libuv::uv_a`、`ngtcp2::ngtcp2_static`。
+node_port_pick_target(_node_uv     libuv::uv_a                libuv::uv)
+node_port_pick_target(_node_llhttp llhttp::llhttp_static      llhttp::llhttp)
+node_port_pick_target(_node_ngtcp2 ngtcp2::ngtcp2_static      ngtcp2::ngtcp2)
+node_port_pick_target(_node_zstd   zstd::libzstd_static       zstd::libzstd_shared zstd::libzstd)
+
 add_library(node_third_party INTERFACE)
 target_link_libraries(node_third_party INTERFACE
   OpenSSL::SSL
   OpenSSL::Crypto
   ${_node_uv}
-  llhttp::llhttp_static
+  ${_node_llhttp}
   c-ares::cares
   unofficial::brotli::brotlidec
   unofficial::brotli::brotlienc
@@ -145,8 +151,8 @@ target_link_libraries(node_third_party INTERFACE
   ZLIB::ZLIB
   ada::ada
   simdjson::simdjson
-  ngtcp2::ngtcp2_static
-  zstd::libzstd_static
+  ${_node_ngtcp2}
+  ${_node_zstd}
   ICU::uc
   ICU::i18n
   ICU::data
