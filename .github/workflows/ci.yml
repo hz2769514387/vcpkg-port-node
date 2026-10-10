@@ -6,12 +6,13 @@
 #   2. 再用 test/ 里的消费端工程 find_package(node) + 链接 node::node + 真跑一段 JS；
 #   3. 覆盖三个平台：x64-linux / x64-windows / arm64-osx。
 #
-# 资源约束（标准 runner 4C/16G/14G 可用磁盘、单 job 6h；macOS arm64 更只有 3C/7G）：
-#   * 先清 runner 预装的大件腾磁盘；
-#   * 用 `triplets/*-ci.cmake`（**只在 triplet 里设 VCPKG_BUILD_TYPE=release 才算数**，
-#     环境变量不生效 —— mac CI 实测会把 debug 也编一遍）；
-#   * `--clean-after-build`（每个包编完立即清 buildtrees/downloads/packages）；
-#   * 并发度收着用（VCPKG_MAX_CONCURRENCY）。
+# 资源策略（**实测后收敛**，见 docs/调研文档.md §9.1）：
+#   实测空闲磁盘：macOS 132 GB / Linux 108 GB / Windows C: 40 GB + D: 157 GB —— 磁盘**不是**
+#   瓶颈。因此**不做任何"删 runner 预装大件"的清理动作**（那类动作会动到 runner 预置环境，
+#   属于自找麻烦；早先加过，现已去掉），只打印 df 留个记录。
+#   * 只出 Release：用 `triplets/*-ci.cmake` —— `VCPKG_BUILD_TYPE` 是 **triplet 变量**，
+#     写在 `env:` 里不生效（mac CI 实测会连 debug 一起编，V8 整棵树代价翻倍）。
+#   * 并发度收着用（`VCPKG_MAX_CONCURRENCY`）：macOS arm64 只有 3 核 / 7 GB。
 #
 # 首次运行的经验（2026-10-10，run #1）：
 #   * lint 用 `vcpkg x-ci-verify-versions` 是**误用** —— 那是给 vcpkg 自身仓库用的，
@@ -97,34 +98,11 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      # ---- 腾磁盘（各平台删预装大件）-----------------------------------------
-      - name: 清理磁盘（Linux）
-        if: runner.os == 'Linux'
+      # ---- 记录可用磁盘（**只打印，不删任何东西**）---------------------------
+      - name: 记录可用磁盘
+        if: always()
         shell: bash
-        run: |
-          set -x
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /opt/hostedtoolcache/CodeQL \
-                      /usr/local/share/boost /usr/share/swift /usr/local/lib/android/sdk || true
-          sudo apt-get clean || true
-          df -h
-
-      - name: 清理磁盘（Windows）
-        if: runner.os == 'Windows'
-        shell: pwsh
-        run: |
-          # runner 预装了另一个版本的 vcpkg（C:\vcpkg）—— 我们要用自己的，顺手删掉省空间。
-          Remove-Item -Recurse -Force C:\Android, C:\hostedtoolcache, C:\vcpkg, C:\tools\Android -ErrorAction SilentlyContinue
-          # 打印**所有**盘：工作区与 vcpkg 其实在 D:（RUNNER_TEMP=`D:\a\_temp`），
-          # 只看 C: 会漏掉真正吃空间的那块盘。
-          Get-PSDrive -PSProvider FileSystem | Select-Object Name,Used,Free
-
-      - name: 清理磁盘（macOS）
-        if: runner.os == 'macOS'
-        shell: bash
-        run: |
-          sudo rm -rf ~/Library/Developer/CoreSimulator /Library/Developer/CoreSimulator || true
-          rm -rf ~/Library/Caches/* || true
-          df -h
+        run: df -h || true
 
       # ---- 装指定版本 vcpkg（2026.07.29）------------------------------------
       - name: 安装 vcpkg ${{ env.VCPKG_REF }}
@@ -164,9 +142,7 @@ jobs:
           set -euo pipefail
           vcpkg install "node:${{ matrix.triplet }}" \
             --overlay-ports="$GITHUB_WORKSPACE/ports" \
-            --overlay-triplets="$GITHUB_WORKSPACE/triplets" \
-            --clean-after-build
-          df -h || true
+            --overlay-triplets="$GITHUB_WORKSPACE/triplets"
 
       # ---- L3：消费端冒烟（find_package + 链接 + 真跑 JS）-------------------
       - name: 构建并运行消费端冒烟

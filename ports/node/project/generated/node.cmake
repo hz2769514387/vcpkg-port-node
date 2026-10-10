@@ -2,7 +2,7 @@
 #   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
 #   指纹    ：../gyp2vcpkg/resolve.py 34eb26e83830e71f
 #             ../gyp2vcpkg/collect.py 69a202ae8e388ee3
-#             ../gyp2vcpkg/generate.py b91b0bec8bc781f3
+#             ../gyp2vcpkg/generate.py e471cc445dfec174
 #             ../gyp2vcpkg/_dump_generator.py d3fe1a95334e65ee
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
@@ -195,9 +195,10 @@ set(NODE_PORT_V8_NODE_LDFLAGS_LINUX
   "-pthread"
   "-m64"
 )
-#   gyp 的 ldflags 里有 6 项是把构建产物整份塞进链接的写法（-Wl,--whole-archive…），翻不成 CMake，调用方要自己写 $<LINK_LIBRARY:WHOLE_ARCHIVE,…>
+#   gyp 的 ldflags 里有 12 项是把构建产物整份塞进链接的写法（-Wl,--whole-archive…），翻不成 CMake，调用方要自己写 $<LINK_LIBRARY:WHOLE_ARCHIVE,…>
 set(NODE_PORT_V8_NODE_LDFLAGS_MAC
   "-pthread"
+  "-Wl,-search_paths_first"
 )
 
 set(NODE_PORT_V8_NODE_EXCEPTIONS FALSE)

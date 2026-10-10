@@ -245,6 +245,11 @@ elseif(APPLE)
   string(APPEND _cfg
     "target_link_libraries(node::node INTERFACE"
     " ${_static} ${_own_rest} ${_third} \"\${_node_nghttp2}\" ${_static})\n")
+  # macOS 上 abseil 的 cctz 引用 CoreFoundation（`_CFRelease` 等）；构建期由
+  # `xcode_settings.OTHER_LDFLAGS` 提供（见 gyp2vcpkg/generate.py）。而手写的
+  # imported 目标带不了构建期的 INTERFACE_LINK_OPTIONS —— 所以在消费配置里显式补。
+  string(APPEND _cfg
+    "target_link_options(node::node INTERFACE -framework CoreFoundation)\n")
 else()
   string(APPEND _cfg
     "target_link_libraries(node::node INTERFACE"

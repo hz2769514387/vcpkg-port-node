@@ -322,10 +322,24 @@ def emit_target_file(name, datas, labels, head_lines, gyp_rel, cfg):
     # 编译/链接标志：**逐平台**（POSIX 那一套；win 侧走 msvs_settings）。
     posix = False
     for field in ("cflags", "cflags_cc", "ldflags", "libraries"):
-        for suf, d in zip(sufs, datas):
+        for lbl, suf, d in zip(labels, sufs, datas):
             if suf == "WIN":
                 continue
             v = _list_of(d["targets"][name], field)
+            # macOS：gyp 用 `xcode_settings.OTHER_LDFLAGS` 表达"要链的框架/链接开关"
+            # （例：`-framework CoreFoundation`、`-Wl,-search_paths_first`）—— POSIX 的
+            # `ldflags` 里**没有**它们。不取就会在链接期报 `_CFRelease` 一类未定义符号
+            # （mac CI 实测：abseil 的 cctz 在 macOS 上用 CoreFoundation）。
+            #
+            # **只对 mac 平台取**：`xcode_settings` 是 .gyp 里的静态内容，三平台的解析
+            # 结果里都带着它；无脑取会把 `-framework` 喂给 Linux（ld 直接报错）。
+            #
+            # 值里可能是"一项含空格"（`'-framework CoreFoundation'`）—— 拆成两项再给
+            # CMake，否则会变成一个带空格的 argv、驱动认不出来。
+            if field == "ldflags" and lbl.split("-")[0].lower() == "mac":
+                _xs = (d["targets"][name].get("config") or {}).get("xcode_settings") or {}
+                for _f in _xs.get("OTHER_LDFLAGS") or []:
+                    v = list(v) + (_f.split() if isinstance(_f, str) else [_f])
             if not v:
                 continue
             # `-Wl,-force_load,<(PRODUCT_DIR)/libuv` / `-Wl,--whole-archive
