@@ -21,6 +21,7 @@
       "name": "windows-clang-cl",
       "inherits": "base",
       "displayName": "Windows x64（clang-cl + 静态 CRT + 静态库）",
+      "description": "node 24+ 的 Windows 官方口径。toolchain 由本工程（消费端）拥有。",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -28,7 +29,7 @@
       },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/../ports/node/cmake/toolchains/clang-cl.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
         "VCPKG_CRT_LINKAGE": "static",
         "VCPKG_LIBRARY_LINKAGE": "static"
       }
@@ -37,6 +38,7 @@
       "name": "windows-clang-cl-arm64",
       "inherits": "base",
       "displayName": "Windows arm64（clang-cl + 静态 CRT + 静态库）",
+      "description": "Tier 2：未实测。见 README 的支持矩阵。",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -44,7 +46,7 @@
       },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-windows-static-clang",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/../ports/node/cmake/toolchains/clang-cl.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
         "VCPKG_CRT_LINKAGE": "static",
         "VCPKG_LIBRARY_LINKAGE": "static"
       }
@@ -52,7 +54,7 @@
     {
       "name": "linux",
       "inherits": "base",
-      "displayName": "Linux x64（gcc）",
+      "displayName": "Linux x64（gcc + 静态库）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -65,7 +67,7 @@
     {
       "name": "linux-arm64",
       "inherits": "base",
-      "displayName": "Linux arm64（gcc）",
+      "displayName": "Linux arm64（gcc + 静态库）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -78,7 +80,7 @@
     {
       "name": "macos",
       "inherits": "base",
-      "displayName": "macOS arm64（clang）",
+      "displayName": "macOS arm64（clang + 静态库）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -91,7 +93,7 @@
     {
       "name": "macos-x64",
       "inherits": "base",
-      "displayName": "macOS x64（clang）",
+      "displayName": "macOS x64（clang + 静态库）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",

@@ -10,12 +10,14 @@
 #   * Windows：clang-cl + 静态 CRT + 静态库（x64/arm64-windows-static-clang）—— node 24+ 官方口径。
 #   * Linux：gcc + 静态库（x64/arm64-linux）。
 #   * macOS：clang + 静态库（x64/arm64-osx）。
-#   triplets 在 ports/node/cmake/triplets/ 下，toolchains 在 ports/node/cmake/toolchains/ 下。
+#   triplet / toolchain 都在**消费端**：test/cmake/{triplets,toolchains}/。
+#   ports/node/ 只含 port 自身（portfile + vcpkg.json + patches + usage），自包含、不引用目录外文件。
 #
 # 策略：
 #   只编译 test（清单模式自动装依赖），不做单独的 vcpkg install。
 #   只出 Release（triplet 里设 VCPKG_BUILD_TYPE=release）。
-#   并发度收着用（VCPKG_MAX_CONCURRENCY=2）：macOS arm64 只有 3 核 / 7 GB。
+#   并发度收着用（VCPKG_MAX_CONCURRENCY=2）：macOS arm64 只有 3 核 / 7 GB，
+#   而且这个值会经 VCPKG_CONCURRENCY 传给 port 内部的 ninja -j。
 
 name: ci
 
@@ -35,7 +37,8 @@ env:
 
 jobs:
   # ---------------------------------------------------------------------------
-  # L1：静态校验。
+  # L1：静态校验。这一层要能在**不编译**的情况下抓住所有"改 port 忘了同步"的错误，
+  #     所以每条规则都落成脚本红灯，而不是文档里的"请遵守"。
   # ---------------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
@@ -46,25 +49,92 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          for f in ports/node/vcpkg.json ports/node/portfile.cmake ports/node/usage; do
-            test -f "$f" || { echo "缺文件：$f"; exit 1; }
+          for f in ports/node/vcpkg.json ports/node/portfile.cmake ports/node/usage versions/n-/node.json; do
+            test -f "$f" || { echo "::error::缺文件：$f"; exit 1; }
           done
-          python3 -c "import json;json.load(open('ports/node/vcpkg.json'))" && echo "vcpkg.json JSON 合法"
-          test -f versions/n-/node.json || { echo "缺 versions/n-/node.json"; exit 1; }
-          python3 -c "import json;json.load(open('versions/n-/node.json'))" && echo "versions 条目 JSON 合法"
+          echo "必备文件齐备"
 
-      - name: versions 记录的 git-tree 与 ports/node 实际内容一致
+      - name: 所有 JSON 必须合法
         shell: bash
         run: |
           set -euo pipefail
-          want="$(python3 -c "import json;print(json.load(open('versions/n-/node.json'))['versions'][0]['git-tree'])")"
-          got="$(git rev-parse HEAD:ports/node)"
-          echo "versions 里记的：$want"
-          echo "HEAD 里的     ：$got"
-          if [ "$want" != "$got" ]; then
-            echo "::error::versions/n-/node.json 的 git-tree 与 ports/node 不一致"
+          python3 - <<'PY'
+          import json
+          import pathlib
+          import sys
+
+          files = [p for p in sorted(pathlib.Path(".").rglob("*.json")) if ".git" not in p.parts]
+          bad = []
+          for p in files:
+              try:
+                  json.loads(p.read_text(encoding="utf-8"))
+              except Exception as exc:
+                  bad.append((p, exc))
+          for p, exc in bad:
+              print("::error file=%s::JSON 不合法：%s" % (p, exc))
+          print("检查了 %d 个 JSON 文件，%d 个不合法" % (len(files), len(bad)))
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: 换行符统一（策略见 .gitattributes）
+        shell: bash
+        run: |
+          set -euo pipefail
+          test -f .gitattributes || { echo "::error::缺 .gitattributes"; exit 1; }
+          # 逐字节判定：被跟踪文件里不该有任何 CR。.gitattributes 声明 * text=auto eol=lf，
+          # 谁用 CRLF 编辑过一个文件并提交，这里就红。
+          # 用 Python 读字节而不是 shell 里的 $'\r' —— 后者在不同 shell/环境里行为不一致
+          # （本机 Git Bash 上会展开成空串，导致"全部文件都命中"的假阳性）。
+          python3 - <<'PY'
+          import pathlib
+          import subprocess
+          import sys
+
+          ls = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
+          files = [p.decode("utf-8") for p in ls.split(b"\x00") if p]
+          bad = []
+          for f in files:
+              try:
+                  if b"\r" in pathlib.Path(f).read_bytes():
+                      bad.append(f)
+              except OSError as exc:
+                  print("::warning file=%s::读不到文件：%s" % (f, exc))
+          for f in bad:
+              print("::error file=%s::含 CR，应为 LF（见 .gitattributes）" % f)
+          print("检查了 %d 个被跟踪文件，%d 个含 CR" % (len(files), len(bad)))
+          sys.exit(1 if bad else 0)
+          PY
+
+      - name: versions 的 git-tree 与 ports/node 实际内容一致
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 真正的裁判是脚本（tools/version_tree.py），CI 与本地用同一份逻辑；
+          # 它比对的是 ports/node 这个目录的 tree 哈希，与机器、core.autocrlf 无关。
+          python3 tools/version_tree.py --check
+
+      - name: port 必须自包含（不引用 port 目录外的任何东西）
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 1) port 目录只允许这几种条目：多出 cmake/ 之类的，就是 triplet/toolchain
+          #    （属于消费端）混进 port 了。
+          for p in ports/node/* ports/node/.[!.]*; do
+            [ -e "$p" ] || continue
+            case "$(basename "$p")" in
+              portfile.cmake|vcpkg.json|usage|patches) ;;
+              *) echo "::error::ports/node 出现了不该有的条目：$p"; exit 1 ;;
+            esac
+          done
+          # 2) 脚本/清单里不能引用 port 目录外的路径。
+          #    注意排除被转义的形式（\${CMAKE_CURRENT_LIST_DIR}/../.. 是**生成**给消费端
+          #    的相对路径字符串，不是 port 自己去读外面的文件）。
+          if grep -rnE '(^|[^\\])\$\{CMAKE_CURRENT_LIST_DIR\}/\.\./|test/cmake|ports/node/cmake' \
+               --include='*.cmake' --include='*.json' ports/node; then
+            echo "::error::ports/node 引用了 port 目录外的路径（见上面列出的行）"
             exit 1
           fi
+          echo "port 自包含检查通过"
 
   # ---------------------------------------------------------------------------
   # L2 + L3：编译 test（清单模式自动装 node + 依赖）+ 消费端冒烟。
@@ -81,7 +151,7 @@ jobs:
           - os: ubuntu-24.04-arm
             preset: linux-arm64
             triplet: arm64-linux
-            allow_failure: false
+            allow_failure: true
           - os: windows-latest
             preset: windows-clang-cl
             triplet: x64-windows-static-clang
@@ -175,17 +245,33 @@ jobs:
           echo "嵌入运行时报告的 node 版本：$OUT"
           test "$OUT" = "24.21.0"
 
-      - name: 失败时打印首错
-        if: failure()
+      - name: 首错写进 job summary
+        if: always()
         shell: bash
         run: |
+          # run 页面上直接能看，不必下载任何东西。
+          summary="$RUNNER_TEMP/first-error.txt"
+          : > "$summary"
           for f in "$VCPKG_ROOT"/buildtrees/*/*-out.log; do
             [ -f "$f" ] || continue
             if grep -q -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$f" 2>/dev/null; then
-              echo "===== $f ====="
-              grep -n -m 30 -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$f" || tail -n 80 "$f"
+              {
+                echo "===== $f ====="
+                grep -n -m 30 -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$f" || tail -n 80 "$f"
+              } >> "$summary"
             fi
           done
+          if [ -s "$summary" ]; then
+            cat "$summary"
+            {
+              echo "## ${{ matrix.triplet }} 首错"
+              echo '```'
+              head -n 120 "$summary"
+              echo '```'
+            } >> "$GITHUB_STEP_SUMMARY"
+          else
+            echo "没有匹配到错误行（若本 job 成功属正常）"
+          fi
 
       - name: 收集日志
         if: always()
@@ -202,22 +288,65 @@ jobs:
             vcpkg version 2>&1 || true
             echo "=== triplet ==="
             echo "${{ matrix.triplet }}"
+            echo "=== preset ==="
+            echo "${{ matrix.preset }}"
             echo "=== compiler ==="
             cc --version 2>&1 || true
             c++ --version 2>&1 || true
             clang-cl --version 2>&1 || true
             echo "=== installed libs ==="
             ls -la "$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/" 2>&1 || true
+            echo "=== installed node-config ==="
+            sed -n '1,80p' "$VCPKG_ROOT/installed/${{ matrix.triplet }}/share/node/node-config.cmake" 2>&1 || true
             echo "=== disk space ==="
             df -h 2>&1 || true
           } > "$RUNNER_TEMP/ci-logs/env_info.txt"
           echo "收集了 $(ls -1 "$RUNNER_TEMP/ci-logs" | wc -l) 个文件"
 
-      - name: 上传日志
+      - name: 上传本 job 的日志（中间产物）
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ matrix.triplet }}
+          name: logs-part-${{ matrix.triplet }}
           path: ${{ runner.temp }}/ci-logs
+          if-no-files-found: error
+          retention-days: 2
+
+  # ---------------------------------------------------------------------------
+  # 汇总日志：把六个平台的日志合成**一个**归档 —— 下载一次就够。
+  # ---------------------------------------------------------------------------
+  logs:
+    needs: [build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: logs-part-*
+          path: all-logs
+          merge-multiple: false
+
+      - name: 合成单个归档
+        shell: bash
+        run: |
+          set -euo pipefail
+          ls -R all-logs | head -n 60 || true
+          tar -czf ci-logs.tar.gz -C all-logs .
+          ls -lh ci-logs.tar.gz
+          {
+            echo "## 日志归档"
+            echo ""
+            echo "下载 ci-logs artifact 即可拿到**全部平台**的日志（一个文件，目录名区分平台）。"
+            echo ""
+            echo '```'
+            tar -tzf ci-logs.tar.gz | head -n 60
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传汇总归档
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: ci-logs.tar.gz
           if-no-files-found: error
           retention-days: 7

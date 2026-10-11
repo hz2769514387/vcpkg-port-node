@@ -60,6 +60,6 @@
     "只出现在某一个平台上的东西（宏、include、动作）进 _WIN / _LINUX 那一份，两边都有的进不带后缀的那份。",
     "编译/链接标志只出 POSIX 那一套（_LINUX）；MSVC 侧的等价物是 MSVS_* 三个变量 —— 两套各归各家，喂错了就是非法参数。",
     "MSVS_FLAGS = AdditionalOptions + WarningLevel(→/W<n>) + RuntimeTypeInfo(→/GR-|/GR) + ExceptionHandling(→/EHs-c-|/EHsc|/EHa) 翻出来的开关；`ExceptionHandling: 0` 还会顺带在 _DEFINES_WIN 里加 `_HAS_EXCEPTIONS=0`（MSVC 关异常要两件一起做）。",
-    "gyp 里 `-Wl,-force_load,<(PRODUCT_DIR)/libuv` 这种"引用构建产物路径"的 ldflags 翻不成 CMake（要写成 $<LINK_LIBRARY:WHOLE_ARCHIVE,…>），会被**跳过并在片段里注明** —— 调用方看到那条注释就得自己补。"
+    "gyp 里 `-Wl,-force_load,<(PRODUCT_DIR)/libuv` 这种「引用构建产物路径」的 ldflags 翻不成 CMake（要写成 $<LINK_LIBRARY:WHOLE_ARCHIVE,…>），会被**跳过并在片段里注明** —— 调用方看到那条注释就得自己补。"
   ]
 }

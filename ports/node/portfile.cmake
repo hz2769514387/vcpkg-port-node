@@ -8,10 +8,14 @@
 #
 # 三平台统一：`gyp -f ninja` → `ninja -C out/Release libnode`。
 #
+# ★ 本 port 是**自包含**的：目录里只有 portfile / vcpkg.json / patches / usage，
+#   不引用 port 目录外的任何文件，也不自带 triplet / toolchain（那是消费端的构建配置）。
+#   Windows 需要 clang-cl 时，走 vcpkg 标准变量 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 从 triplet
+#   交接过来 —— 于是换成使用者自己的 clang-cl triplet 也能工作。
+#
 # 口径要点：
-#   * Windows **必须用 clang-cl** 驱动 gyp（`configure.py` 写入 `make_global_settings`，
-#     见 patches/0008）：这是 node 24+ 的官方口径（vcbuild.bat 强制 ClangCL），也是
-#     ninja 生成器能编过 node 的 DevTools 协议模板的前提。
+#   * Windows **必须用 clang-cl**（node 24+ 的官方口径，vcbuild.bat 强制 ClangCL），
+#     这也是 ninja 生成器能编过 node 的 DevTools 协议模板的前提。
 #   * 依赖全部走 vcpkg（`--shared-*`），不编 node 内嵌副本；ICU 走 system-icu。
 #   * 交付物是**静态库**：请求动态库时报错（结构性不可能，而非"没测过"）。
 
@@ -49,32 +53,59 @@ vcpkg_find_acquire_program(NINJA)
 
 # ---------------------------------------------------------------------------
 # 编译环境：三平台一律 clang（工程约定）。
-#   * Windows：clang-cl（含 MSVC 命令行环境，clang-cl 需要 INCLUDE/LIB）。
-#   * Linux / macOS：直接用系统 cc / clang。
+#   * Windows：clang-cl。**编译器路径由 triplet 经 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 交接**，
+#     port 里因此不需要也不携带任何 toolchain 文件。同时，triplet 已经在 portfile 之前
+#     被 vcpkg include 过（scripts/ports.cmake:176），INCLUDE/LIB/PATH 也已就位。
+#   * Linux / macOS：用系统 cc / c++。
 # configure.py 通过 CC/CXX 环境变量决定 make_global_settings，进而决定 gyp 的 cl 规则。
 # ---------------------------------------------------------------------------
 set(_node_cc "")
 set(_node_cxx "")
+set(_node_clang_cl_arg "")
+
 if(VCPKG_TARGET_IS_WINDOWS)
-    # 复用仓库的 toolchain 脚本：它发布 NODE_PORT_LLVM_BIN（clang-cl 所在目录）
-    # 并设好 MSVC 命令行环境（INCLUDE/LIB/PATH）。
-    include("${CMAKE_CURRENT_LIST_DIR}/cmake/toolchains/clang-cl.cmake")
-    set(_node_cc "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
-    set(_node_cxx "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
+    # chainload toolchain 是 vcpkg 的标准交接机制：triplet 声明它，vcpkg 把它交给 port。
+    # 我们的 triplet 交来的那一份会发布 NODE_PORT_LLVM_BIN / NODE_PORT_VS_INSTALL_ROOT，
+    # 并把 MSVC 命令行环境配好。
+    if(DEFINED VCPKG_CHAINLOAD_TOOLCHAIN_FILE AND NOT VCPKG_CHAINLOAD_TOOLCHAIN_FILE STREQUAL "")
+        include("${VCPKG_CHAINLOAD_TOOLCHAIN_FILE}")
+    endif()
+
+    if(DEFINED NODE_PORT_LLVM_BIN AND NOT NODE_PORT_LLVM_BIN STREQUAL "")
+        set(_node_clang_cl "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
+    elseif(DEFINED ENV{CC} AND "$ENV{CC}" MATCHES "clang-cl")
+        set(_node_clang_cl "$ENV{CC}")
+    else()
+        find_program(_node_clang_cl NAMES clang-cl)
+    endif()
+    if(NOT _node_clang_cl)
+        message(FATAL_ERROR
+            "Windows 上构建本 port 需要 clang-cl（node 24+ 官方口径）。\n"
+            "请用一个把 clang-cl 交接给 port 的 triplet：本仓库的消费端示例工程里，\n"
+            "`cmake/triplets/` 下的 x64-windows-static-clang.cmake 就是这么做的\n"
+            "（它设置 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 指向 clang-cl.cmake）。")
+    endif()
+
+    set(_node_cc "${_node_clang_cl}")
+    set(_node_cxx "${_node_clang_cl}")
+
     # gyp 在中文 locale 下的两个已知坑：VS 定位失败 / reg.exe 解码失败。
     set(ENV{GYP_MSVS_VERSION} 2022)
     if(NODE_PORT_VS_INSTALL_ROOT)
         set(ENV{GYP_MSVS_OVERRIDE_PATH} "${NODE_PORT_VS_INSTALL_ROOT}")
     endif()
     set(ENV{DXSDK_DIR} "C:/nonexistent")
+
     # system-icu 需要 pkg-config：用 vcpkg_find_acquire_program(PKGCONFIG) 拿 MinGW 原生版
     # （MSYS2 运行时版的 pkg-config 无法读 Windows 风格的 PKG_CONFIG_PATH）。
     vcpkg_find_acquire_program(PKGCONFIG)
     set(ENV{PKG_CONFIG} "${PKGCONFIG}")
+
     # vcpkg 依赖的头文件和库文件加入 INCLUDE/LIB：gyp 的非 v8 目标（如 js2c）
     # 也需要 simdutf.h，链接器需要 simdutf.lib —— 不加这里，每个目标都要单独配路径。
     set(ENV{INCLUDE} "${CURRENT_INSTALLED_DIR}/include;$ENV{INCLUDE}")
     set(ENV{LIB} "${CURRENT_INSTALLED_DIR}/lib;$ENV{LIB}")
+
     # --clang-cl=<ver> 让 configure.py 设 clang=1，这使 v8.gyp 的 asm_to_inline_asm
     # action 把 embedded.S 转成 embedded.cc（否则 embedded blob 符号丢失，链接失败）。
     execute_process(
@@ -82,9 +113,26 @@ if(VCPKG_TARGET_IS_WINDOWS)
         OUTPUT_VARIABLE _clang_version_output
         ERROR_QUIET
         OUTPUT_STRIP_TRAILING_WHITESPACE)
-    string(REGEX REPLACE "^clang version ([0-9]+\.[0-9]+\.[0-9]+).*" "\\1"
+    # 用 [.] 而不是 \. —— CMake 的引号字符串里 \. 是非法转义序列（会报 dev 级警告）。
+    string(REGEX REPLACE "^clang version ([0-9]+[.][0-9]+[.][0-9]+).*" "\\1"
            _llvm_version "${_clang_version_output}")
     set(_node_clang_cl_arg "--clang-cl=${_llvm_version}")
+
+    # patches/0007 与 0008 要用 clang.exe（clang-cl 的兄弟）做宏/OpenSSL 版本探测，并把
+    # compiler-rt 内建库挂到链接行上 —— 这些开关**必须是目标架构的**，不能写死 x86_64。
+    # 目标三元组与内建库名从这里交给补丁（补丁只读环境变量，内部不含架构常量）。
+    if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
+        set(_node_llvm_arch "aarch64")
+        set(_node_rt_arch "aarch64")
+    elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
+        set(_node_llvm_arch "i686")
+        set(_node_rt_arch "i386")
+    else()
+        set(_node_llvm_arch "x86_64")
+        set(_node_rt_arch "x86_64")
+    endif()
+    set(ENV{NODE_PORT_CLANG_TARGET} "${_node_llvm_arch}-pc-windows-msvc")
+    set(ENV{NODE_PORT_CLANG_RT_BUILTINS_NAME} "clang_rt.builtins-${_node_rt_arch}")
 else()
     find_program(_node_c_prog NAMES cc gcc)
     find_program(_node_cxx_prog NAMES c++ g++ clang++)
@@ -93,12 +141,7 @@ else()
     set(ENV{PKG_CONFIG} "pkg-config")
 endif()
 
-# 非Windows 不需要 --clang-cl
-if(NOT VCPKG_TARGET_IS_WINDOWS)
-    set(_node_clang_cl_arg "")
-endif()
-
-# shlex 会吃反斜杠：CC/CCX 与 PKG_CONFIG 一律用正斜杠（Windows 上尤其重要）。
+# shlex 会吃反斜杠：CC/CXX 与 PKG_CONFIG 一律用正斜杠（Windows 上尤其重要）。
 set(ENV{CC} "${_node_cc}")
 set(ENV{CXX} "${_node_cxx}")
 set(ENV{PKG_CONFIG_PATH} "${CURRENT_INSTALLED_DIR}/lib/pkgconfig")
@@ -154,9 +197,10 @@ _node_shared(hdr-histogram hdr-histogram "${_hdrhist_lib}")
 
 # ---------------------------------------------------------------------------
 # 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
-#    --ninja 让 configure.py 用 ninja 生成器（Windows 上 ninja-win，flavor=win）。
+#    --ninja → configure.py 传 `-f ninja-<flavor>`（Windows 上是 ninja-win）。这是合法
+#    写法：gyp 的 Load() 里有 `if "-" in format: format, flavor = format.split("-", 1)`，
+#    会把它拆成 format=ninja + flavor=win（见 tools/gyp/pylib/gyp/__init__.py）。
 #    -DVCPKG_SIMDUTF_INCLUDE 供 patches/0011 的 v8 simdutf 目标使用。
-#    configure.py 用 parse_known_args，未知位置参数会转发给 gyp（见 configure.py:2750）。
 # ---------------------------------------------------------------------------
 vcpkg_execute_required_process(
     COMMAND "${PYTHON3}" configure.py
@@ -170,16 +214,24 @@ vcpkg_execute_required_process(
 )
 
 # ---------------------------------------------------------------------------
-# 3) ninja 构建可链接库 `libnode`（gyp 目标名，见 node.gyp 的 node_lib_target_name）。
+# 2) ninja 构建可链接库 `libnode`（gyp 目标名，见 node.gyp 的 node_lib_target_name）。
+#    并发度跟随 vcpkg（VCPKG_CONCURRENCY，来自 VCPKG_MAX_CONCURRENCY）：ninja 默认是
+#    "核数+2"，在 3 核 / 7 GB 的 macOS arm64 runner 上会同时跑 5 个重型 V8 编译单元，
+#    容易 OOM。vcpkg 自带的 vcpkg_build_ninja 反而不传 -j，所以这里显式传。
 # ---------------------------------------------------------------------------
+set(_node_ninja_jobs "")
+if(DEFINED VCPKG_CONCURRENCY AND NOT VCPKG_CONCURRENCY STREQUAL "")
+    set(_node_ninja_jobs "-j${VCPKG_CONCURRENCY}")
+endif()
+
 vcpkg_execute_required_process(
-    COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/Release" libnode
+    COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/Release" ${_node_ninja_jobs} libnode
     WORKING_DIRECTORY "${SOURCE_PATH}"
     LOGNAME build
 )
 
 # ---------------------------------------------------------------------------
-# 4) 安装：头文件 + 全部 gyp 静态库 + 手写 CMake 消费配置。
+# 3) 安装：头文件 + 全部 gyp 静态库 + 手写 CMake 消费配置。
 # ---------------------------------------------------------------------------
 file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${CURRENT_PACKAGES_DIR}/include/node"
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
@@ -206,6 +258,26 @@ if(VCPKG_TARGET_IS_WINDOWS)
 endif()
 
 # ---- 手写消费配置（不用 install(EXPORT)：库是 gyp 产物、不是 CMake 目标）--------
+#
+# ★ gyp 的静态库命名规则（tools/gyp/pylib/gyp/generator/ninja.py 的
+#   ComputeOutputFileName，以及 node.gyp:16-18 的注释"Gyp will prefix this with `lib`
+#   if this name does not start with `lib`"）：
+#     * 非 Windows：前缀 "lib"，且**先把 target_name 开头的 "lib" 剥掉**再补前缀
+#       → target `libnode` 的产物是 `libnode.a`（**不是** liblibnode.a），
+#         target `node_base` 的产物是 `libnode_base.a`。
+#     * Windows：前缀为空 → `libnode.lib` / `node_base.lib`。
+#   直接拼 "lib" + target + ".a" 会在 Linux/macOS 上算出 liblibnode.a 这个不存在的
+#   文件，消费端 CMake 立刻报 "imported target … references the file … but this file
+#   does not exist"。所以这里按 gyp 的语义算文件名。
+function(_node_archive_filename _target _out)
+    if(VCPKG_TARGET_IS_WINDOWS)
+        set(${_out} "${_target}.lib" PARENT_SCOPE)
+    else()
+        string(REGEX REPLACE "^lib" "" _node_stripped "${_target}")
+        set(${_out} "lib${_node_stripped}.a" PARENT_SCOPE)
+    endif()
+endfunction()
+
 set(_cfg "# 由 node port 生成：node 的 CMake 消费配置。\n")
 string(APPEND _cfg "include(CMakeFindDependencyMacro)\n")
 # hdr_histogram-config.cmake 内部用 find_dependency(ZLIB) module mode，
@@ -234,11 +306,7 @@ endforeach()
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
     "set(_node_lib \"\${_node_prefix}/lib\")\n")
-if(VCPKG_TARGET_IS_WINDOWS)
-    string(APPEND _cfg "set(_node_pre \"\")\nset(_node_suf \".lib\")\n")
-else()
-    string(APPEND _cfg "set(_node_pre \"lib\")\nset(_node_suf \".a\")\n")
-endif()
+
 # node 自身口径下需要串起来的静态库全集（gyp 目标）。
 set(_node_all_archives
     libnode node_base
@@ -247,13 +315,16 @@ set(_node_all_archives
     abseil highway
     ncrypto ncrypto_engine nbytes merve uvwasi crdtp)
 foreach(_a IN LISTS _node_all_archives)
+    _node_archive_filename("${_a}" _node_file)
     string(APPEND _cfg
         "if(NOT TARGET node::${_a})\n"
         "  add_library(node::${_a} STATIC IMPORTED)\n"
         "  set_target_properties(node::${_a} PROPERTIES IMPORTED_LOCATION"
-        " \"\${_node_lib}/\${_node_pre}${_a}\${_node_suf}\")\n"
+        " \"\${_node_lib}/${_node_file}\")\n"
         "endif()\n")
 endforeach()
+unset(_node_file)
+
 string(APPEND _cfg
     "add_library(node::node INTERFACE IMPORTED)\n"
     "set_target_properties(node::node PROPERTIES"
@@ -282,10 +353,21 @@ string(APPEND _cfg
     " ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3"
     " hdr_histogram::hdr_histogram_static node::nghttp2"
     " llhttp::llhttp_static)\n")
-# Windows 额外系统库：winmm（V8 timeGetTime）、clang_rt.builtins（hdr_histogram __cpu_model）
+# Windows 额外系统库：
+#   * winmm：V8 的 timeGetTime。
+#   * compiler-rt 内建库：hdr_histogram（以及别的 clang 编出来的 C 代码）用
+#     __builtin_cpu_supports 时引用 __cpu_model，而 CMake 对 MSVC 前端的链接规则是
+#     直接调 lld-link，绕过了 clang 驱动 —— 内建库不会自动带上。
+#     名字**按架构取**（x64 → x86_64，arm64 → aarch64）；若消费端的 chainload toolchain
+#     已经算出了绝对路径（NODE_PORT_CLANG_RT_BUILTINS），优先用它。
 if(VCPKG_TARGET_IS_WINDOWS)
+    string(APPEND _cfg "set(_node_rt_builtins \"clang_rt.builtins-${_node_rt_arch}\")\n")
     string(APPEND _cfg
-        "target_link_libraries(node::node INTERFACE winmm clang_rt.builtins-x86_64)\n")
+        "if(DEFINED NODE_PORT_CLANG_RT_BUILTINS AND EXISTS \"\${NODE_PORT_CLANG_RT_BUILTINS}\")\n"
+        "  set(_node_rt_builtins \"\${NODE_PORT_CLANG_RT_BUILTINS}\")\n"
+        "endif()\n")
+    string(APPEND _cfg
+        "target_link_libraries(node::node INTERFACE winmm \${_node_rt_builtins})\n")
 endif()
 string(APPEND _cfg
     "set(node_NODE_SOURCE_MANIFEST \"\${CMAKE_CURRENT_LIST_DIR}/node.exe.extra.manifest\")\n")

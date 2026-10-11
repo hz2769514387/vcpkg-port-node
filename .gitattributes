@@ -1,0 +1,25 @@
+# 换行符策略：**入库即定案**，与任何机器的 core.autocrlf 无关。
+#
+# 为什么必须显式声明（而不是依赖各机器的 git config）：
+#   1) patch 的上下文匹配是逐字节的 —— 入库/检出的换行符一旦随机器变化，
+#      `git apply` 就会"同一份补丁在这台机器能打、在那台打不上"。
+#   2) `versions/*.json` 里的 git-tree 是 **ports/<port> 目录的 tree 对象哈希**，
+#      而 `git add` 是否做 EOL 归一化取决于 .gitattributes + core.autocrlf。
+#      不声明清楚，同一份源码在不同机器上算出的 git-tree 会不一样 ——
+#      CI 的 lint 就会随机红（这正是 2026-10-11 那次失败的隐患来源）。
+#
+# 本仓库全部是可跨平台的文本（没有 .bat / .cmd / .ps1），所以统一 LF。
+* text=auto eol=lf
+
+# patch 单独再声明一次：它必须逐字节稳定，不能被任何启发式影响。
+*.patch text eol=lf
+
+# 真二进制：不做任何转换、不参与 diff。
+*.lib binary
+*.a binary
+*.gz binary
+*.tar binary
+*.zip binary
+*.png binary
+*.jpg binary
+*.ico binary

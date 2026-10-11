@@ -406,9 +406,22 @@ python tools/gyp_node.py -f ninja -Dpython=<py> -Dconfiguring_node=1 -Dbuild_typ
 "<vcpkg>/downloads/tools/ninja-1.13.2-windows/ninja.exe" -C out/Release <target>
 ```
 
-> ⚠ **不要用 `configure.py --ninja`**：它拼出 `-f ninja-win`，而 **gyp 只有 `ninja`
-> 这一个 generator 名**（`gyp.generator.ninja`），没有 `ninja-win`。实测会解析失败。
-> 正确做法是 configure 走默认、再手动 `-f ninja`。
+> ⚠ **更正（2026-10-11，本条原结论错误）**：原文写"不要用 `configure.py --ninja`，
+> 它拼出 `-f ninja-win`，而 gyp 只有 `ninja` 这一个 generator 名，会解析失败"。
+> 经逐行核对源码，`-f ninja-win` 是**合法**写法：`tools/gyp/pylib/gyp/__init__.py:89-90`
+> 有
+>
+> ```python
+> if "-" in format:
+>     format, params["flavor"] = format.split("-", 1)
+> ```
+>
+> 即 gyp 会把 `ninja-win` 拆成 `format=ninja` + `flavor=win`，然后正常 `import
+> gyp.generator.ninja`。当初之所以得出"解析失败"，是因为用
+> `importlib.import_module("gyp.generator.ninja-win")` 直接导入 —— 绕过了 gyp 自己的
+> `Load()`，当然找不到 `gyp/generator/ninja-win.py`。走 gyp 的入口没有问题。
+> 因此正式 portfile 用的是 `configure.py --ninja`（比"configure 走默认再手动 `-f ninja`"
+> 少一步、也不依赖 `configure.py` 之外的调用约定）。
 
 ### 与 `vcpkg_build_ninja` 的接口
 

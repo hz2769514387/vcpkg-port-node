@@ -1,7 +1,8 @@
-node 提供 node v24.21.0 整棵树的 CMake 构建产物：
+node 提供 node v24.21.0 整棵树的静态库构建产物：
 
   * 头文件：<prefix>/include/node/（node 嵌入头）与 <prefix>/include/（v8 公开头）
-  * 静态库：<prefix>/lib/（node_base / node_main / v8_* / 各 vendored 库）
+  * 静态库：<prefix>/lib/（libnode、node_base、v8_*、以及 node 自带的
+    uvwasi / merve / nbytes / ncrypto / crdtp 与 v8 内嵌的 abseil / highway / v8_zlib）
   * 消费配置：<prefix>/share/node/node-config.cmake
 
 用法（CMake）：
@@ -10,5 +11,15 @@ node 提供 node v24.21.0 整棵树的 CMake 构建产物：
     target_link_libraries(<你的目标> PRIVATE node::node)
 
 `node::node` 已经把 node 的全部实现与第三方依赖接好，并带好 include 目录。
-Windows 上若要让目标嵌平台兼容性清单，可用变量
-`node_NODE_SOURCE_MANIFEST`（指向 node.exe.extra.manifest）。
+
+几点说明：
+
+  * 静态库文件名遵循 node 自己 gyp 的命名规则：POSIX 上是 libnode.a / libnode_base.a，
+    Windows 上是 libnode.lib / node_base.lib（消费配置已经按平台算好，你不用管）。
+  * Windows 上若要让目标嵌平台兼容性清单，可用变量
+    `node_NODE_SOURCE_MANIFEST`（指向 node.exe.extra.manifest）；缺了它进程一启动就退出码 216。
+  * 这是**静态库**交付：请求 VCPKG_LIBRARY_LINKAGE=dynamic 会被 vcpkg 直接报错
+    （node 的交付形态结构性不支持动态库）。
+  * node 依赖的第三方库（openssl / zlib / libuv / icu / sqlite3 / brotli / zstd /
+    simdjson / simdutf / ada / ngtcp2 / nghttp2 / c-ares / llhttp / hdr-histogram）
+    都由 vcpkg 提供，作为传递依赖自动带上；不需要你手工 find_package。

@@ -119,4 +119,6 @@ test里面感觉不像是正常的使用overlay-port的推荐方式；应该有v
 4.可能需要输出的东西：include、lib、还有参考tools\node_exe里面（有node.exe、npm包、corepack包、npm和npx的脚本，这些东西使用者特殊场景下很可能也需要用）；还有toolchains、triplets里面的东西？按照vcpkg规则是不是统一输出到share里面比较好？test从share里面拿。
 5.上一轮push的ci日志已经放在log/11了，都失败。以后建议你需要关心的所有编译结果都放到log archive里面，不要放artifact里面（我一个一个点下载麻烦，而下载log archive只需要点一次）。
 
-
+2026年10月11日 22点02分
+审查一下这个仓库还有没有什么问题，目前最后一轮push的ci还在编译中。
+debug的事情留着，其他都开始做。versions\n-\node.json里面的值是什么意思，感觉自动生成更好。CRLF问题也得彻底解决（ci机器配置如果改变随时可能出现，用户使用时也担心隐患）
