@@ -249,7 +249,9 @@ if(NOT _absl_libs)
         "找不到 vcpkg 的 abseil 静态库（它应当已作为本 port 的依赖装上）：${_lib}")
 endif()
 list(LENGTH _absl_libs _absl_count)
-if(UNIX AND NOT APPLE)
+# 用 VCPKG_TARGET_IS_LINUX 而不是 `UNIX AND NOT APPLE`：vcpkg 对 UNIX/APPLE/WIN32 这类
+# 歧义系统变量装了 variable_watch，在 portfile 里读一下就会打很长一段警告（实测）。
+if(VCPKG_TARGET_IS_LINUX)
     # GNU ld 对静态库顺序敏感，而这堆 absl_* 之间有循环引用 → 用 group 包起来。
     # （ld64（macOS）会自己反复扫归档，不需要也不支持 --start-group。）
     list(PREPEND _absl_libs "-Wl,--start-group")
@@ -284,7 +286,7 @@ file(WRITE "${_deps_gypi}"
 "
 "}
 ")
-message(STATUS "v8 将用 vcpkg 的 abseil（${_absl_count} 个静态库）与 highway（${_hwy_gyp}）")
+message(STATUS "v8 will use the vcpkg abseil (${_absl_count} libs) and highway (${_hwy_gyp})")
 
 # ---------------------------------------------------------------------------
 # 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
@@ -317,11 +319,12 @@ if(DEFINED VCPKG_CONCURRENCY AND NOT VCPKG_CONCURRENCY STREQUAL "")
     set(_node_ninja_jobs "-j${VCPKG_CONCURRENCY}")
 endif()
 
-vcpkg_execute_required_process(
 set(_node_ninja_targets libnode)
 if("tools" IN_LIST FEATURES)
     list(APPEND _node_ninja_targets node)  # tools 要 node.exe
 endif()
+
+vcpkg_execute_required_process(
     COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/Release" ${_node_ninja_jobs} ${_node_ninja_targets}
     WORKING_DIRECTORY "${SOURCE_PATH}"
     LOGNAME build
