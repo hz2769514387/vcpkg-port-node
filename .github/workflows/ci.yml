@@ -9,12 +9,19 @@
 #        coexist      —— 行为级：zlib/brotli/openssl/ICU/IDN/sqlite/http/http2/worker/wasm
 #                        全部由链接进来的 vcpkg 库提供；外加符号审计（Windows）
 #        node-suite   —— **node 官方测试套件**，由官方 tools/test.py --shell=<本工程的可执行> 驱动
-#   3. 覆盖六个平台：win/linux/mac × x64/arm64。
+#   3. 覆盖**五个**平台：win x64/arm64、linux x64/arm64、macos arm64。
+#      （x64-osx 已从 CI 移除 —— macos-13 runner 资源紧张、排队久；triplet 与本工程 preset
+#        仍然保留，见 docs/暂时还没做.md。）
+#
+# ★ 先装 CMake 4.x 再动 vcpkg：vcpkg 2026.07.29 的脚本用了 `string(JSON ... STRING_ENCODE)`，
+#   那是 CMake 4.x 才有的子命令（3.31 会报 invalid mode 'STRING_ENCODE'），而 vcpkg 执行
+#   portfile.cmake 用的就是 PATH 上的 cmake。镜像里 ubuntu/macos 是 3.31 → 装依赖的第一个
+#   port（zstd）就挂；Windows 恰好是 4.4 才侥幸能过。所以这里统一钉版本，不依赖镜像自带的那份。
 #
 # 平台口径（路线 B）：
 #   * Windows：clang-cl + 静态 CRT + 静态库（x64/arm64-windows-static-clang）—— node 24+ 官方口径。
 #   * Linux：gcc + 静态库（x64/arm64-linux）。
-#   * macOS：clang + 静态库（x64/arm64-osx）。
+#   * macOS：clang + 静态库（arm64-osx）。
 #   triplet / toolchain 都在**消费端**：test/cmake/{triplets,toolchains}/。
 #   ports/node/ 只含 port 自身（portfile + vcpkg.json + patches + usage），自包含、不引用目录外文件。
 #
@@ -177,10 +184,6 @@ jobs:
             preset: windows-clang-cl-arm64
             triplet: arm64-windows-static-clang
             allow_failure: true
-          - os: macos-13
-            preset: macos-x64
-            triplet: x64-osx
-            allow_failure: true
           - os: macos-latest
             preset: macos
             triplet: arm64-osx
@@ -197,6 +200,45 @@ jobs:
         if: always()
         shell: bash
         run: df -h || true
+
+      # ---- 先装 CMake 4.x ------------------------------------------------------
+      # vcpkg 2026.07.29 的脚本（z_vcpkg_spdx.cmake）用了 `string(JSON ... STRING_ENCODE)`，
+      # 那是 CMake 4.x 才有的子命令 —— 3.31 会直接报：
+      #     string sub-command JSON got an invalid mode 'STRING_ENCODE'
+      # 而 vcpkg 执行 portfile.cmake 用的就是 PATH 上的 cmake，所以镜像自带哪一版就决定了成败
+      # （ubuntu/macos 是 3.31 → 装依赖的第一个 port 就挂；Windows 恰好是 4.4）。
+      # 这里统一钉一个版本。下载失败不直接判死：后面有一步专门断言最终 cmake 的主版本 ≥ 4，
+      # 由它给出清楚的报错（而不是藏在 port 构建里）。
+      - name: 安装 CMake 4.4.0（vcpkg 的脚本需要 CMake 4.x）
+        shell: bash
+        run: |
+          set -euo pipefail
+          ver="4.4.0"
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64)   asset="cmake-$ver-linux-x86_64.tar.gz";    inner="cmake-$ver-linux-x86_64" ;;
+            Linux-ARM64) asset="cmake-$ver-linux-aarch64.tar.gz";   inner="cmake-$ver-linux-aarch64" ;;
+            macOS-*)     asset="cmake-$ver-macos-universal.tar.gz"; inner="cmake-$ver-macos-universal/CMake.app/Contents" ;;
+            Windows-*)   asset="cmake-$ver-windows-x86_64.zip";     inner="cmake-$ver-windows-x86_64" ;;
+            *) echo "::error::未知平台 ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          cd "$RUNNER_TEMP"
+          url="https://github.com/Kitware/CMake/releases/download/v$ver/$asset"
+          echo "下载 $url"
+          if ! curl -fsSL -o "$asset" "$url"; then
+            echo "::warning::CMake 下载失败，退回镜像自带的 cmake（下一步会断言版本）"
+            exit 0
+          fi
+          case "$asset" in
+            *.zip) unzip -qo "$asset" ;;
+            *)     tar -xzf "$asset" ;;
+          esac
+          bin="$RUNNER_TEMP/$inner/bin"
+          if ! ls "$bin"/cmake* >/dev/null 2>&1; then
+            echo "::warning::解压后没找到 cmake（$bin），退回镜像自带的那份"
+            exit 0
+          fi
+          echo "$bin" >> "$GITHUB_PATH"
+          "$bin/cmake" --version | head -1
 
       # ---- Windows：确保 clang-cl 可用 ----------------------------------------
       - name: 定位 clang-cl（Windows）
@@ -237,6 +279,21 @@ jobs:
           ./vcpkg-src/vcpkg version
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_ENV"
           echo "$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_PATH"
+
+      # ---- 断言 CMake 主版本 ≥ 4 ----------------------------------------------
+      # 这一条是给 vcpkg 立的门：低于 4 的 cmake 会让 portfile 在第一个 vcpkg_from_github /
+      # vcpkg_download_distfile 上就炸（STRING_ENCODE），而且报错位置离真因很远。
+      - name: 确认 CMake 主版本 ≥ 4（vcpkg 的脚本要求）
+        shell: bash
+        run: |
+          set -euo pipefail
+          which cmake
+          cmake --version | head -1
+          major="$(cmake --version | head -1 | sed -E 's/[^0-9]*([0-9]+)\..*/\1/')"
+          if [ "${major:-0}" -lt 4 ]; then
+            echo "::error::当前 cmake 主版本是 ${major}，vcpkg 2026.07.29 的脚本需要 4.x"
+            exit 1
+          fi
 
       # ---- L2 + L3：配置 + 构建 + 运行消费端冒烟 ------------------------------
       # 清单模式：test/vcpkg.json 声明依赖 node，vcpkg 自动装（含 overlay port）。
@@ -355,7 +412,7 @@ jobs:
           retention-days: 2
 
   # ---------------------------------------------------------------------------
-  # 汇总日志：把六个平台的日志合成**一个**归档 —— 下载一次就够。
+  # 汇总日志：把各平台的日志合成**一个**归档 —— 下载一次就够。
   # ---------------------------------------------------------------------------
   logs:
     needs: [build]

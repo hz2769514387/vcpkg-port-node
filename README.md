@@ -21,7 +21,8 @@ target_link_libraries(你的目标 PRIVATE node::node)
 | 档 | 含义 | 平台 / 口径 |
 |---|---|---|
 | **Tier 1** | CI 每个 push 都跑，**实测保证** | Windows `x64-windows-static-clang`（clang-cl + 静态 CRT，node 24+ 官方口径）；Linux `x64-linux`（gcc，静态库） |
-| **Tier 2** | 进了 CI 矩阵但**允许失败**；声明可过、未保证 | `arm64-windows-static-clang`、`arm64-linux`、`x64-osx`、`arm64-osx`；MSVC 口径、debug 构建、动态 CRT 变体 |
+| **Tier 2** | 进了 CI 矩阵但**允许失败**；声明可过、未保证 | `arm64-windows-static-clang`、`arm64-linux`、`arm64-osx`；MSVC 口径、debug 构建、动态 CRT 变体 |
+| **Tier 2（不在 CI）** | 配置留着、可自己跑，但 CI 不覆盖 | `x64-osx`（macos-13 runner 资源紧张，已从 CI 移除，见 `docs/暂时还没做.md` 2b） |
 | **Tier 3** | **结构性不支持**（vcpkg 直接报错或 `supports` 字段挡掉） | 动态库交付、32 位、mingw、android / ios |
 
 全部 release-only（triplet 里 `VCPKG_BUILD_TYPE release`）。
@@ -82,7 +83,7 @@ Windows 需要 clang-cl 时，triplet 用 vcpkg 的标准变量 `VCPKG_CHAINLOAD
 
 ```sh
 cd test
-cmake --preset windows-clang-cl          # 或 linux / macos / …（六个平台）
+cmake --preset windows-clang-cl          # 或 linux / macos / …（六个 preset，CI 跑其中五个）
 cmake --build --preset windows-clang-cl
 ctest --test-dir build/windows-clang-cl --output-on-failure
 ```
@@ -122,10 +123,10 @@ ctest --test-dir build/windows-clang-cl --output-on-failure
 `.github/workflows/ci.yml`：
 
 * `lint`：静态校验四条红线（JSON 合法、无 CR、git-tree 与 `ports/node` 一致、port 自包含）。
-* `build`：六个平台 × 清单模式编译 `test/`，然后 `ctest` 跑全部四组
+* `build`：**五个**平台 × 清单模式编译 `test/`，然后 `ctest` 跑全部四组
   （smoke / unit / coexist / node 官方套件）。每个 job 加了 `timeout-minutes`，
   被超时取消时 `if: always()` 的收集步骤仍会把日志带走。
-* `logs`：把六个平台的日志合成**一个** `ci-logs` 归档（下载一次即可），
+* `logs`：把各平台的日志合成**一个** `ci-logs` 归档（下载一次即可），
   里面还带 `ctest.log` 与用例清单；每个 job 的"首错"和 ctest 摘要直接写进 run 页面的
   job summary，不必下载就能看。
 

@@ -1131,3 +1131,42 @@ if %NODE_MAJOR_VERSION% GEQ 24 (
 > 注意 `tools/symbol_check.py` 目前是 Windows/dumpbin 专用；Linux 的 `nm` 版本还没写
 > （已记在 `docs/暂时还没做.md`）。ctest 里 `--dumpbin` 由 CMake 在**配置期**解析绝对
 > 路径传进去 —— ctest 进程不在 vcvars 环境里，光靠 PATH 找不到。
+
+### 15.5 ★★ vcpkg 2026.07.29 的脚本要求 **CMake 4.x**，而 portfile 的解释器就是 PATH 上的 cmake
+
+- 现象（run #13 的 linux-arm job，4 秒就死）：
+  ```
+  CMake Error at scripts/cmake/z_vcpkg_spdx.cmake:15 (string):
+    string sub-command JSON got an invalid mode 'STRING_ENCODE',
+    expected one of GET, TYPE, MEMBER, LENGTH, REMOVE, SET, EQUAL.
+  Call Stack: vcpkg_from_github.cmake:135 (z_vcpkg_add_spdx_resource) <- ports/zstd
+  ```
+- 根因：`string(JSON ... STRING_ENCODE)` 是 **CMake 4.x** 才有的子命令。实测：
+  - CMake 3.31.6 → `invalid mode 'STRING_ENCODE'`（vcpkg 的脚本当场炸）
+  - CMake 4.3.3 → `ok: "a"`
+  而 **vcpkg 执行 `portfile.cmake` 用的就是 PATH 上的 cmake**（不是它给 port 构建下载的
+  那份 `downloads/tools/cmake-4.4.0-*`）—— Windows runner 上 PATH 里的
+  `C:/Program Files/CMake` 恰好是 4.4 所以能过；ubuntu / macos 镜像是 3.31 → 装依赖的
+  第一个用 `vcpkg_from_github`/`vcpkg_download_distfile` 的 port（zstd）就挂。
+- 而且这个路径**没有开关可以关**：`z_vcpkg_add_spdx_resource` 在 `vcpkg_from_github.cmake`
+  与 `vcpkg_download_distfile.cmake` 里都是无条件调用的（我们自己的 portfile 也用后者）。
+- 修法：CI 里**先钉一个 CMake 4.4.0**（按平台下 Kitware 的官方包、塞进 PATH），
+  再断言主版本 ≥ 4 —— 报错要报在"CMake 版本不够"这一步，而不是藏在某个 port 的构建里。
+- 教训：**"哪个 CMake 在跑 portfile"是一个必须显式管的依赖**，不能指望 runner 镜像的版本。
+  镜像哪天从 4.4 退回 3.x，Windows 也会跟着挂。
+
+### 15.6 arm64-windows 交叉构建：try_compile 不能运行 arm64 的 exe
+
+- 现象（run #13 的 win-arm job，zstd 的编译器检查）：
+  ```
+  FAILED: [code=4294967295] cmTC_0ffd6.exe ... unknown error
+  ```
+  顺着看编译行，`--target=aarch64-pc-windows-msvc` 是对的（架构参数化生效），
+  但 CMake 的 `try_compile` 默认会**运行**产出的可执行来验证 —— x64 宿主跑不了 arm64 的 exe。
+- 修法（只加在 arm64-windows 这个**交叉** triplet 上）：
+  `-DCMAKE_TRY_COMPILE_TARGET_TYPE=STATIC_LIBRARY`，让 try_compile 只编译不运行。
+- 注意 `VCPKG_CMAKE_CONFIGURE_OPTIONS` 是用 `vcpkg_list` 展开的，所以多个 `-D` 用 `;` 分隔是
+  安全的 —— **与 `VCPKG_C_FLAGS`/`VCPKG_CXX_FLAGS` 相反**（那两个必须是空格分隔的单个字符串，
+  见 15.3）。
+- 但这条**只是**让 zstd 之类的依赖能过；node 自己在交叉构建下还有更硬的障碍
+  （构建期工具 mksnapshot/torque 必须在宿主上**运行**），见 `docs/暂时还没做.md` 第 2 项。

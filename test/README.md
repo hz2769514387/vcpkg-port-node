@@ -96,7 +96,7 @@ test ──(overlay-ports)──> ports/node
 * 官方套件这类"消费端需要的内容"，走 port 的**安装产物**（`share/`）输出，而不是让
   消费端去 port 源码目录里拿。
 
-## 平台口径（六个 triplet）
+## 平台口径（六个 triplet；CI 跑其中五个）
 
 | preset | triplet | 编译器 | CI |
 |---|---|---|---|
@@ -105,6 +105,6 @@ test ──(overlay-ports)──> ports/node
 | `linux-arm64` | `arm64-linux` | gcc，静态库 | Tier 2（允许失败） |
 | `windows-clang-cl-arm64` | `arm64-windows-static-clang` | clang-cl + 静态 CRT | Tier 2 |
 | `macos` | `arm64-osx` | clang，静态库 | Tier 2 |
-| `macos-x64` | `x64-osx` | clang，静态库 | Tier 2 |
+| `macos-x64` | `x64-osx` | clang，静态库 | 不在 CI（macos-13 资源紧张，见欠账清单 2b） |
 
 全部 release-only。分层含义见仓库根 `README.md`。
