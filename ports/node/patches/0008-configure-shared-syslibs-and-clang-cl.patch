@@ -1,0 +1,108 @@
+--- a/configure.py
++++ b/configure.py
+@@ -1337,6 +1337,17 @@
+           '-include', 'openssl/opensslv.h',
+           '-include', 'openssl/crypto.h',
+           '-']
++  compiler = shlex.split(CC)
++  if compiler and compiler[0].replace('\\', '/').endswith('clang-cl.exe'):
++    # clang-cl (the MSVC-compatible clang driver, used by the vcpkg clang-cl
++    # triplet) silently ignores -dM, so the macro dump comes back empty and the
++    # OpenSSL version cannot be determined.  Its sibling clang.exe accepts the
++    # GNU-style flags when told to target the MSVC ABI, so point at that instead.
++    compiler = [
++      c.replace('clang-cl.exe', 'clang.exe') if c.endswith('clang-cl.exe') else c
++      for c in compiler
++    ]
++    args = ['--target=x86_64-pc-windows-msvc'] + args
+   if not options.shared_openssl:
+     args = ['-I', 'deps/openssl/openssl/include'] + args
+   elif options.shared_openssl_includes:
+@@ -1346,7 +1357,7 @@
+       args = ['-I', dir] + args
+ 
+   proc = subprocess.Popen(
+-    shlex.split(CC) + args,
++    compiler + args,
+     stdin=subprocess.PIPE,
+     stdout=subprocess.PIPE,
+     stderr=subprocess.PIPE
+@@ -1391,7 +1402,7 @@
+       version_number = macros.get('OPENSSL_VERSION_NUMBER')
+       # Prior to OpenSSL 3 the value should be in the format 0xMNN00PPSL.
+       # If it is, we need to strip the `L` suffix prior to parsing.
+-      if version_number[:2] == "0x" and version_number[-1] == "L":
++      if version_number and version_number[:2] == "0x" and version_number[-1] == "L":
+         return int(version_number[:-1], 16)
+ 
+     # Check if it's a pre-release (has non-empty PRE_RELEASE string)
+@@ -1922,6 +1933,26 @@
+   version = getnapibuildversion.get_napi_version()
+   output['variables']['napi_build_version'] = version
+ 
++# Windows system import libraries that the vendored copy of a dependency would
++# have contributed through its own *.gyp "link_settings".  When the dependency
++# is built as a shared/external library (--shared-<lib>), that gyp file is no
++# longer part of the build, so its system libraries have to be re-added here or
++# the final link fails with LNK2019 (e.g. libuv needs ws2_32/iphlpapi/userenv).
++shared_lib_windows_system_libs = {
++  'libuv': ['advapi32', 'dbghelp', 'ole32', 'iphlpapi', 'psapi',
++            'shell32', 'user32', 'userenv', 'uuid', 'ws2_32'],
++  'cares': ['ws2_32', 'iphlpapi'],
++  # openssl's e_capi / winstore engines use the Win32 certificate store.
++  # Upstream gets these from the vendored openssl .gypi link_settings, which
++  # --shared-openssl skips.
++  'openssl': ['crypt32'],
++  # hdr-histogram is C code compiled by clang-cl; when it uses
++  # __builtin_cpu_supports the object references compiler-rt builtins
++  # (__cpu_model). gyp links with link.exe directly, so the clang driver
++  # never adds its builtins library.
++  'hdr_histogram': ['clang_rt.builtins-x86_64'],
++}
++
+ def configure_library(lib, output, pkgname=None):
+   shared_lib = 'shared_' + lib
+   output['variables']['node_' + shared_lib] = b(getattr(options, shared_lib))
+@@ -1955,6 +1986,14 @@
+     elif pkg_libs:
+       output['libraries'] += pkg_libs.split()
+ 
++    # Re-add the Windows system import libraries that the vendored dependency's
++    # own gyp file would have contributed (see the table above).  Ordered after
++    # the dependency's own libraries so that MSVC's left-to-right resolution
++    # still works.
++    if flavor == 'win':
++      for syslib in shared_lib_windows_system_libs.get(lib, []):
++        output['libraries'] += [f'-l{syslib}']
++
+ 
+ def configure_v8(o, configs):
+   set_configuration_variable(configs, 'v8_enable_v8_checks', release=0, debug=1)
+@@ -2524,6 +2563,27 @@
+   'defines': [],
+   'cflags': [],
+ }
++
++# When the caller selects clang-cl (via CC/CXX), tell gyp to drive the build with
++# it.  gyp's ninja generator recognises this exact spelling ("clang-cl" as the CC
++# entry of make_global_settings) and swaps the MSVC cl.exe rule for clang-cl,
++# which is what the vcpkg clang-cl triplet chainloads.  Without this the build
++# falls back to cl.exe and (among other things) rejects the DevTools protocol
++# templates that upstream only ever compiles with clang.
++if sys.platform == 'win32' and 'clang-cl' in (CC + CXX):
++  # gyp treats each make_global_settings value as a bare path: it joins it with
++  # the build directory and re-quotes it later (QuoteShellArgument).  Embedding
++  # quotes here would survive into the ".exe"-suffixed value and defeat gyp's
++  # `endswith("clang-cl")` detection, so hand it the raw path.
++  def _unquote_path(p):
++    p = p.strip()
++    if len(p) >= 2 and p[0] == p[-1] and p[0] in ('"', "'"):
++      p = p[1:-1]
++    return p
++  output['make_global_settings'] = [
++    ['CC', _unquote_path(CC)],
++    ['CXX', _unquote_path(CXX)],
++  ]
+ configurations = {
+   'Release': { 'variables': {} },
+   'Debug': { 'variables': {} },

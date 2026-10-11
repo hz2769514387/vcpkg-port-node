@@ -1,0 +1,59 @@
+--- a/tools/js2c.cc
++++ b/tools/js2c.cc
+@@ -326,27 +326,35 @@
+ }
+ 
+ std::string GetFileId(const std::string& filename) {
+-  size_t end = filename.size();
++  // Normalize the Windows separator up front: the prefix/suffix matching below
++  // (and the identifier built from the result) is written for POSIX-style
++  // paths, and MSBuild hands them over with '/' whereas ninja passes native
++  // '\' separators.
++  std::string path = filename;
++  for (char& c : path) {
++    if (c == '\\') c = '/';
++  }
++  size_t end = path.size();
+   size_t start = 0;
+   std::string prefix;
+   // Strip .mjs and .js suffix
+-  if (filename.ends_with(kMjsSuffix)) {
++  if (path.ends_with(kMjsSuffix)) {
+     end -= kMjsSuffix.size();
+-  } else if (filename.ends_with(kJsSuffix)) {
++  } else if (path.ends_with(kJsSuffix)) {
+     end -= kJsSuffix.size();
+   }
+ 
+   // deps/acorn/acorn/dist/acorn.js -> internal/deps/acorn/acorn/dist/acorn
+-  if (filename.starts_with(depsPrefix)) {
++  if (path.starts_with(depsPrefix)) {
+     start = depsPrefix.size();
+     prefix = "internal/deps/";
+-  } else if (filename.starts_with(libPrefix)) {
++  } else if (path.starts_with(libPrefix)) {
+     // lib/internal/url.js -> internal/url
+     start = libPrefix.size();
+     prefix = "";
+   }
+ 
+-  return prefix + std::string(filename.begin() + start, filename.begin() + end);
++  return prefix + std::string(path.begin() + start, path.begin() + end);
+ }
+ 
+ std::string GetVariableName(const std::string& id) {
+@@ -354,7 +362,13 @@
+   size_t length = result.size();
+ 
+   for (size_t i = 0; i < length; ++i) {
+-    if (result[i] == '.' || result[i] == '-' || result[i] == '/') {
++    // Treat the Windows path separator like the POSIX one: a raw '\' in a
++    // generated C identifier starts an escape sequence ('\u', '\a', ...) and
++    // fails to compile.  The ninja generator passes native (backslash) paths,
++    // whereas MSBuild normalizes them to '/', so this only shows up on the
++    // ninja path.
++    if (result[i] == '.' || result[i] == '-' || result[i] == '/' ||
++        result[i] == '\\') {
+       result[i] = '_';
+     }
+   }

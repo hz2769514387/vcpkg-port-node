@@ -1,0 +1,31 @@
+--- a/tools/v8_gypfiles/v8.gyp
++++ b/tools/v8_gypfiles/v8.gyp
+@@ -2420,18 +2420,20 @@
+       ],
+     },  # highway
+     {
++      # S1: use the vcpkg simdutf instead of the vendored 6.4.0 copy.
++      # The vendored simdutf.cpp is no longer compiled (it produced a second,
++      # COMDAT-duplicated copy of every symbol alongside the vcpkg 8.x lib
++      # that the node layer already links). Headers now come from the vcpkg
++      # installation; v8 sources include <simdutf.h> (P18).
++      # The include dir is passed on the gyp command line as
++      # -D VCPKG_SIMDUTF_INCLUDE=<dir> (see the port's portfile.cmake).
+       'target_name': 'simdutf',
+-      'type': 'static_library',
++      'type': 'none',
+       'toolsets': ['host', 'target'],
+       'direct_dependent_settings': {
+-        'include_dirs': [
+-          '<(V8_ROOT)/third_party/simdutf',
+-        ],
++        'include_dirs': ['<(VCPKG_SIMDUTF_INCLUDE)'],
+       },
+-      'include_dirs': ['.'],
+-      'sources': [
+-        '<(V8_ROOT)/third_party/simdutf/simdutf.cpp',
+-      ],
++      'include_dirs': ['<(VCPKG_SIMDUTF_INCLUDE)'],
+     },  # simdutf
+   ],
+ }

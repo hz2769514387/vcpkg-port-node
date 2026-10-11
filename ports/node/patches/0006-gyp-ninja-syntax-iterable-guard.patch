@@ -1,0 +1,13 @@
+--- a/tools/gyp/pylib/gyp/ninja_syntax.py
++++ b/tools/gyp/pylib/gyp/ninja_syntax.py
+@@ -33,6 +33,10 @@
+             return
+         if isinstance(value, list):
+             value = " ".join(filter(None, value))  # Filter out empty strings.
++        elif not isinstance(value, (str, int, float)):
++            # Guard against an unconsumed iterator/map being str()'d into the
++            # generated file (which used to produce "<map object at 0x...>").
++            value = " ".join(filter(None, map(str, value)))
+         self._line(f"{key} = {value}", indent)
+ 
+     def pool(self, name, depth):

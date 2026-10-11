@@ -1,0 +1,73 @@
+--- a/tools/gyp/pylib/gyp/generator/ninja.py
++++ b/tools/gyp/pylib/gyp/generator/ninja.py
+@@ -1076,8 +1076,12 @@
+         elif self.flavor == "win":
+             asmflags = self.msvs_settings.GetAsmflags(config_name)
+             cflags = self.msvs_settings.GetCflags(config_name)
+-            cflags_c = self.msvs_settings.GetCflagsC(config_name)
+-            cflags_cc = self.msvs_settings.GetCflagsCC(config_name)
++            cflags_c = self.msvs_settings.GetCflagsC(
++                config_name, self.GypPathToNinja
++            )
++            cflags_cc = self.msvs_settings.GetCflagsCC(
++                config_name, self.GypPathToNinja
++            )
+             extra_defines = self.msvs_settings.GetComputedDefines(config_name)
+             # See comment at cc_command for why there's two .pdb files.
+             pdbpath_c = pdbpath_cc = self.msvs_settings.GetCompilerPdbName(
+@@ -1218,9 +1222,15 @@
+                 command = "cc_s"
+             elif (
+                 self.flavor == "win"
+-                and ext in ("asm", "S")
++                and ext == "asm"
+                 and not self.msvs_settings.HasExplicitAsmRules(spec)
+             ):
++                # P17: ".S" (GAS syntax) must not be handed to MASM (ml64) --
++                # it can never assemble it. On Windows, .S files are expected
++                # to be consumed by explicit actions (e.g. v8's
++                # asm_to_inline_asm.py) or ignored, matching the MSBuild
++                # generator where they never reach ClCompile. Only ".asm"
++                # (MASM syntax) gets the implicit ml64 rule.
+                 command = "asm"
+                 # Add the _asm suffix as msvs is capable of handling .cc and
+                 # .asm files of the same name without collision.
+@@ -1494,7 +1504,24 @@
+         if self.flavor == "mac":
+             libraries = self.xcode_settings.AdjustLibraries(libraries, config_name)
+         elif self.flavor == "win":
+-            libraries = self.msvs_settings.AdjustLibraries(libraries)
++            # A "-L<dir>" entry in the libraries list is a linker search path, not
++            # a library name. On Windows everything is passed to link.exe through a
++            # response file, where a bare "-L<dir>" is not understood (it is turned
++            # into "/L<dir>" by the rsp writer). Translate it into /LIBPATH:<dir>
++            # and prepend it, so it lands before the libraries it applies to.
++            extra_libdirs = []
++            kept = []
++            for lib in libraries:
++                if lib.startswith("-L") and not lib.startswith("-LIB"):
++                    extra_libdirs.append(
++                        "/LIBPATH:"
++                        + QuoteShellArgument(
++                            self.GypPathToNinja(lib[2:]), self.flavor
++                        )
++                    )
++                else:
++                    kept.append(lib)
++            libraries = extra_libdirs + self.msvs_settings.AdjustLibraries(kept)
+ 
+         self.WriteVariableList(ninja_file, "libs", library_dirs + libraries)
+ 
+@@ -2263,7 +2290,11 @@
+             ar_host = os.path.join(build_to_root, value)
+         if key == "CC":
+             cc = os.path.join(build_to_root, value)
+-            if cc.endswith("clang-cl"):
++            # Accept "clang-cl" as well as the executable spelling "clang-cl.exe";
++            # the .exe suffix is what Node's configure.py passes through and a
++            # strict endswith() check would miss it, silently falling back to MSVC's
++            # cl.exe (which cannot compile Node's DevTools protocol templates).
++            if cc.lower().endswith(("clang-cl", "clang-cl.exe")):
+                 clang_cl = cc
+         if key == "CXX":
+             cxx = os.path.join(build_to_root, value)

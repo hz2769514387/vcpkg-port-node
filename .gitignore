@@ -71,4 +71,7 @@ Testing/
 __pycache__/
 *.py[cod]
 
+# 本地实验用的 node 发行包（三平台二进制，勿入库）
+tools/node_exe/
+
 log/

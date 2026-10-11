@@ -1,29 +1,29 @@
-# node port 的消费端冒烟工程。
+# node port 的消费端示例（主项目）。
 #
-# 它**不是** port 的一部分，而是"以使用者的方式"验证 port：
-#   find_package(node) + 链接 node::node + 真跑一段 JS。
+# 这是一个**独立于 port** 的示例工程，站在"使用者"的视角演示推荐接入方式：
+#   * 依赖声明用 vcpkg manifest（`vcpkg.json`）；
+#   * overlay-port / overlay-triplet 由 `vcpkg-configuration.json` 指向本仓库；
+#   * 构建入口统一走 `CMakePresets.json` 的 preset（不必手敲一长串 -D）。
 #
-# 用法（classic 模式，先装依赖再配置；CI 也是这么用）：
-#   vcpkg install node:<triplet> --overlay-ports=<repo>/ports
-#   cmake -S test -B build -G Ninja \
-#         -DCMAKE_TOOLCHAIN_FILE=$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake \
-#         -DVCPKG_TARGET_TRIPLET=<triplet> -DVCPKG_MANIFEST_MODE=OFF
-#   cmake --build build
-#   ./build/smoke -e "console.log(process.versions.node)"
-cmake_minimum_required(VERSION 3.20)
+# 用法（本目录下，按 host 选 preset）：
+#   cmake --preset windows-clang-cl     # Windows
+#   cmake --preset linux                # Linux
+#   cmake --preset macos                # macOS
+#   cmake --build --preset <同上的 preset>
+#   ./build/<preset>/app/smoke -e "console.log(process.versions.node)"
+#
+# 需要环境变量 VCPKG_ROOT 指向 vcpkg 安装根（preset 里用它定位 toolchain）。
+#
+# 工程结构是"主项目 + 子项目"：
+#   test/           主项目：只做 find_package(node)（依赖查找）
+#   test/app/       子项目：真正嵌入 node 的可执行（链接 node::node）
+# 使用者自己的多目标工程可以照此把 node 依赖收敛在主项目里。
+cmake_minimum_required(VERSION 3.21)
 
 project(node_port_smoke LANGUAGES CXX)
 
+# node 由 vcpkg 装出，提供 CONFIG 包（`find_package(node CONFIG)`）与
+# imported 目标 `node::node`（含传递依赖与平台链接选项）。
 find_package(node CONFIG REQUIRED)
 
-add_executable(smoke main.cpp)
-target_link_libraries(smoke PRIVATE node::node)
-target_compile_features(smoke PRIVATE cxx_std_17)
-
-# Windows：目标必须嵌 node 的平台兼容性清单，否则进程一启动就退出码 216（实测）。
-# node 的消费配置导出了清单路径变量 `node_NODE_SOURCE_MANIFEST`。
-if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-  target_link_options(smoke PRIVATE
-    "/MANIFEST:EMBED"
-    "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}")
-endif()
+add_subdirectory(app)

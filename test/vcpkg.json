@@ -1,0 +1,8 @@
+{
+  "name": "node-port-smoke",
+  "version-string": "0.0.1",
+  "description": "消费端示例工程（主项目）：以 vcpkg manifest 模式通过 overlay-port 使用 node，演示使用者的推荐接入方式。",
+  "dependencies": [
+    "node"
+  ]
+}

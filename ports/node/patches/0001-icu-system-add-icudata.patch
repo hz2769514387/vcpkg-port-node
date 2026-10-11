@@ -1,0 +1,17 @@
+--- a/tools/icu/icu-system.gyp
++++ b/tools/icu/icu-system.gyp
+@@ -16,5 +16,14 @@
+       'type': 'none',
+       'toolsets': [ 'host', 'target' ],
+     },
++    {
++      # vcpkg patch：v8.gyp 在 OS=="win" 分支里无条件依赖 <(icu_gyp_path):icudata
++      # （v8.gyp:1315），而上游的 system-icu 清单漏了这个目标 —— Windows + system-icu
++      # 组合直接报 "Dependency ... icudata#target not found"。补一个空壳接住依赖边：
++      # 真正的 icudata 由 vcpkg 的 icu port 提供（pkg-config 的 -licudt 已在 libraries 里）。
++      'target_name': 'icudata',
++      'type': 'none',
++      'toolsets': [ 'host', 'target' ],
++    },
+   ],
+ }

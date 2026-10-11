@@ -1,0 +1,33 @@
+--- a/deps/v8/src/builtins/builtins-typed-array.cc
++++ b/deps/v8/src/builtins/builtins-typed-array.cc
+@@ -12,7 +12,7 @@
+ #include "src/objects/js-array-buffer-inl.h"
+ #include "src/objects/objects-inl.h"
+ #include "src/objects/simd.h"
+-#include "third_party/simdutf/simdutf.h"
++#include <simdutf.h>
+ 
+ namespace v8 {
+ namespace internal {
+--- a/deps/v8/src/objects/string.h
++++ b/deps/v8/src/objects/string.h
+@@ -21,7 +21,7 @@
+ #include "src/objects/tagged.h"
+ #include "src/sandbox/external-pointer.h"
+ #include "src/strings/unicode-decoder.h"
+-#include "third_party/simdutf/simdutf.h"
++#include <simdutf.h>
+ 
+ // Has to be the last include (doesn't have include guards):
+ #include "src/objects/object-macros.h"
+--- a/deps/v8/src/strings/unicode-inl.h
++++ b/deps/v8/src/strings/unicode-inl.h
+@@ -10,7 +10,7 @@
+ 
+ #include "src/base/logging.h"
+ #include "src/utils/utils.h"
+-#include "third_party/simdutf/simdutf.h"
++#include <simdutf.h>
+ 
+ namespace unibrow {
+ 
