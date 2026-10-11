@@ -1263,3 +1263,43 @@ features / portfile 编译开关；③ 凡是"疑似会导致链接或行为差�
 Windows 上需要 `ssize_t`，而它不在 MSVC 的头里 —— node 自己是在 `node.h` 里补的
 （`node_http2.h` 的注释原话："nghttp2.h needs ssize_t"）。所以消费端 include nghttp2 头
 **之前**要先 include `<node.h>`；我在 unit 测试里漏了这一步。
+
+### 15.11 ★★★ abseil/highway **换不掉**：v8 用的是它们的内部符号（撤回 0015/0016）
+
+上一轮为修"v8 自带 absl/*.cc 编到 vcpkg 头文件 → 重定义"的问题，走了"让 v8 改用 vcpkg 那份"
+的路（patch 0015 把 `abseil.gyp` 的目标改成 `type:'none'` + `libraries`；0016 同理 highway）。
+本机整树构建给出了决定性结果：**编译期确实不再重定义了（步数 1902→1857，少掉那 ~300 个源文件），
+但链接期必挂**：
+
+```
+FAILED: [code=1] node_mksnapshot.exe
+node_base.lib(node_base.node.obj) : error LNK2019: 无法解析的外部符号
+  void __cdecl absl::lts_20260107::SetMutexDeadlockDetectionMode(enum ...::OnDeadlockCycle)
+v8_base_without_compiler.lib(...) : error LNK2001: 无法解析的外部符号
+  absl::lts_20260107::container_internal::DeallocateBackingArray<8, class std::allocator<char> >
+v8_compiler.lib(...) : error LNK2001: 无法解析的外部符号
+  private: static void const * const absl::lts_20260107::hash_internal::MixingHashState::kSeed
+```
+
+- 这些是 abseil 的**内部符号**（`container_internal` / `hash_internal` / 以及 vcpkg 那份
+  abseil 没有编进去的 `SetMutexDeadlockDetectionMode`）——**vcpkg 的 abseil 不提供同一套**，
+  所以"换成 vcpkg 的 abseil"这条路**在符号层面就不成立**（不是版本号对不上那么简单）。
+- 而 `src/node.cc` 自己也 `#include "absl/..."` ⇒ 头也必须来自**同一份**（即 v8 自带那份）。
+- ⇒ **结论：v8 自带的 abseil / highway 必须保留，不能替换**。0015/0016 与 port 的
+  `abseil` / `highway` 依赖**全部撤回**。
+
+**正确的修法：让 v8 自带的头在 include 顺序上赢**（而不是换库）：
+
+- `configure.py` 的 `configure_library()` 是**按调用顺序**把 `--shared-*-includes` 的值
+  append 进 `output['include_dirs']` 的（`output['include_dirs'] += [ ..._includes]`，单个字符串、
+  不拆 `;`）—— 所以 port 里**第一条** `_node_shared(...)` 给的目录会排在最终 `-I` 的最前面。
+- 于是 port 把头两条改成给 **v8 自带的 `deps/v8/third_party/abseil-cpp` 与
+  `.../highway/src`**（`_node_shared` 宏加了可选第 4 参）；vcpkg 的 `${_inc}` 仍在列表后面，
+  其它头（simdutf.h / openssl / …）照常拿得到。
+- 这样 `#include "absl/..."`（v8 的 ~300 个 absl 源文件 + `src/node.cc`）一律命中自带那份，
+  **头与库同源**，重定义与内部符号缺失同时消失。
+
+**共存结论（要写进 README/欠账）**：**使用者在同一个可执行里再链 vcpkg 的 abseil / highway
+会与 v8 自带那份冲突**（同名、含内部符号）——这是本 port 的**已知限制**，不是配置问题。
+`symdutf` / `zlib` 则是可以共享的（已经用 patch 0011/0014 换成 vcpkg 那份 ✓），
+两者的差别在于：v8 对 simdutf/zlib 只用**公开**接口，对 abseil/highway 则用到内部实现。

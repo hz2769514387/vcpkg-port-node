@@ -5,12 +5,10 @@
   "license": "MIT",
   "supports": "windows | linux | osx",
   "dependencies": [
-    "abseil",
     "ada-url",
     "brotli",
     "c-ares",
     "hdr-histogram",
-    "highway",
     "icu",
     "libuv",
     "llhttp",

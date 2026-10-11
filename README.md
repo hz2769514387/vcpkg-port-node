@@ -28,6 +28,10 @@ target_link_libraries(你的目标 PRIVATE node::node)
 全部 release-only（triplet 里 `VCPKG_BUILD_TYPE release`）。
 未做与待办逐项列在 `docs/暂时还没做.md`。
 
+**一个已知限制**：v8 自带的 **abseil / highway 不能替换、也不能在同一可执行里与 vcpkg 的那两份共存**——
+v8 用到它们的内部符号（实测：换用 vcpkg 的 abseil 会在链接期 LNK2019），所以 port 保留 v8 自带的那份并让它优先。`simdutf` / `zlib` 没有这个问题（v8 只用公开接口，已换成 vcpkg 那份）。
+细节见 `docs/架构重审-路线B落地实验.md` §15.11 与 `docs/暂时还没做.md` 5g。
+
 ## 目录结构
 
 ```

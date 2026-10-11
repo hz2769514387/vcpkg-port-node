@@ -27,15 +27,17 @@ find_library(NGHTTP2_LIBRARY NAMES nghttp2 REQUIRED)
 
 # 这批库就是"使用者可能同时想要的"那一批：node 的直接依赖，加上与 v8 内嵌第三方
 # （abseil / highway / simdutf / zlib）同名的 vcpkg port。
+# ★ absl / hwy 只在"基线"那个可执行里链，不放进与 node 同时链的那批 —— 原因有实测：
+# v8 用的是 abseil / highway 的**内部符号**（LNK2019 实测：SetMutexDeadlockDetectionMode /
+# container_internal::DeallocateBackingArray<8> / hash_internal::MixingHashState::kSeed），
+# 而且**必须**用 v8 自带的那份（换成 vcpkg 的 abseil 会在链接期挂）。于是 v8 自带一份、
+# 使用者的 vcpkg 再一份 ⇒ 同一个可执行里两份同名（含内部符号）的 abseil 必然冲突。
+# 这是**已知限制**，记在 docs/暂时还没做.md 5g 与 README 里；基线测试（不含 node）照常覆盖它们。
 set(NODE_PORT_TEST_VCPKG_LIBS
     ZLIB::ZLIB
     OpenSSL::Crypto
     libuv::uv_a
     fmt::fmt
-    absl::base
-    absl::strings
-    absl::str_format
-    hwy::hwy
     simdutf::simdutf
     simdjson::simdjson
     unofficial::sqlite3::sqlite3
@@ -51,7 +53,10 @@ set(NODE_PORT_TEST_VCPKG_LIBS
 
 # ---- 基线 --------------------------------------------------------------------
 add_executable(unit_vcpkg_baseline test_vcpkg_baseline.cpp)
-target_link_libraries(unit_vcpkg_baseline PRIVATE GTest::gtest_main ${NODE_PORT_TEST_VCPKG_LIBS})
+# 基线（不链 node）里把 abseil / highway 也带上 —— 它们单独用没问题，
+# 问题只出在"和 v8 自带那份同处一个可执行"时（见上面的说明）。
+target_link_libraries(unit_vcpkg_baseline PRIVATE
+    GTest::gtest_main ${NODE_PORT_TEST_VCPKG_LIBS} absl::base absl::strings absl::str_format hwy::hwy)
 target_include_directories(unit_vcpkg_baseline PRIVATE "${NGHTTP2_INCLUDE_DIR}")
 target_compile_features(unit_vcpkg_baseline PRIVATE cxx_std_20)
 if(MSVC)

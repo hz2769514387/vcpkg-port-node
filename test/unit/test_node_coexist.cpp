@@ -23,10 +23,8 @@
 #include <iostream>
 #include <string>
 
-#include <absl/strings/str_format.h>
 #include <brotli/encode.h>
 #include <fmt/format.h>
-#include <hwy/aligned_allocator.h>
 // ★ <node.h> 必须在 nghttp2 之前：nghttp2 的头用了 ssize_t，而 MSVC 的头里没有这个类型 ——
 // node 自己是在 node.h 里补的（node 的 node_http2.h 注释原话："nghttp2.h needs ssize_t"）。
 // 这也是"消费端怎么正确用 node 的头"的一个真实例子。
@@ -184,19 +182,10 @@ TEST(NodeCoexist, DeflateBytesIdenticalBetweenNodeAndOurs) {
 
 // ---- 共存可用性：这些库在"同一个进程里还装着 node+v8"的情况下照样能用 ----------
 
-TEST(NodeCoexist, AbseilWorksWhileV8IsLinked) {
-  EXPECT_EQ(absl::StrFormat("%d-%s", 1, "x"), "1-x");
-  std::cout << "[coexist] abseil 可用（注意：v8 内嵌也有自己的一份 abseil，"
-               "两份同名符号由链接器择一，符号审计另有专门检查）" << std::endl;
-}
-
-TEST(NodeCoexist, HighwayWorksWhileV8IsLinked) {
-  auto p = hwy::AllocateAligned<float>(32);
-  ASSERT_NE(p.get(), nullptr);
-  p[0] = 1.0f;
-  EXPECT_FLOAT_EQ(p[0], 1.0f);
-  std::cout << "[coexist] highway 可用" << std::endl;
-}
+// ★ 这里**故意没有** "abseil / highway 与 node 同时链"的用例：实测证明它们做不到
+// （v8 用 abseil 的内部符号，replace 成 vcpkg 那份会在链接期 LNK2019 ⇒ v8 必须自带一份；
+// 使用者的 vcpkg abseil 就是第二份 ⇒ 同名冲突）。基线可执行（unit_vcpkg_baseline）
+// 里仍然覆盖这两个库本身可用。详见 docs/暂时还没做.md 5g。
 
 TEST(NodeCoexist, FmtWorksWhileNodeIsLinked) {
   EXPECT_EQ(fmt::format("{}", 42), "42");

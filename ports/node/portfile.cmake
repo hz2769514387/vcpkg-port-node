@@ -45,8 +45,6 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0012-v8-simdutf-system-include.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0013-v8-compiler-add-descriptor-array-inl.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0014-v8-use-vcpkg-zlib-target.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/0015-v8-use-vcpkg-abseil.patch"
-        "${CMAKE_CURRENT_LIST_DIR}/patches/0016-v8-use-vcpkg-highway.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。
@@ -157,9 +155,17 @@ set(_inc "${CURRENT_INSTALLED_DIR}/include")
 set(_lib "${CURRENT_INSTALLED_DIR}/lib")
 
 macro(_node_shared _opt _pkg _libnames)
+    # 可选第 4 个参数：这一条的 --shared-*-includes 用什么目录（默认 ${_inc}）。
+    # configure.py 的 configure_library() 是**按调用顺序**往 output['include_dirs'] 里 append 的，
+    # 所以这里给的顺序就是最终 -I 的顺序（见下面 abseil/highway 那两条的用意）。
+    if(ARGC GREATER 3)
+        set(_node_this_inc "${ARGV3}")
+    else()
+        set(_node_this_inc "${_inc}")
+    endif()
     list(APPEND _node_shared_args
         "--shared-${_opt}"
-        "--shared-${_opt}-includes=${_inc}"
+        "--shared-${_opt}-includes=${_node_this_inc}"
         "--shared-${_opt}-libpath=${_lib}"
         "--shared-${_opt}-libname=${_libnames}")
 endmacro()
@@ -182,8 +188,27 @@ else()
 endif()
 set(_hdrhist_lib   "hdr_histogram_static")
 
-_node_shared(openssl       openssl     "${_openssl_lib}")
-_node_shared(zlib          zlib        "${_zlib_lib}")
+# ★★ 头两条故意把 **v8 自带的 abseil / highway 目录**放在最前面，而不是 ${_inc}。
+#
+# 原因（实测结论，别再试"换成 vcpkg 的"了）：v8 用 abseil / highway 的**内部符号**。
+# 上一轮试过让 v8 改用 vcpkg 的 abseil（patch 0015/0016 + port 依赖 abseil/highway），
+# 编译期不再重定义、但**链接期必挂**：
+#   node_mksnapshot link: LNK2019 无法解析的外部符号
+#     absl::SetMutexDeadlockDetectionMode
+#     absl::container_internal::DeallocateBackingArray<8, ...>
+#     absl::hash_internal::MixingHashState::kSeed
+# vcpkg 那份 abseil 不提供同一套内部符号 ⇒ **只能保留 v8 自带的那份**。
+#
+# 而 port 经 --shared-*-includes 交给 configure.py 的 ${_inc} 会进 target_defaults.include_dirs，
+# **所有目标都看得见**（含 v8 的）——于是 v8 自带的 absl/*.cc 编到了 vcpkg 的同名头文件上
+# （同名不同版本）→ 重定义：
+#   absl/base/internal/spinlock.cc:71: error: redefinition of Spinlock::SpinLock(...)
+# 修法就是把**自带头目录排到最前**：`#include "absl/..."` / "hwy/..." 一律命中自带那份，
+# vcpkg 的 include 仍在列表后面，其它头（simdutf.h / openssl / ...）照常拿得到。
+set(_v8_third_party_inc "${SOURCE_PATH}/deps/v8/third_party")
+
+_node_shared(openssl       openssl     "${_openssl_lib}"        "${_v8_third_party_inc}/abseil-cpp")
+_node_shared(zlib          zlib        "${_zlib_lib}"           "${_v8_third_party_inc}/highway/src")
 _node_shared(libuv         libuv       "${_libuv_lib}")
 _node_shared(cares         c-ares      "cares")
 _node_shared(brotli        brotli      "brotlidec,brotlienc,brotlicommon")
@@ -196,97 +221,6 @@ _node_shared(simdutf       simdutf     "simdutf")
 _node_shared(sqlite        sqlite3     "sqlite3")
 _node_shared(ada           ada-url     "ada")
 _node_shared(hdr-histogram hdr-histogram "${_hdrhist_lib}")
-
-# ---------------------------------------------------------------------------
-# v8 内嵌第三方的替换：abseil / highway（与 simdutf、zlib 同一手法）
-#
-# 为什么必须换：port 把 --shared-*-includes=${CURRENT_INSTALLED_DIR}/include 交给
-# configure.py，它会进 target_defaults.include_dirs —— **所有**目标都能看到 vcpkg 的
-# include。于是 v8 自带那份 absl/*.cc 会编到 vcpkg 的同名头文件上（同名不同版本）→
-# 实测直接编不过（CI run #14，x64-linux）：
-#   absl/base/internal/spinlock.cc:71: error: redefinition of SpinLock::SpinLock(SchedulingMode)
-# 后果：**只要使用者工程里出现 abseil（protobuf / grpc / re2 都会把它拖进来），
-# node port 就编不过**。这正是"vcpkg 库能不能和 node port 共存"要防的那类问题。
-#
-# 换成 vcpkg 的那一份之后：头文件与库同源，进程里也只剩一份 abseil / highway，
-# 不会再有"两份同名符号被链接器静默折叠"的隐患。
-#
-# 库名列表在这里按 vcpkg 里**实际的**库名 glob 出来（abseil 有 90+ 个静态库，
-# 不能写死）。注意 -D 只能传字符串，列表必须走 gyp 的 -I gypi 机制。
-# ---------------------------------------------------------------------------
-function(_node_gyp_list _out _items)
-    set(_s "")
-    foreach(_i IN LISTS _items)
-        if(_s STREQUAL "")
-            set(_s "'${_i}'")
-        else()
-            set(_s "${_s}, '${_i}'")
-        endif()
-    endforeach()
-    set(${_out} "${_s}" PARENT_SCOPE)
-endfunction()
-
-function(_node_collect_libs _out)
-    set(_globs "")
-    foreach(_pfx IN LISTS ARGN)
-        list(APPEND _globs "${_lib}/${_pfx}*.lib" "${_lib}/${_pfx}*.a")
-    endforeach()
-    file(GLOB _files ${_globs})
-    set(_names "")
-    foreach(_f IN LISTS _files)
-        get_filename_component(_n "${_f}" NAME_WE)
-        # POSIX 的库带 lib 前缀（libabsl_base.a），gyp 的 -l 形式不要前缀
-        string(REGEX REPLACE "^lib" "" _n "${_n}")
-        list(APPEND _names "-l${_n}")
-    endforeach()
-    list(SORT _names)
-    set(${_out} "${_names}" PARENT_SCOPE)
-endfunction()
-
-_node_collect_libs(_absl_libs absl_ libabsl_)
-if(NOT _absl_libs)
-    message(FATAL_ERROR
-        "找不到 vcpkg 的 abseil 静态库（它应当已作为本 port 的依赖装上）：${_lib}")
-endif()
-list(LENGTH _absl_libs _absl_count)
-# 用 VCPKG_TARGET_IS_LINUX 而不是 `UNIX AND NOT APPLE`：vcpkg 对 UNIX/APPLE/WIN32 这类
-# 歧义系统变量装了 variable_watch，在 portfile 里读一下就会打很长一段警告（实测）。
-if(VCPKG_TARGET_IS_LINUX)
-    # GNU ld 对静态库顺序敏感，而这堆 absl_* 之间有循环引用 → 用 group 包起来。
-    # （ld64（macOS）会自己反复扫归档，不需要也不支持 --start-group。）
-    list(PREPEND _absl_libs "-Wl,--start-group")
-    list(APPEND _absl_libs "-Wl,--end-group")
-endif()
-
-_node_collect_libs(_hwy_libs hwy libhwy)
-if(NOT _hwy_libs)
-    message(FATAL_ERROR "找不到 vcpkg 的 highway 静态库（hwy）：${_lib}")
-endif()
-
-_node_gyp_list(_absl_gyp "${_absl_libs}")
-_node_gyp_list(_hwy_gyp "${_hwy_libs}")
-
-set(_deps_gypi "${CURRENT_BUILDTREES_DIR}/vcpkg-deps.gypi")
-file(WRITE "${_deps_gypi}"
-"# 由 node port 生成：告诉 v8 的 gyp 用 vcpkg 的 abseil / highway 而不是内嵌副本。
-"
-"{
-"
-"  'variables': {
-"
-"    'vcpkg_abseil_include': '${_inc}',
-"
-"    'vcpkg_abseil_libs': [${_absl_gyp}],
-"
-"    'vcpkg_highway_include': '${_inc}',
-"
-"    'vcpkg_highway_libs': [${_hwy_gyp}],
-"
-"  },
-"
-"}
-")
-message(STATUS "v8 will use the vcpkg abseil (${_absl_count} libs) and highway (${_hwy_gyp})")
 
 # ---------------------------------------------------------------------------
 # 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
@@ -302,8 +236,6 @@ vcpkg_execute_required_process(
         --with-intl=system-icu
         ${_node_shared_args}
         "-DVCPKG_SIMDUTF_INCLUDE=${_inc}"
-        # 变量注入用 gyp 的 -I（不能用 -D + includes：gyp 解析 includes 的时机更早）
-        "-I${_deps_gypi}"
     WORKING_DIRECTORY "${SOURCE_PATH}"
     LOGNAME configure
 )
@@ -529,55 +461,6 @@ if(VCPKG_TARGET_IS_WINDOWS)
     string(APPEND _cfg
         "target_link_libraries(node::node INTERFACE winmm \${_node_rt_builtins})\n")
 endif()
-# v8 用的 abseil / highway 就是 vcpkg 提供的那一份（见 portfile 前面的说明）：
-# 静态库不会进 node 的归档，最终可执行链接时必须把它们带上。
-# 库名按 vcpkg 里的实际文件名 glob（abseil 有 90+ 个），不写死。
-string(APPEND _cfg
-    "file(GLOB _node_absl_libs \"\${_node_lib}/absl_*.lib\" \"\${_node_lib}/libabsl_*.a\")\n"
-    "file(GLOB _node_hwy_libs \"\${_node_lib}/hwy.lib\" \"\${_node_lib}/libhwy.a\")\n"
-    "if(_node_absl_libs AND UNIX AND NOT APPLE)\n"
-    "  # GNU ld 对静态库顺序敏感，而 absl_* 之间有循环引用\n"
-    "  target_link_libraries(node::node INTERFACE \"-Wl,--start-group\" \${_node_absl_libs} \"-Wl,--end-group\")\n"
-    "elseif(_node_absl_libs)\n"
-    "  target_link_libraries(node::node INTERFACE \${_node_absl_libs})\n"
-    "endif()\n"
-    "if(_node_hwy_libs)\n"
-    "  target_link_libraries(node::node INTERFACE \${_node_hwy_libs})\n"
-    "endif()\n")
-string(APPEND _cfg
-    "set(node_NODE_SOURCE_MANIFEST \"\${CMAKE_CURRENT_LIST_DIR}/node.exe.extra.manifest\")\n")
-# tools feature 装出来的可执行：按 vcpkg 惯例由 config 导出变量，使用者不必猜路径。
-string(APPEND _cfg
-    "set(_node_tools \"\${_node_prefix}/tools/node\")
-"
-    "if(WIN32)
-"
-    "  set(_node_exe \"\${_node_tools}/node.exe\")
-"
-    "  set(_node_shim_ext \".cmd\")
-"
-    "else()
-"
-    "  set(_node_exe \"\${_node_tools}/node\")
-"
-    "  set(_node_shim_ext \"\")
-"
-    "endif()
-"
-    "if(EXISTS \"\${_node_exe}\")
-"
-    "  set(node_EXECUTABLE \"\${_node_exe}\")
-"
-    "  set(node_TOOLS_DIR \"\${_node_tools}\")
-"
-    "  set(node_NPM \"\${_node_tools}/npm\${_node_shim_ext}\")
-"
-    "  set(node_NPX \"\${_node_tools}/npx\${_node_shim_ext}\")
-"
-    "  set(node_COREPACK \"\${_node_tools}/corepack\${_node_shim_ext}\")
-"
-    "endif()
-")
 # 装了 test-suite feature 就导出官方套件的根目录（tools/test.py 以它的父目录为 workspace）。
 string(APPEND _cfg
     "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/test-suite/tools/test.py\")\n"
