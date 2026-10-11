@@ -92,22 +92,6 @@ std::string Inflate(const std::string& s, size_t expected_size) {
   return out;
 }
 
-// 只留数字与点，便于把 "OpenSSL 3.6.3 ..." 与 node 报的 "3.6.3" 放一起比
-std::string Digits(const std::string& s) {
-  std::string out;
-  for (char c : s) {
-    if (c >= '0' && c <= '9') {
-      out.push_back(c);
-    } else if (c == '.' && !out.empty() && out.back() != '.') {
-      out.push_back(c);
-    } else if (!out.empty() && out.back() != '.') {
-      out.push_back('.');
-    }
-  }
-  while (!out.empty() && out.back() == '.') out.pop_back();
-  return out;
-}
-
 std::string AdaString(ada_string s) { return std::string(s.data, s.length); }
 
 // 用 vcpkg 的 sqlite3 写一个真库文件，交给 node:sqlite 读
@@ -225,9 +209,12 @@ int main(int argc, char** argv) {
     return Fail("ICU 大小写映射不一致：C++=" + cxx_upper + " JS=" + std::string(js_upper));
   if (std::string(js_zlib) != zlibVersion())
     return Fail("zlib 版本不一致：C++=" + std::string(zlibVersion()) + " JS=" + std::string(js_zlib));
-  if (Digits(std::string(js_openssl)) != Digits(OpenSSL_version(OPENSSL_VERSION)))
-    return Fail("openssl 版本不一致：C++=" + Digits(OpenSSL_version(OPENSSL_VERSION)) +
-                " JS=" + Digits(std::string(js_openssl)));
+  // ★ 取 OPENSSL_VERSION_STR（宏，值是 "3.6.3"），不是 OpenSSL_version(OPENSSL_VERSION)
+  //   （返回 "OpenSSL 3.6.3 9 Jun 2026"，把日期也算进去；node 的
+  //   process.versions.openssl 就是 "3.6.3"）。注意它不是 OpenSSL_version() 的索引。
+  if (std::string(js_openssl) != OPENSSL_VERSION_STR)
+    return Fail("openssl 版本不一致：C++=" + std::string(OPENSSL_VERSION_STR) +
+                " JS=" + std::string(js_openssl));
   if (std::string(js_icu) != cxx_icu)
     return Fail("icu 版本不一致：C++=" + std::string(cxx_icu) +
                 " JS=" + std::string(js_icu));
@@ -244,7 +231,7 @@ int main(int argc, char** argv) {
       "zlib / openssl / sqlite3 / ada / icu / simdjson 的互相校验\n"
       "  node=%s zlib=%s openssl=%s icu=%s sqlite=%s\n",
       std::string(js_node).c_str(), std::string(js_zlib).c_str(),
-      Digits(std::string(js_openssl)).c_str(), std::string(js_icu).c_str(),
+      std::string(js_openssl).c_str(), std::string(js_icu).c_str(),
       js_sqlite.empty() ? "(未编译进此构建)" : std::string(js_sqlite).c_str());
   return 0;
 }

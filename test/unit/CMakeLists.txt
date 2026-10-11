@@ -100,12 +100,18 @@ target_link_libraries(unit_node_coexist PRIVATE
 target_include_directories(unit_node_coexist PRIVATE "${NGHTTP2_INCLUDE_DIR}")
 target_compile_features(unit_node_coexist PRIVATE cxx_std_20)
 # 用它来起子进程问 node "你用的是哪一份依赖"（交叉核对，见测试源码里的说明）。
-# ★ 这里**不要**加转义引号：C++ 侧自己会加（RunNodeEval 里 `std::string("\"") + ...`）。
-#   加在这儿，MSVC 响应文件会把开头那个 \" 吃掉，命令行变成
-#     C:\...\node.exe" -p "process.versions.uv      <- 少了前面的引号
-#   cmd 于是报"不是内部或外部命令"，而现象看起来像"node 跑不起来"（实测踩到过）。
-target_compile_definitions(unit_node_coexist PRIVATE
-    "NODE_EMBED_PATH=$<TARGET_FILE:node_embed>")
+# node_embed 的路径交给 C++ 侧拼命令行用。
+# ★ 走 file(GENERATE) 写成头文件，**不要**用 target_compile_definitions：
+#   * 写成 `-DNODE_EMBED_PATH="C:\...\node.exe"`（带转义引号）→ MSVC 的响应文件会把
+#     开头那个 \" 吃掉，实际值是 `C:\...\node.exe"`（少一个前引号），cmd 于是报
+#     "不是内部或外部命令"，现象看起来像"node 跑不起来"（实测踩到过）；
+#   * 干脆不写引号（-DNODE_EMBED_PATH=C:/.../node.exe）→ 被 C++ 当 token 拆开，
+#     报 `use of undeclared identifier 'C'` / 'work' / 'git' …（实测踩到过）。
+#   写进头文件就没有响应文件那一层转义，字符串字面量原样落盘。
+#   另外 file(GENERATE) 会展开生成器表达式，configure_file 不会。
+file(GENERATE OUTPUT "${CMAKE_CURRENT_BINARY_DIR}/node_embed_path.h"
+     CONTENT "#pragma once\n#define NODE_EMBED_PATH \"$<TARGET_FILE:node_embed>\"\n")
+target_include_directories(unit_node_coexist PRIVATE "${CMAKE_CURRENT_BINARY_DIR}")
 if(MSVC)
   target_compile_options(unit_node_coexist PRIVATE /W0)
 endif()

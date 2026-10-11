@@ -224,7 +224,7 @@ function collect(opts) {
       }
     }
   }
-  return { nodeLibs, depLibs, tool };
+  return { nodeLibs, depLibs, tool, skippedSelf, selfPkg };
 }
 
 function total(m) {
@@ -242,7 +242,7 @@ function main(argv) {
     return 2;
   }
 
-  const { nodeLibs, depLibs, tool } = collect(opts);
+  const { nodeLibs, depLibs, tool, skippedSelf, selfPkg } = collect(opts);
   console.log(`符号工具: ${tool}`);
   console.log(`== node 自带库 ${Object.keys(nodeLibs).length} 个（强符号合计 ${total(nodeLibs)}）==`);
   for (const k of Object.keys(nodeLibs).sort((a, b) => nodeLibs[b].size - nodeLibs[a].size)) {

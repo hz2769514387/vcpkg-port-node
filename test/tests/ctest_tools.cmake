@@ -14,10 +14,14 @@ set_tests_properties(tools-node-runs PROPERTIES
   LABELS "tools"
   PASS_REGULAR_EXPRESSION "24\\.21\\.0")
 
-# Windows 上 npm 是 .cmd，得经 cmd.exe 才能起（CreateProcess 不能直接跑 .cmd）
+# Windows 上 npm 是 .cmd。★ 直接把 .cmd 交给 ctest（CreateProcess 会自动经 cmd.exe 起），
+#   **不要**写 `COMMAND cmd /c ...`：
+#   * ctest 会把每个参数都加引号，`"/c"` 带引号 cmd 不认 → "命令语法不正确"（实测踩到过）；
+#   * cmd 也不认正斜杠的程序名。
+#   路径用 node-config 导出的可移植正斜杠形式即可，CreateProcess 会归一化。
 if(WIN32)
-  add_test(NAME tools-npm-version COMMAND cmd /c "${node_NPM}" --version)
-  add_test(NAME tools-npx-version COMMAND cmd /c "${node_NPX}" --version)
+  add_test(NAME tools-npm-version COMMAND "${node_NPM}" --version)
+  add_test(NAME tools-npx-version COMMAND "${node_NPX}" --version)
 else()
   add_test(NAME tools-npm-version COMMAND "${node_NPM}" --version)
   add_test(NAME tools-npx-version COMMAND "${node_NPX}" --version)
@@ -27,9 +31,5 @@ set_tests_properties(tools-npm-version tools-npx-version PROPERTIES
   TIMEOUT 300)
 
 # corepack --version 在有些环境会去读 HOME/缓存；读到就把版本打出来，读不到也不该挂。
-if(WIN32)
-  add_test(NAME tools-corepack-version COMMAND cmd /c "${node_COREPACK}" --version)
-else()
-  add_test(NAME tools-corepack-version COMMAND "${node_COREPACK}" --version)
-endif()
+add_test(NAME tools-corepack-version COMMAND "${node_COREPACK}" --version)
 set_tests_properties(tools-corepack-version PROPERTIES LABELS "tools" TIMEOUT 300)

@@ -452,6 +452,11 @@ if("tools" IN_LIST FEATURES)
         set(_node_exe_name "node")
         set(_node_shim_ext "")
     endif()
+    # 导出**可移植**的形式：`${_node_prefix}` 相对 + 正斜杠。
+    # 不要在这里做 TO_NATIVE_PATH —— 那会把 ${CURRENT_PACKAGES_DIR}（packages 目录）
+    # 烤死进配置里，而 vcpkg 之后会把产物搬进真正的安装目录。
+    # 需要反斜杠的消费端（`cmd /c` 不认正斜杠的程序名）自己在 find_package 之后转，
+    # 见 test/tests/ctest_tools.cmake。
     string(APPEND _cfg
         "set(node_TOOLS_DIR \"\${_node_prefix}/tools/node\")\n"
         "set(node_EXECUTABLE \"\${_node_prefix}/tools/node/${_node_exe_name}\")\n"

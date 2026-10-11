@@ -28,6 +28,7 @@ add_test(NAME smoke-node-version
          COMMAND node_embed -e "process.stdout.write(process.versions.node)")
 set_tests_properties(smoke-node-version PROPERTIES
   LABELS "smoke"
-  # Windows 上 node 的输出以 CRLF 结尾，`$` 卡在 `\r` 前面所以匹配不上
-  # （实测：输出确实是 24.21.0，但断言还是红）。把行尾空白放开。
-  PASS_REGULAR_EXPRESSION "^24\\.21\\.0[[:space:]]*$")
+  # 不加 `^...$` 锚：ctest 的正则不是多行模式，Windows 上输出以 CRLF 结尾，
+  # `$` 卡在 `\r` 前面（实测 `^24\.21\.0[[:space:]]*$` 也红，输出确实是 24.21.0）。
+  # 我们要断言的是"版本号等于 24.21.0"，直接匹配它本身。
+  PASS_REGULAR_EXPRESSION "24\\.21\\.0")

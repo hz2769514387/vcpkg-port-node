@@ -16,6 +16,10 @@
 // 也是同一份"，对共存同样是必要的（头不一致会导致 ABI 理解不一致）。
 #include <gtest/gtest.h>
 
+// node_embed 的路径由 CMake 生成（见 unit/CMakeLists.txt 里为什么不用
+// target_compile_definitions —— 响应文件会吃掉转义引号）。
+#include "node_embed_path.h"
+
 #include <algorithm>
 #include <cctype>
 #include <cstdio>
@@ -48,11 +52,18 @@ std::string Trim(std::string s) {
 
 // 把嵌入可执行当 CLI 用：node -p '<js>'。用它来问 node"你用的是哪个版本"。
 std::string RunNodeEval(const std::string& js) {
-  const std::string cmd =
+  const std::string inner =
       std::string("\"") + NODE_EMBED_PATH + "\" -p \"" + js + "\"";
 #ifdef _WIN32
+  // ★ _popen 底下是 `%COMSPEC% /c <字符串>`，而 cmd 对 /c 后面那串有著名的引号剥离
+  //   规则：**引号数 > 2 时，把最外层的一对剥掉**。inner 首尾本来就是引号，一剥就变成
+  //     C:\...\node.exe" -p "js        <- 少一个前引号
+  //   cmd 于是报"不是内部或外部命令"，现象看起来像"node 跑不起来"（实测踩到过）。
+  //   套一层额外的引号，让 cmd 剥掉的是我们故意加的那层。
+  const std::string cmd = "\"" + inner + "\"";
   FILE* pipe = _popen(cmd.c_str(), "r");
 #else
+  const std::string cmd = inner;
   FILE* pipe = popen(cmd.c_str(), "r");
 #endif
   if (pipe == nullptr) return "<popen failed>";
@@ -68,25 +79,10 @@ std::string RunNodeEval(const std::string& js) {
   return Trim(out);
 }
 
-// 只保留数字与点，便于把 "OpenSSL 3.6.3 1 Oct 2025" 与 "3.6.3" 放一起比。
-std::string Digits(const std::string& s) {
-  std::string out;
-  bool last_dot = true;
-  for (char c : s) {
-    if (std::isdigit(static_cast<unsigned char>(c))) {
-      out.push_back(c);
-      last_dot = false;
-    } else if (c == '.' && !last_dot) {
-      out.push_back(c);
-      last_dot = true;
-    } else if (!out.empty() && !last_dot) {
-      out.push_back('.');
-      last_dot = true;
-    }
-  }
-  while (!out.empty() && out.back() == '.') out.pop_back();
-  return out;
-}
+// openssl 的版本对比直接用 OPENSSL_VERSION_STR（宏，值是 "3.6.3"），与
+// process.versions.openssl 同一口径。**不要**用 OpenSSL_version(OPENSSL_VERSION) 再做
+// "只留数字与点"的归一化 —— 它返回 "OpenSSL 3.6.3 9 Jun 2026"，日期会被拼进去，
+// 得到 3.6.3.9.2026，看起来像版本不一致，其实是取值口径错了（实测踩到过）。
 
 std::string BrotliVersionString() {
   const uint32_t v = BrotliEncoderVersion();
@@ -120,7 +116,7 @@ TEST(NodeCoexist, NodeReportsSameBrotli) {
 TEST(NodeCoexist, NodeReportsSameOpenSsl) {
   const std::string reported = RunNodeEval("process.versions.openssl");
   ASSERT_FALSE(reported.empty());
-  EXPECT_EQ(Digits(reported), Digits(OpenSSL_version(OPENSSL_VERSION)));
+  EXPECT_EQ(reported, std::string(OPENSSL_VERSION_STR));
 }
 
 // ---- 编译期版本（证明头文件也是同一份）----------------------------------------
@@ -206,7 +202,7 @@ TEST(NodeCoexist, Report) {
       {"zlib", RunNodeEval("process.versions.zlib"), zlibVersion()},
       {"brotli", RunNodeEval("process.versions.brotli"), BrotliVersionString()},
       {"openssl", RunNodeEval("process.versions.openssl"),
-       Digits(OpenSSL_version(OPENSSL_VERSION))},
+       OPENSSL_VERSION_STR},
       {"nghttp2", RunNodeEval("process.versions.nghttp2"),
        nghttp2_version(0) ? nghttp2_version(0)->version_str : ""},
       {"simdutf", RunNodeEval("process.versions.simdutf"), SIMDUTF_VERSION},
