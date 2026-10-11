@@ -1248,7 +1248,7 @@ features / portfile 编译开关；③ 凡是"疑似会导致链接或行为差�
 
 | 依赖 | node 侧 gyp 的设定 | vcpkg port | 结论 |
 |---|---|---|---|
-| **ada** | `ADA_USE_SIMDUTF=1`（用 v8 的 simdutf 做 UTF-8 校验） | ada-url **没有** simdutf 这个 feature | ★ **真实差异**：结果一致、**只是少了 SIMD 加速**（性能 delta）。可从我们这侧修不了（feature 不在 ada-url port 里）→ 记入欠账清单 |
+| **ada** | node 编译 amalgamated `deps/ada/ada.cpp`（内自带 `ada_idna.cpp`），配 v8 的 simdutf + `ADA_USE_SIMDUTF=1` | ada-url：**没有** simdutf feature，其 `ADA_USE_SIMDUTF` 走 **CPM 下载 simdutf**（vcpkg 不合适→ port 写死 OFF）；**ada-idna：有** `simdutf` feature（用户指出，确认属实） | ★ 真实差异，但**只是性能 delta**（结果一致）。**node 不用 ada-idna**（它的 ada 把 idna 打进去了；`deps/` 下没有独立 idna、node 树里无人引用、ada-config 也不依赖它）⇒ 给 ada-idna 开 simdutf 对 node 没有任何影响；我们之前声明 ada-idna 属于**多余依赖**，已删。要真正补上这个 SIMD 路径只能：① 上游给 ada-url 加一个不走 CPM 的 simdutf feature；② 自己 overlay 一份 ada-url port → 记入欠账清单 5e |
 | sqlite3 | `SQLITE_ENABLE_COLUMN_METADATA`、`SQLITE_ENABLE_DBSTAT_VTAB`、`SQLITE_DEFAULT_MEMSTATUS=0` | dbstat ✓ 我们已开；**column metadata 看着没开** | 我先怀疑它会**链接失败**（node_sqlite.cc 无条件调用 `sqlite3_column_{origin,database,table}_name`）→ **探针实测：符号在、链接通过、程序能跑** ⇒ **虚警**，撤回该怀疑 |
 | nghttp2 / ngtcp2 / llhttp / brotli / zstd | `NGHTTP2_STATICLIB` / `NGTCP2_STATICLIB` / … 等 define；`ZSTD_MULTITHREAD` | 静态口径的头若按 dllimport 声明，链接静态库会挂 | **探针实测：不定义这些宏也能链接、能跑** ⇒ 这一族**不是问题**（vcpkg 静态口径装的头是可用的）。`ZSTD_MULTITHREAD_SUPPORT=1` vcpkg 的 zstd port 本来就开 ✓ |
 | zstd | `XXH_NAMESPACE=ZSTD_` | vcpkg 的 zstd 不设 | 只影响 zstd 内部 xxhash 的符号名；同一个进程里若再链 vcpkg 的 `xxhash` port 才可能撞 —— 属 vcpkg 全局行为，记一笔备查 |

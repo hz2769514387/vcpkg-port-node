@@ -6,7 +6,6 @@
   "supports": "windows | linux | osx",
   "dependencies": [
     "abseil",
-    "ada-idna",
     "ada-url",
     "brotli",
     "c-ares",
