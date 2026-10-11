@@ -208,15 +208,11 @@ endif()
 # ---- 手写消费配置（不用 install(EXPORT)：库是 gyp 产物、不是 CMake 目标）--------
 set(_cfg "# 由 node port 生成：node 的 CMake 消费配置。\n")
 string(APPEND _cfg "include(CMakeFindDependencyMacro)\n")
-foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
-             "unofficial-brotli CONFIG" "ZLIB CONFIG" "ada CONFIG" "simdjson CONFIG"
-             "simdutf CONFIG" "ngtcp2 CONFIG" "zstd CONFIG"
-             "ICU COMPONENTS uc i18n data" "unofficial-sqlite3 CONFIG"
-             "hdr_histogram CONFIG")
-    string(APPEND _cfg "find_dependency(${_dep})\n")
-endforeach()
 # hdr_histogram-config.cmake 内部用 find_dependency(ZLIB) module mode，
-# 在 Windows static 下找不到 zs.lib。预先用 CONFIG 模式找到后设好 cache 变量。
+# 在 Windows static 下找不到 zs.lib。必须在 hdr_histogram 之前先用 CONFIG 模式
+# 找到 ZLIB，并设好 cache 变量 ZLIB_LIBRARY / ZLIB_INCLUDE_DIR，
+# 这样 hdr_histogram 内部的 module-mode find_dependency(ZLIB) 就能复用。
+string(APPEND _cfg "find_dependency(ZLIB CONFIG)\n")
 string(APPEND _cfg
     "if(TARGET ZLIB::ZLIB)\n"
     "  get_target_property(_zlib_loc ZLIB::ZLIB IMPORTED_LOCATION)\n"
@@ -228,6 +224,13 @@ string(APPEND _cfg
     "    set(ZLIB_INCLUDE_DIR \"\${_zlib_inc}\" CACHE PATH \"Path to zlib headers\")\n"
     "  endif()\n"
     "endif()\n")
+foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
+             "unofficial-brotli CONFIG" "ada CONFIG" "simdjson CONFIG"
+             "simdutf CONFIG" "ngtcp2 CONFIG" "zstd CONFIG"
+             "ICU COMPONENTS uc i18n data" "unofficial-sqlite3 CONFIG"
+             "hdr_histogram CONFIG")
+    string(APPEND _cfg "find_dependency(${_dep})\n")
+endforeach()
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
     "set(_node_lib \"\${_node_prefix}/lib\")\n")

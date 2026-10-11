@@ -28,7 +28,10 @@
         "rhs": "Windows"
       },
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
+        "VCPKG_CRT_LINKAGE": "static",
+        "VCPKG_LIBRARY_LINKAGE": "static"
       }
     },
     {
