@@ -4,15 +4,16 @@
 #   1. 在 GitHub Actions runner 上用**指定的 vcpkg 版本 2026.07.29**（不是 runner 预装的那个）
 #      把本仓库的 overlay port 装起来；
 #   2. 再用 test/ 里的消费端工程 find_package(node) + 链接 node::node + 真跑一段 JS；
-#   3. 覆盖三个平台：x64-linux / x64-windows / arm64-osx。
+#   3. 覆盖六个平台：win/linux/mac × x64/arm64。
 #
 # 平台口径（路线 B）：
-#   * Windows：clang-cl + 静态 CRT + 静态库（x64-windows-static-clang）—— node 24+ 官方口径。
-#   * Linux：gcc + 静态库（x64-linux）。
-#   * macOS：clang + 静态库（arm64-osx）。
-#   triplets 在 test/cmake/triplets/ 下，toolchains 在 test/cmake/toolchains/ 下。
+#   * Windows：clang-cl + 静态 CRT + 静态库（x64/arm64-windows-static-clang）—— node 24+ 官方口径。
+#   * Linux：gcc + 静态库（x64/arm64-linux）。
+#   * macOS：clang + 静态库（x64/arm64-osx）。
+#   triplets 在 ports/node/cmake/triplets/ 下，toolchains 在 ports/node/cmake/toolchains/ 下。
 #
-# 资源策略：
+# 策略：
+#   只编译 test（清单模式自动装依赖），不做单独的 vcpkg install。
 #   只出 Release（triplet 里设 VCPKG_BUILD_TYPE=release）。
 #   并发度收着用（VCPKG_MAX_CONCURRENCY=2）：macOS arm64 只有 3 核 / 7 GB。
 
@@ -66,7 +67,7 @@ jobs:
           fi
 
   # ---------------------------------------------------------------------------
-  # L2 + L3：装依赖 + 编 port + 消费端冒烟。
+  # L2 + L3：编译 test（清单模式自动装 node + 依赖）+ 消费端冒烟。
   # ---------------------------------------------------------------------------
   build:
     strategy:
@@ -74,12 +75,27 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
+            preset: linux
             triplet: x64-linux
             allow_failure: false
+          - os: ubuntu-24.04-arm
+            preset: linux-arm64
+            triplet: arm64-linux
+            allow_failure: false
           - os: windows-latest
+            preset: windows-clang-cl
             triplet: x64-windows-static-clang
             allow_failure: false
+          - os: windows-latest
+            preset: windows-clang-cl-arm64
+            triplet: arm64-windows-static-clang
+            allow_failure: true
+          - os: macos-13
+            preset: macos-x64
+            triplet: x64-osx
+            allow_failure: true
           - os: macos-latest
+            preset: macos
             triplet: arm64-osx
             allow_failure: true
     runs-on: ${{ matrix.os }}
@@ -93,15 +109,11 @@ jobs:
         run: df -h || true
 
       # ---- Windows：确保 clang-cl 可用 ----------------------------------------
-      # GitHub Actions windows-latest 预装了 LLVM，但 VS 的 "C++ Clang 编译器" 组件
-      # 不一定装了。toolchain 的搜索顺序会查 Program Files/LLVM，这里把它设到
-      # NODE_PORT_LLVM_ROOT 以确保 toolchain 能找到。
       - name: 定位 clang-cl（Windows）
         if: runner.os == 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          # VS 自带的 LLVM（优先：与 MSVC 头文件/库匹配）
           VS_LLVM=$(find "/c/Program Files/Microsoft Visual Studio" -path "*/VC/Tools/Llvm/x64/bin/clang-cl.exe" 2>/dev/null | head -1 || true)
           if [ -n "$VS_LLVM" ]; then
             LLVM_ROOT=$(dirname "$(dirname "$VS_LLVM")")
@@ -109,7 +121,6 @@ jobs:
             echo "找到 VS 自带 LLVM：$LLVM_ROOT"
             exit 0
           fi
-          # 独立 LLVM
           if [ -f "/c/Program Files/LLVM/bin/clang-cl.exe" ]; then
             echo "NODE_PORT_LLVM_ROOT=/c/Program Files/LLVM" >> "$GITHUB_ENV"
             echo "找到独立 LLVM"
@@ -137,20 +148,37 @@ jobs:
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_ENV"
           echo "$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_PATH"
 
-      # ---- L2：装 port（含 16 个官方依赖）-----------------------------------
-      - name: 装 node port（overlay）
+      # ---- L2 + L3：配置 + 构建 + 运行消费端冒烟 ------------------------------
+      # 清单模式：test/vcpkg.json 声明依赖 node，vcpkg 自动装（含 overlay port）。
+      # CMake preset 指定 triplet 和 toolchain，无需手敲 -D。
+      - name: 配置 test（cmake preset）
         shell: bash
         run: |
           set -euo pipefail
-          vcpkg install "node:${{ matrix.triplet }}" \
-            --overlay-ports="$GITHUB_WORKSPACE/ports" \
-            --overlay-triplets="$GITHUB_WORKSPACE/test/cmake/triplets"
+          cd test
+          cmake --preset ${{ matrix.preset }}
+
+      - name: 构建 test
+        shell: bash
+        run: |
+          set -euo pipefail
+          cd test
+          cmake --build --preset ${{ matrix.preset }}
+
+      - name: 运行冒烟
+        shell: bash
+        run: |
+          set -euo pipefail
+          SMOKE="./test/build/${{ matrix.preset }}/app/smoke"
+          [ -f "$SMOKE.exe" ] && SMOKE="$SMOKE.exe"
+          OUT="$("$SMOKE" -e "process.stdout.write(process.versions.node)")"
+          echo "嵌入运行时报告的 node 版本：$OUT"
+          test "$OUT" = "24.21.0"
 
       - name: 失败时打印首错
         if: failure()
         shell: bash
         run: |
-          # 搜索所有 buildtrees（不只是 node）的日志中的错误
           for f in "$VCPKG_ROOT"/buildtrees/*/*-out.log; do
             [ -f "$f" ] || continue
             if grep -q -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$f" 2>/dev/null; then
@@ -158,24 +186,17 @@ jobs:
               grep -n -m 30 -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$f" || tail -n 80 "$f"
             fi
           done
-          for f in "$VCPKG_ROOT"/buildtrees/*/config-*-out.log; do
-            [ -f "$f" ] || continue
-            echo "===== $f（tail 120）====="
-            tail -n 120 "$f"
-          done
 
       - name: 收集日志
         if: always()
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/ci-logs"
-          # 收集所有 buildtrees 的日志（不只是 node），用 port 名做前缀防冲突
           for f in "$VCPKG_ROOT"/buildtrees/*/*.log; do
             [ -f "$f" ] || continue
             port="$(basename "$(dirname "$f")")"
             cp "$f" "$RUNNER_TEMP/ci-logs/${port}_$(basename "$f")"
           done
-          # 收集环境信息
           {
             echo "=== vcpkg version ==="
             vcpkg version 2>&1 || true
@@ -187,38 +208,16 @@ jobs:
             clang-cl --version 2>&1 || true
             echo "=== installed libs ==="
             ls -la "$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/" 2>&1 || true
-            echo "=== installed pkgconfig ==="
-            ls "$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/pkgconfig/" 2>&1 || true
             echo "=== disk space ==="
             df -h 2>&1 || true
           } > "$RUNNER_TEMP/ci-logs/env_info.txt"
           echo "收集了 $(ls -1 "$RUNNER_TEMP/ci-logs" | wc -l) 个文件"
-          ls -la "$RUNNER_TEMP/ci-logs" || true
 
-      - name: 上传日志 artifact
+      - name: 上传日志
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: vcpkg-logs-${{ matrix.triplet }}
+          name: logs-${{ matrix.triplet }}
           path: ${{ runner.temp }}/ci-logs
           if-no-files-found: error
           retention-days: 7
-
-      # ---- L3：消费端冒烟（find_package + 链接 + 真跑 JS）-------------------
-      - name: 构建并运行消费端冒烟
-        shell: bash
-        run: |
-          set -euo pipefail
-          cmake -S test -B build -G Ninja \
-            -DCMAKE_BUILD_TYPE=Release \
-            -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
-            -DVCPKG_TARGET_TRIPLET="${{ matrix.triplet }}" \
-            -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/test/cmake/triplets" \
-            -DVCPKG_OVERLAY_PORTS="$GITHUB_WORKSPACE/ports" \
-            -DVCPKG_MANIFEST_MODE=OFF
-          cmake --build build
-          SMOKE=./build/app/smoke
-          [ -f "$SMOKE.exe" ] && SMOKE="$SMOKE.exe"
-          OUT="$("$SMOKE" -e "process.stdout.write(process.versions.node)")"
-          echo "嵌入运行时报告的 node 版本：$OUT"
-          test "$OUT" = "24.21.0"

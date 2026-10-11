@@ -58,7 +58,7 @@ set(_node_cxx "")
 if(VCPKG_TARGET_IS_WINDOWS)
     # 复用仓库的 toolchain 脚本：它发布 NODE_PORT_LLVM_BIN（clang-cl 所在目录）
     # 并设好 MSVC 命令行环境（INCLUDE/LIB/PATH）。
-    include("${CMAKE_CURRENT_LIST_DIR}/../../test/cmake/toolchains/clang-cl.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/cmake/toolchains/clang-cl.cmake")
     set(_node_cc "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
     set(_node_cxx "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
     # gyp 在中文 locale 下的两个已知坑：VS 定位失败 / reg.exe 解码失败。
@@ -122,20 +122,20 @@ endmacro()
 set(_node_shared_args "")
 
 # Windows static-clang 和 Linux/macOS 的静态库名不同：
-#   * Windows：zlib→zs, openssl→libcrypto,libssl, libuv→libuv, hdr→hdr_histogram_static
-#   * Linux/macOS：zlib→z, openssl→crypto,ssl, libuv→uv, hdr→hdr_histogram
+#   * Windows：zlib→zs, openssl→libcrypto,libssl, libuv→libuv
+#   * Linux/macOS：zlib→z, openssl→crypto,ssl, libuv→uv
+# hdr_histogram 在所有平台都装 hdr_histogram_static。
 # 其余依赖库名两平台一致。
 if(VCPKG_TARGET_IS_WINDOWS)
     set(_zlib_lib      "zs")
     set(_openssl_lib   "libcrypto,libssl")
     set(_libuv_lib     "libuv")
-    set(_hdrhist_lib   "hdr_histogram_static")
 else()
     set(_zlib_lib      "z")
     set(_openssl_lib   "crypto,ssl")
     set(_libuv_lib     "uv")
-    set(_hdrhist_lib   "hdr_histogram")
 endif()
+set(_hdrhist_lib   "hdr_histogram_static")
 
 _node_shared(openssl       openssl     "${_openssl_lib}")
 _node_shared(zlib          zlib        "${_zlib_lib}")

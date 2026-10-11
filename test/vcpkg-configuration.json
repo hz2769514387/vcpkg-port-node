@@ -3,6 +3,6 @@
     "../ports"
   ],
   "overlay-triplets": [
-    "cmake/triplets"
+    "../ports/node/cmake/triplets"
   ]
 }

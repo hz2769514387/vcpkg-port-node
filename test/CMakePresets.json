@@ -21,7 +21,6 @@
       "name": "windows-clang-cl",
       "inherits": "base",
       "displayName": "Windows x64（clang-cl + 静态 CRT + 静态库）",
-      "description": "node 上游 Windows 24+ 的官方口径（见仓库 triplets/x64-windows-static-clang.cmake）。",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -29,7 +28,23 @@
       },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/../ports/node/cmake/toolchains/clang-cl.cmake",
+        "VCPKG_CRT_LINKAGE": "static",
+        "VCPKG_LIBRARY_LINKAGE": "static"
+      }
+    },
+    {
+      "name": "windows-clang-cl-arm64",
+      "inherits": "base",
+      "displayName": "Windows arm64（clang-cl + 静态 CRT + 静态库）",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-clang",
+        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/../ports/node/cmake/toolchains/clang-cl.cmake",
         "VCPKG_CRT_LINKAGE": "static",
         "VCPKG_LIBRARY_LINKAGE": "static"
       }
@@ -48,6 +63,19 @@
       }
     },
     {
+      "name": "linux-arm64",
+      "inherits": "base",
+      "displayName": "Linux arm64（gcc）",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-linux"
+      }
+    },
+    {
       "name": "macos",
       "inherits": "base",
       "displayName": "macOS arm64（clang）",
@@ -59,6 +87,19 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-osx"
       }
+    },
+    {
+      "name": "macos-x64",
+      "inherits": "base",
+      "displayName": "macOS x64（clang）",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-osx"
+      }
     }
   ],
   "buildPresets": [
@@ -67,12 +108,24 @@
       "configurePreset": "windows-clang-cl"
     },
     {
+      "name": "windows-clang-cl-arm64",
+      "configurePreset": "windows-clang-cl-arm64"
+    },
+    {
       "name": "linux",
       "configurePreset": "linux"
     },
     {
+      "name": "linux-arm64",
+      "configurePreset": "linux-arm64"
+    },
+    {
       "name": "macos",
       "configurePreset": "macos"
+    },
+    {
+      "name": "macos-x64",
+      "configurePreset": "macos-x64"
     }
   ]
 }

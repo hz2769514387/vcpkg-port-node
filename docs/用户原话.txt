@@ -103,3 +103,20 @@ debug也是需要ci实测的，不过可能会导致六小时超时。这个可�
 不要在临时目录里面做实验了，直接按正式的正常项目overlay-port的方式做。
 test里面感觉不像是正常的使用overlay-port的推荐方式；应该有vcpkg.json+cmakepresets+overlay-port的vcpkg配置+分为主项目+子项目模式，并建立合适的目录结构，给使用者带个好头。
 这次的提交我push ci了，日志部分取回放在：log/9/
+
+2026年10月11日 14点16分
+构建也由你来做，你可以长时间等待构建结果，没有关系。
+要把ci也按照路线b的做法设置好（完整的增加平台和按照规范triplets），我push后才能同步验证。
+项目根目录下的toolchains和triplets我理解应该也是test里面的内容，一个规范的vcpkg项目主流做法是在test项目内一个cmake文件夹把这些东西放进去。
+而且根目录下的triplets和文档内讨论的node需要的默认triplets不同。triplets要放node默认的triplets，其他triplets由高级用户自己探索，这里不再给出示例。
+而且vcpkg推荐方式是清单模式跑test，不能直接在非清单目录内 vcpkg install
+
+2026年10月11日 20点01分
+看了下ci，感觉有问题：
+1.triplets数量应该要有六个（win+linux+mac * x64 + arm64)
+2.其实只需要编译test即可，不需要在vcpkg目录进行install（那是非清单模式，也不是vcpkg推荐的使用方式），编译完test就能直接证明port/node能用。虽然少了非清单模式的测试，但我觉得问题不大（清单模式都通过了，非清单模式无法通过概率小，以后真需要再加也不迟）。这样只做一步编译可以省空间时间。
+3.现在test和port存在的关系是相互依赖（port依赖test/cmake，test依赖port），以后提交到vcpkg上只会有port，这会是大问题。解决方法是只能test单向依赖port，且port不能依赖port目录外任何东西。要研究vcpkg的输出机制，简单vcpkg port只输出include和libs，实际上复杂port（如qt）还会输出tools等其他东西，这是我们需要学习的，test需要的东西，都应该经由这个输出手段输出出来，并按vcpkg规则使用（而不是从当前仓库的port里面复制一份出来）
+4.可能需要输出的东西：include、lib、还有参考tools\node_exe里面（有node.exe、npm包、corepack包、npm和npx的脚本，这些东西使用者特殊场景下很可能也需要用）；还有toolchains、triplets里面的东西？按照vcpkg规则是不是统一输出到share里面比较好？test从share里面拿。
+5.上一轮push的ci日志已经放在log/11了，都失败。以后建议你需要关心的所有编译结果都放到log archive里面，不要放artifact里面（我一个一个点下载麻烦，而下载log archive只需要点一次）。
+
+
