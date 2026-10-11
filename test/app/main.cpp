@@ -1,22 +1,67 @@
-// node port 消费端冒烟测试：最小嵌入。
+// 最小但忠实的 Node.js 嵌入可执行（embedder）—— 同时也是 node 官方测试套件的 shell。
 //
-// 用途：验证 <prefix>/share/node/node-config.cmake 能被 find_package 找到、
-// `node::node` 能被链接，并且**真的跑得起** node 运行时。
+// 为什么不是只做个 smoke：
+//   node 官方的 tools/test.py 支持 `--shell=<可执行>`，于是只要有**一个忠实于官方 main
+//   的可执行**，就能把官方 JS 用例真跑一遍。忠实度体现在两处：
+//     1) 参数一字不改地交给 node::Start（官方 src/node_main.cc 就是这一句）；
+//     2) Windows 上官方用的是 wmain + argv 转 UTF-8 —— 不是 ANSI 代码页。
+//        很多用例会传非 ASCII 路径/参数，用 main(char**) 会按系统代码页解释而错乱。
 //
-// 做法：把命令行参数原样交给 node —— 等价于 node 自带命令行：
-//     smoke -e "console.log(process.versions.node)"
-//     smoke script.js
+// 用法（与 node 命令行一致）：
+//     node -e "console.log(process.versions.node)"
+//     node test/parallel/test-xxx.js
+//     node --test test/parallel/
 #include <node.h>
 
 #include <cstdio>
+#include <cstdlib>
 
-int main(int argc, char* argv[]) {
-  if (argc <= 1) {
-    std::fprintf(stderr,
-                 "用法：%s [-e <脚本> | <脚本文件> ...]\n"
-                 "例如：%s -e \"console.log(process.versions.node)\"\n",
-                 argv[0], argv[0]);
-    return 2;
+#ifdef _WIN32
+#include <windows.h>
+
+#include <string>
+#include <vector>
+
+namespace {
+
+// 与上游 src/node_main.cc 一致：wchar_t** → UTF-8 的 char**。
+// 返回的缓冲由 args 持有，调用方保证它在 node::Start 期间存活。
+std::vector<char*> ToUtf8Argv(int argc, wchar_t* wargv[],
+                              std::vector<std::string>* args) {
+  args->reserve(static_cast<size_t>(argc));
+  for (int i = 0; i < argc; i++) {
+    const int size = WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, nullptr, 0,
+                                         nullptr, nullptr);
+    if (size <= 0) {
+      std::fprintf(stderr, "Could not convert arguments to utf8.\n");
+      std::exit(1);
+    }
+    std::string buf(static_cast<size_t>(size - 1), '\0');
+    if (size > 1 &&
+        WideCharToMultiByte(CP_UTF8, 0, wargv[i], -1, buf.data(), size, nullptr,
+                            nullptr) == 0) {
+      std::fprintf(stderr, "Could not convert arguments to utf8.\n");
+      std::exit(1);
+    }
+    args->push_back(std::move(buf));
   }
-  return node::Start(argc, argv);
+  std::vector<char*> argv;
+  argv.reserve(static_cast<size_t>(argc) + 1);
+  for (std::string& s : *args) argv.push_back(s.data());
+  argv.push_back(nullptr);
+  return argv;
 }
+
+}  // namespace
+
+int wmain(int argc, wchar_t* wargv[]) {
+  std::vector<std::string> args;
+  std::vector<char*> argv = ToUtf8Argv(argc, wargv, &args);
+  return node::Start(argc, argv.data());
+}
+
+#else  // 非 Windows：与上游一致，直通
+
+int main(int argc, char* argv[]) { return node::Start(argc, argv); }
+
+#endif

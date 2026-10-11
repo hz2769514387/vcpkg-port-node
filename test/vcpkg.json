@@ -1,8 +1,32 @@
 {
-  "name": "node-port-smoke",
+  "name": "node-port-test",
   "version-string": "0.0.1",
-  "description": "消费端示例工程（主项目）：以 vcpkg manifest 模式通过 overlay-port 使用 node，演示使用者的推荐接入方式。",
+  "description": "node port 的消费端验证工程：既是接入示例，也真跑 node 官方测试套件，并验证 vcpkg 库能与 node port 共存。显式声明 node 的依赖、以及 v8 内嵌第三方（abseil / highway / simdutf / zlib）同名的 vcpkg port —— 用来证明它们可以同时链进一个使用者工程而不出问题。",
   "dependencies": [
-    "node"
+    {
+      "name": "node",
+      "features": [
+        "test-suite"
+      ]
+    },
+    "gtest",
+    "abseil",
+    "highway",
+    "fmt",
+    "simdutf",
+    "simdjson",
+    "zlib",
+    "openssl",
+    "libuv",
+    "c-ares",
+    "nghttp2",
+    "ngtcp2",
+    "brotli",
+    "zstd",
+    "llhttp",
+    "ada-url",
+    "icu",
+    "hdr-histogram",
+    "sqlite3"
   ]
 }

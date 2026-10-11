@@ -33,5 +33,10 @@
     "icu",
     "ngtcp2",
     "hdr-histogram"
-  ]
+  ],
+  "features": {
+    "test-suite": {
+      "description": "额外安装 Node.js 官方测试套件（test/ 全量 + tools/test.py 驱动）到 share/node/test-suite。消费端可以用它自己的 node 嵌入可执行（tools/test.py --shell=<你的可执行>）把官方 JS 用例真跑一遍；不装则只有库与头文件。约 80 MB。"
+    }
+  }
 }

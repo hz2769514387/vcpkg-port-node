@@ -1,7 +1,14 @@
 """符号检测：node port 自带库 vs vcpkg 依赖库，是否存在重复符号。
 
 用法（须在 vcvars 环境下）：
-  python symbol_check.py <node_lib_dir> <vcpkg_packages_dir> <triplet> [--json out.json]
+  python symbol_check.py <node_lib_dir> <vcpkg_packages_dir> <triplet>
+                         [--json out.json] [--dumpbin <路径>] [--fail-on-duplicates]
+
+  --dumpbin：dumpbin.exe 的完整路径。不传就用 PATH 上的 dumpbin。ctest 用例会从
+             CMake 侧把配置期找到的绝对路径传进来（ctest 进程本身不在 vcvars 环境里，
+             光靠 PATH 找不到）。
+  --fail-on-duplicates：发现跨库重复强符号时以退出码 1 结束（CI / ctest 当闸门用）。
+                        不加这个开关时只报告，退出码恒为 0（当调查工具用）。
 
 原理：
   dumpbin /symbols 导出每个 .lib 的定义符号。只保留 **External + 真实段 + 非 COMDAT**
@@ -88,8 +95,13 @@ def main(argv):
     json_out = None
     if "--json" in argv:
         json_out = argv[argv.index("--json") + 1]
-
+    # CI 要把它当闸门用：有跨库重复强符号就红。默认仍是"只报告、退出 0"，
+    # 因为这个脚本平时也当调查工具用，不该因为发现问题就打断别人的手头动作。
+    fail_on_duplicates = "--fail-on-duplicates" in argv
     dumpbin = "dumpbin"
+    if "--dumpbin" in argv:
+        dumpbin = argv[argv.index("--dumpbin") + 1]
+
     node_libs, dep_libs = {}, {}
     for f in sorted(os.listdir(node_lib_dir)):
         if f.lower().endswith(".lib"):
@@ -148,6 +160,9 @@ def main(argv):
                                for n, d, s in found],
             }, f, ensure_ascii=False, indent=1)
         print("\nJSON 写入 %s" % json_out)
+    if fail_on_duplicates and found:
+        print("\n::error:: 发现 %d 组跨库重复强符号（--fail-on-duplicates）" % len(found))
+        return 1
     return 0
 
 

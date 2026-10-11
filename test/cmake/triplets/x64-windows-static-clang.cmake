@@ -38,5 +38,19 @@ set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW")
 # clang-cl 22.x（VS 18 自带）比 19.x 严格：-Wincompatible-pointer-types 默认是 error。
 # hdr-histogram 等 upstream C 代码有真实的类型不匹配（uint32_t* vs unsigned long*），
 # 在 MSVC 上是 warning，在 clang-cl 上是 error。降为 warning 以便构建通过。
-set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types")
-set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types")
+#
+# ★ VCPKG_C_FLAGS / VCPKG_CXX_FLAGS 必须是**空格分隔的单个字符串**，不能用
+#   list(APPEND)。它们会被直接拼进编译命令，列表会被写成 `-Wno-a;-Wno-b` 这种
+#   **一个**参数（分号没被拆开），clang-cl 只会报 "argument unused" —— 实测就是这么
+#   把 gtest 搞挂的。
+set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument")
+set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument")
+
+# 第二条抑制开关（-Wno-unused-command-line-argument）的来由：
+# clang-cl 不实现 MSVC 的 /MP（多进程编译），而上游 CMake 工程只要 `if(MSVC)` 就会加它，
+# 工程自己再开 /WX（warnings as errors）时，这条 warning 就成了硬错误。实测 gtest 的
+# CMake（googlemock / googletest）正是这么挂的：
+#     clang-cl: error: argument unused during compilation: '/MP' [-Werror,-Wunused-command-line-argument]
+# 用 -Wno-（彻底关掉）而不是 -Wno-error=：工程自己的 /WX 排在后面，会把 -Wno-error= 重新
+# 打开，而 -Wno- 关掉的警告不会被通用的 -Werror 复活。只关这一条，不做"把 /W4 降成 /W0"
+# 那种大扫除 —— 那会把真问题一起盖掉。

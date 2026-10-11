@@ -32,10 +32,14 @@ target_link_libraries(你的目标 PRIVATE node::node)
 ```
 ports/node/          自包含的 port：只有 portfile.cmake / vcpkg.json / patches/ / usage
                      不引用 port 目录外的任何文件，不含 triplet / toolchain
-test/                消费端示例（主项目 + 子项目），同时就是 CI 的冒烟
+                     （可选 feature test-suite 会额外装 node 官方测试套件到 share/）
+test/                消费端验证工程（主项目 + 子项目），同时是 CI 的验证入口
+├── app/              node 嵌入可执行（产物名故意叫 node，兼作官方套件的 shell）
+├── unit/             gtest：vcpkg 库自身 + 与 node 共存（版本交叉核对）
+├── coexist/          行为级共存：zlib/brotli/openssl/ICU/IDN/sqlite/http/http2/worker/wasm
+├── tests/            ctest 胶水：node 官方套件 + 符号审计
 ├── cmake/triplets/   六个平台的 triplet      ← 属于消费端
-├── cmake/toolchains/ clang-cl + MSVC 命令行环境 ← 属于消费端
-└── app/              真正嵌入 node 的可执行
+└── cmake/toolchains/ clang-cl + MSVC 命令行环境 ← 属于消费端
 tools/               维护工具：version_tree.py（版本表）、symbol_check.py、gyp2vcpkg/
 versions/            vcpkg 版本表（versions/n-/node.json）
 docs/                调研与决策记录（架构重审、路线抉择、落地实验）
@@ -70,6 +74,28 @@ Windows 需要 clang-cl 时，triplet 用 vcpkg 的标准变量 `VCPKG_CHAINLOAD
 | `<prefix>/lib/` | `libnode`（或 `libnode.a`）+ `node_base` + `v8_*` + uvwasi / merve / nbytes / ncrypto / crdtp / abseil / highway / v8_zlib |
 | `<prefix>/share/node/node-config.cmake` | `node::node` 及其全部传递依赖的导入目标 |
 | `<prefix>/share/node/node.exe.extra.manifest` | Windows 平台兼容性清单（变量 `node_NODE_SOURCE_MANIFEST`） |
+| `<prefix>/share/node/test-suite/` | **可选 feature `test-suite`**：node 官方测试套件（`test/` 全量 + `tools/test.py`），消费端可用它跑官方用例（变量 `node_TEST_SUITE_DIR`）。约 80 MB |
+
+## 怎么验证它能用（不只是冒烟）
+
+`test/` 是一个真正的验证工程，用 ctest 分四组：
+
+```sh
+cd test
+cmake --preset windows-clang-cl          # 或 linux / macos / …（六个平台）
+cmake --build --preset windows-clang-cl
+ctest --test-dir build/windows-clang-cl --output-on-failure
+```
+
+| label | 验证什么 |
+|---|---|
+| `smoke` | 链接成功 + 跑得起来 + `process.versions.node` 对得上 |
+| `unit` | gtest：一批 vcpkg 库自身可用；**同时链 `node::node`** 后仍可用；node 报告的依赖版本与我方直接调用得到的版本一致 |
+| `coexist` | 行为级：zlib / brotli / openssl / ICU / IDN / sqlite / llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑；外加符号审计（Windows，`tools/symbol_check.py`） |
+| `node-suite` | **node 官方测试套件**：官方 `tools/test.py --shell=<本工程编译出的可执行>`，上游 `*.status` 里的 SKIP/FLAKY 会被尊重 |
+
+用 `-L` 只跑其中一组，例如 `ctest --test-dir build/<preset> -L unit --output-on-failure`。
+细节（分片、跳过表、为什么不用 `node --test`）见 `test/README.md`。
 
 ## 维护约定（会被 CI 强制）
 
@@ -93,9 +119,14 @@ Windows 需要 clang-cl 时，triplet 用 vcpkg 的标准变量 `VCPKG_CHAINLOAD
 
 ## CI
 
-`.github/workflows/ci.yml`：`lint` 做静态校验（JSON、换行符、git-tree、port 自包含），
-`build` 在六个平台上用清单模式编译 `test/` 并真跑 `smoke -e "process.stdout.write(process.versions.node)"`，
-`logs` 把六个平台的日志合成**一个** `ci-logs` 归档（下载一次即可）。
-失败的"首错"会直接写进 run 页面的 job summary，不必下载也能看。
+`.github/workflows/ci.yml`：
+
+* `lint`：静态校验四条红线（JSON 合法、无 CR、git-tree 与 `ports/node` 一致、port 自包含）。
+* `build`：六个平台 × 清单模式编译 `test/`，然后 `ctest` 跑全部四组
+  （smoke / unit / coexist / node 官方套件）。每个 job 加了 `timeout-minutes`，
+  被超时取消时 `if: always()` 的收集步骤仍会把日志带走。
+* `logs`：把六个平台的日志合成**一个** `ci-logs` 归档（下载一次即可），
+  里面还带 `ctest.log` 与用例清单；每个 job 的"首错"和 ctest 摘要直接写进 run 页面的
+  job summary，不必下载就能看。
 
 CI 固定用 vcpkg `2026.07.29`（不是 runner 预装的那个）。

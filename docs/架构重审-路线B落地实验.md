@@ -1053,3 +1053,81 @@ if %NODE_MAJOR_VERSION% GEQ 24 (
 该事项与其它"欠账"统一记录在 `docs/暂时还没做.md`，发版前逐项清零。
 
 
+
+---
+
+## 15. 消费端验证升级（真跑 node 官方套件 + vcpkg 库共存）——2026-10-11
+
+此前 test/ 只做"能不能链接 + 能不能跑一行 JS"的冒烟。本轮把它升级成真正的验证工程，
+并借它做了一件之前只停留在文档里的事：**把 node 官方测试套件真跑一遍**。
+
+### 15.1 ★ 官方套件可以被"别人的 node"驱动 —— 关键在 `tools/test.py --shell=`
+
+- `tools/test.py`（node 官方用例驱动）自带 `--shell=<可执行>`：**用别人的 node 跑官方用例**。
+  我们只要提供一个忠实的嵌入可执行即可。
+- **为什么不能直接 `node --test`**：各套件目录下的 `*.status` 记录着上游标记的
+  SKIP / FLAKY 用例，**只有 test.py 会读**。用内置 runner 会把这些状态全丢掉 ——
+  于是满屏"失败"，而其中绝大多数是**上游本来就跳过**的环境相关用例。
+  这种红没有信息量，会把真问题淹掉。这是"测试要先信得过，才谈得上发现问题"。
+- 忠实度的两个具体点（照抄上游 `src/node_main.cc`）：
+  1) argv 一字不改交给 `node::Start`；
+  2) Windows 用 `wmain` 并把 argv 转 UTF-8 —— 不是 ANSI 代码页。很多用例会传
+     非 ASCII 路径/参数，`main(char**)` 会按系统代码页解释而错乱。
+- 套件**不由 port 源码目录提供**：port 加了 `test-suite` feature，把 `test/` 全量 +
+  `tools/test.py`/`utils.py` 装到 `share/node/test-suite/`，消费端从安装产物取。
+  依依赖方向仍然只有"消费端 → port"，也符合"port 目录自包含"。
+  test.py 按 `dirname(sys.argv[0])/..` 推 workspace，所以 `tools/` 与 `test/` 必须同层。
+- 分片：test.py 原生支持 `--run=<第几片>,<总片数>`。把它映射成多个 ctest 用例，
+  交给 `ctest -j` 并行 —— 比在一个进程里靠 test.py 自己调度更好利用 runner 的核。
+- 上游标为 flaky 的用例按 `--flaky-tests=dontcare` 处理：跑，但不拿它的失败点红灯。
+  我们不是上游 CI，用默认的 `run` 会让已知不稳定用例反复点亮红灯。
+
+### 15.2 ★★ clang-cl 不实现 MSVC 的 `/MP`，而 gtest 会在 `if(MSVC)` 下加它
+
+- 现象（加 gtest 依赖后立刻暴露）：
+  ```
+  clang-cl: error: argument unused during compilation: '/MP' [-Werror,-Wunused-command-line-argument]
+  ```
+- 根因：gtest 的 CMake 里 `if(MSVC) add_compile_options(/MP)`。clang-cl 因为是
+  MSVC 兼容前端，`MSVC` 变量为真 → 加了 `/MP`；而 clang-cl **不实现** `/MP`，
+  把它报成"未使用的参数"；gtest 自己又开了 `/WX`（warnings as errors）→ 警告升级为错误。
+- 修法（写在 **triplet** 里，对所有依赖 port 生效）：
+  `-Wno-unused-command-line-argument`。
+  用 `-Wno-`（彻底关掉）而不是 `-Wno-error=`：工程自己的 `/WX` 排在后面会把
+  `-Wno-error=` 重新打开，而 `-Wno-` 关掉的警告不会被通用 `-Werror` 复活。
+  只关这一条，不做"把 `/W4` 降成 `/W0`"那种大扫除 —— 那会把真问题一起盖掉。
+
+### 15.3 ★ `VCPKG_C_FLAGS` / `VCPKG_CXX_FLAGS` 必须是空格分隔的**单个字符串**
+
+- 我一开始写了 `list(APPEND VCPKG_CXX_FLAGS "-Wno-a")`，结果编译行里出现的是
+  **一个**参数：
+  ```
+  -Wno-error=incompatible-pointer-types;-Wno-unused-command-line-argument
+  ```
+  分号没被拆开 → clang-cl 只认第一个，第二个报 "argument unused"。
+- 正确写法是 `set(VCPKG_CXX_FLAGS "-Wno-a -Wno-b")`（空格在内）。这两个变量会被直接
+  拼进编译命令行，vcpkg 不替你做列表展开。
+
+### 15.4 共存是怎么被"证明"的（四层，互相独立）
+
+1. **能链接**：`unit_node_coexist` 同时链 `node::node`（内含 V8 与 v8 内嵌的
+   abseil / highway / v8_zlib）与同一批 vcpkg 库。重复的**强**符号会让链接器直接报错 ——
+   链接成功本身就是证据。
+2. **是同一份**：把 `node -p process.versions.X` 与我方进程里直接调用库得到的版本比对。
+   `uv` / `zlib` / `brotli` 在 node 里是**运行期**取值（`uv_version_string()` /
+   `zlibVersion()` / `BrotliEncoderVersion()`，见 `src/node_metadata.cc`），所以这条能
+   证明"node 用的就是我们链的这份"；其余是编译期宏，比对它们证明**头文件**也是同一份
+   （头不一致同样会踩 ABI）。另加一条行为级旁证：同输入同参数下，node 的
+   `zlib.deflateSync` 与我们 `compress2` 的字节必须完全一致 —— 版本号相同但实现不同
+   也能被它抓出来。
+3. **行为对**：`coexist.js` 把 zlib / brotli / openssl / ICU / ada(IDN) / sqlite /
+   llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑（h2c 不需要证书，正好用来
+   验 nghttp2）。
+4. **符号审计**：`tools/symbol_check.py` 扫 node 自带库与 vcpkg 库的**强符号**交集。
+   链接成功 ≠ 没隐患 —— 同名 **COMDAT**（inline/template、同名第三方库的不同版本）
+   会被静默折叠，运行时用哪一份由链接器决定。这个只能扫符号发现。
+   新增 `--fail-on-duplicates` 让它能当闸门（默认仍是只报告）。
+
+> 注意 `tools/symbol_check.py` 目前是 Windows/dumpbin 专用；Linux 的 `nm` 版本还没写
+> （已记在 `docs/暂时还没做.md`）。ctest 里 `--dumpbin` 由 CMake 在**配置期**解析绝对
+> 路径传进去 —— ctest 进程不在 vcvars 环境里，光靠 PATH 找不到。

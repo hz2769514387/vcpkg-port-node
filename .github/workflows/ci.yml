@@ -3,7 +3,12 @@
 # 目标：
 #   1. 在 GitHub Actions runner 上用**指定的 vcpkg 版本 2026.07.29**（不是 runner 预装的那个）
 #      把本仓库的 overlay port 装起来；
-#   2. 再用 test/ 里的消费端工程 find_package(node) + 链接 node::node + 真跑一段 JS；
+#   2. 再用 test/ 里的消费端工程 find_package(node) + 链接 node::node，然后跑 ctest：
+#        smoke        —— 版本断言
+#        unit         —— gtest：vcpkg 库自身 + 与 node 共存（版本交叉核对）
+#        coexist      —— 行为级：zlib/brotli/openssl/ICU/IDN/sqlite/http/http2/worker/wasm
+#                        全部由链接进来的 vcpkg 库提供；外加符号审计（Windows）
+#        node-suite   —— **node 官方测试套件**，由官方 tools/test.py --shell=<本工程的可执行> 驱动
 #   3. 覆盖六个平台：win/linux/mac × x64/arm64。
 #
 # 平台口径（路线 B）：
@@ -182,6 +187,9 @@ jobs:
             allow_failure: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.allow_failure }}
+    # GitHub 单个 job 的硬上限是 6 小时。给一个留余量的值：超时被取消时，
+    # `if: always()` 的收集步骤仍会跑，日志能带走 —— 否则白等一场。
+    timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
 
@@ -247,15 +255,33 @@ jobs:
           cd test
           cmake --build --preset ${{ matrix.preset }}
 
-      - name: 运行冒烟
+      - name: 列出将要跑的 ctest 用例
         shell: bash
         run: |
           set -euo pipefail
-          SMOKE="./test/build/${{ matrix.preset }}/app/smoke"
-          [ -f "$SMOKE.exe" ] && SMOKE="$SMOKE.exe"
-          OUT="$("$SMOKE" -e "process.stdout.write(process.versions.node)")"
-          echo "嵌入运行时报告的 node 版本：$OUT"
-          test "$OUT" = "24.21.0"
+          ctest --test-dir "test/build/${{ matrix.preset }}" -N | tee "$RUNNER_TEMP/ctest-list.txt"
+
+      - name: 跑 ctest（smoke + unit + coexist + node 官方套件 + 符号审计）
+        shell: bash
+        run: |
+          # pipefail：让失败通过 tee 传出来（否则管道最后一段的退出码会把它吃掉）
+          set -o pipefail
+          ctest --test-dir "test/build/${{ matrix.preset }}" \
+                --output-on-failure \
+                -j "${VCPKG_MAX_CONCURRENCY}" \
+                2>&1 | tee "$RUNNER_TEMP/ctest.log"
+
+      - name: ctest 摘要进 job summary
+        if: always()
+        shell: bash
+        run: |
+          {
+            echo "## ${{ matrix.triplet }} ctest 摘要"
+            echo ""
+            echo '```'
+            tail -n 80 "$RUNNER_TEMP/ctest.log" 2>/dev/null || echo "(没有 ctest.log)"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 首错写进 job summary
         if: always()
@@ -313,6 +339,10 @@ jobs:
             echo "=== disk space ==="
             df -h 2>&1 || true
           } > "$RUNNER_TEMP/ci-logs/env_info.txt"
+          # ctest 的输出与用例清单也一起进归档（它们是"结论"，比 buildtrees 更常被翻）
+          for f in ctest.log ctest-list.txt; do
+            [ -f "$RUNNER_TEMP/$f" ] && cp "$RUNNER_TEMP/$f" "$RUNNER_TEMP/ci-logs/$f"
+          done
           echo "收集了 $(ls -1 "$RUNNER_TEMP/ci-logs" | wc -l) 个文件"
 
       - name: 上传本 job 的日志（中间产物）

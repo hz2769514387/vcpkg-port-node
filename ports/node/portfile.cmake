@@ -257,6 +257,27 @@ if(VCPKG_TARGET_IS_WINDOWS)
         DESTINATION "${CURRENT_PACKAGES_DIR}/share/node" RENAME node.exe.extra.manifest)
 endif()
 
+# ---- 可选 feature：官方测试套件 -------------------------------------------------
+# 消费端要跑 node 官方用例，就得有 test/ 与 tools/test.py。它是经**安装产物**
+# （share/node/test-suite）给出的，而不是让消费端去 port 源码目录里拿 ——
+# 依赖方向只有一条：消费端 -> port。
+#
+# 为什么要连 tools/test.py 一起装：node 官方的 skip / flaky 列表（各套件下的
+# *.status）只有 tools/test.py 会读，直接 `node --test` 会把这些状态全丢掉、
+# 于是满屏假失败。test.py 用 --shell=<你的 node 嵌入可执行> 驱动，
+# 且它按 dirname(sys.argv[0])/.. 推 workspace，所以 tools/ 与 test/ 必须同层。
+if("test-suite" IN_LIST FEATURES)
+    set(_node_suite "${CURRENT_PACKAGES_DIR}/share/node/test-suite")
+    file(INSTALL "${SOURCE_PATH}/test/" DESTINATION "${_node_suite}/test")
+    file(INSTALL
+        "${SOURCE_PATH}/tools/test.py"
+        "${SOURCE_PATH}/tools/utils.py"
+        DESTINATION "${_node_suite}/tools")
+    if(EXISTS "${SOURCE_PATH}/tools/run-worker.js")
+        file(INSTALL "${SOURCE_PATH}/tools/run-worker.js" DESTINATION "${_node_suite}/tools")
+    endif()
+endif()
+
 # ---- 手写消费配置（不用 install(EXPORT)：库是 gyp 产物、不是 CMake 目标）--------
 #
 # ★ gyp 的静态库命名规则（tools/gyp/pylib/gyp/generator/ninja.py 的
@@ -371,6 +392,11 @@ if(VCPKG_TARGET_IS_WINDOWS)
 endif()
 string(APPEND _cfg
     "set(node_NODE_SOURCE_MANIFEST \"\${CMAKE_CURRENT_LIST_DIR}/node.exe.extra.manifest\")\n")
+# 装了 test-suite feature 就导出官方套件的根目录（tools/test.py 以它的父目录为 workspace）。
+string(APPEND _cfg
+    "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/test-suite/tools/test.py\")\n"
+    "  set(node_TEST_SUITE_DIR \"\${CMAKE_CURRENT_LIST_DIR}/test-suite\")\n"
+    "endif()\n")
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/node-config.cmake" "${_cfg}")
 
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
