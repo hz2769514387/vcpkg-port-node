@@ -383,12 +383,24 @@ def emit_target_file(name, datas, labels, head_lines, gyp_rel, cfg):
             _emit_set(L, "%s_MSVS_DISABLED_WARNINGS" % U, ["/wd%s" % w for w in disabled])
         # AdditionalOptions 只是 msvs_settings 里的一半：WarningLevel / RuntimeTypeInfo /
         # ExceptionHandling 是**另三个键**，不翻就等于"全工程默认是什么就是什么"。
-        msvs_flags = list(_msvs(twd, "VCCLCompilerTool").get("AdditionalOptions") or [])
-        msvs_flags += _msvs_switches(_msvs(twd, "VCCLCompilerTool"))
+        #
+        # AdditionalOptions **先拆驱动**：那一份列表把 clang 与 MSVC 的开关混在一起写
+        # （gyp 生成 .vcxproj 时自己会挑），整份抄给 cl.exe 会报 D8021 —— 见
+        # `_split_msvc_clang` 的说明（CI run #8 的 win 失败就是这一条）。拆出来的两份
+        # 分别出给 `<目标>_MSVS_FLAGS`（cl.exe）与 `<目标>_CLANG_FLAGS`（clang-cl）。
+        _msvc_ao, _clang_ao = _split_msvc_clang(
+            _msvs(twd, "VCCLCompilerTool").get("AdditionalOptions") or [])
+        _extra = _msvs_switches(_msvs(twd, "VCCLCompilerTool"))
+        msvs_flags = _msvc_ao + _extra
+        clang_flags = _clang_ao + _extra
         if msvs_flags:
             L.append("# msvs_settings.VCCLCompilerTool：AdditionalOptions + WarningLevel /")
             L.append("# RuntimeTypeInfo / ExceptionHandling 翻出来的开关（Windows 专用）")
             _emit_set(L, "%s_MSVS_FLAGS" % U, msvs_flags, quote=True)
+        if clang_flags and clang_flags != msvs_flags:
+            L.append("# 同上那份里 clang-cl 认的开关（`-` 开头）—— 与 MSVC 的 `/` 分开给，")
+            L.append("# 两个驱动各取一份（本仓库口径是三平台一律 clang，见 toolchains/clang-cl.cmake）")
+            _emit_set(L, "%s_CLANG_FLAGS" % U, clang_flags, quote=True)
         link_libs = []
         for d in datas:
             for l in _msvs(d["targets"][name], "VCLinkerTool").get("AdditionalDependencies") or []:
@@ -426,6 +438,45 @@ def _is_unit(p):
 # msvs_settings.VCCLCompilerTool 里那三个**不是** AdditionalOptions 的键。
 # 值在 gyp 里是字符串（common.gypi 给的就是 `'WarningLevel': '3'` 这种）。
 _MSVS_EH = {"0": "/EHs-c-", "1": "/EHsc", "2": "/EHa"}
+
+
+def _split_msvc_clang(flags):
+    """把 `VCCLCompilerTool.AdditionalOptions` 按**驱动**拆成两份：MSVC 与 clang。
+
+    返回 `(msvc, clang)`：`msvc` = `/` 开头的（cl.exe 原生），`clang` = `-` 开头的
+    （clang-cl 认的 GNU 风格）。
+
+    node 的 `common.gypi` 把两个驱动的开关塞进**同一个** `AdditionalOptions` 列表里
+    （这是 gyp 的写法：真正生效哪个由生成器按目标工具链挑）：
+
+        "AdditionalOptions": [
+          "-Wno-invalid-offsetof", "-Wno-nullability-completeness",   # clang
+          "/bigobj", "/Zc:__cplusplus", "/Zm2000", "/utf-8"           # MSVC
+        ]
+
+    gyp 生成 `.vcxproj` 时，**cl.exe 只收到 `/` 那几项**；我们把整份抄给 `cl.exe`
+    就是非法参数 —— CI 实测（run #8，x64-windows-ci，MSVC）：
+
+        cl : Command line error D8021 : invalid numeric argument '/Wno-invalid-offsetof'
+
+    失败在**第一个编译单元**（abseil 的 `cycleclock.cc.obj.ddi`）就停了：34 个目标
+    带着同一条 `-Wno-*`，谁都编不过。
+
+    判定就是**前缀**：`/` → MSVC，`-` → clang（win 侧 `AdditionalOptions` 实测全集里
+    没有反例：`-Wno-*` / `-fno-lto` / `-flto=thin` 全是 clang；`/bigobj` / `/Zc:` /
+    `/Zm` / `/utf-8` / `/std:` 全是 MSVC。`-D` / `-I` 这类两边都认的写法，node 是走
+    `defines` / `include_dirs` 字段，不从这个字段给）。
+
+    **两份都要留**：本仓库的目标口径是"**三平台一律 clang**"（`toolchains/clang-cl.cmake`
+    工程约定第 2 条），所以 clang-cl 下那些 `-Wno-*` 是要生效的 —— 拆开喂给各自的
+    前端即可，不能一刀切丢掉。消费侧按 `CMAKE_CXX_COMPILER_FRONTEND_VARIANT` 挑。
+    """
+    msvc, clang = [], []
+    for f in flags:
+        if not isinstance(f, str):
+            continue
+        (msvc if f.startswith("/") else clang).append(f)
+    return msvc, clang
 
 
 def _msvs_switches(cc):

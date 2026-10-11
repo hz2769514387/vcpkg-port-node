@@ -2,13 +2,13 @@
 #   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
 #   指纹    ：../gyp2vcpkg/resolve.py dd1094c2b980abfe
 #             ../gyp2vcpkg/collect.py bad964667d786dc9
-#             ../gyp2vcpkg/generate.py faa73f3b43a0a9ef
+#             ../gyp2vcpkg/generate.py 073d946e6a47a475
 #             ../gyp2vcpkg/_dump_generator.py 1c32cb74b4bccbe1
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
 #             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
-#   蓝本    ：node-v24.21.0/tools/v8_gypfiles/v8.gyp 里 run_gen-regexp-special-case 的 action「run_gen-regexp-special-case_action」
+#   蓝本    ：C:\work\git\fe\deps\node\node-v24.21.0\tools\v8_gypfiles\v8.gyp 里 run_gen-regexp-special-case 的 action「run_gen-regexp-special-case_action」
 #   输入 0 个；输出 1 个（1 个目录）
 
 set(NODE_PORT_RUN_GEN-REGEXP-SPECIAL-CASE_TOOL gen-regexp-special-case)
@@ -31,7 +31,7 @@ set(NODE_PORT_RUN_GEN-REGEXP-SPECIAL-CASE_IN_ALL
 )
 set(NODE_PORT_RUN_GEN-REGEXP-SPECIAL-CASE_CMD
   "${Python3_EXECUTABLE}"
-  "${NODE_PORT_V8_ROOT}/tools/run.py"
+  "../../deps/v8/tools/run.py"
   "$<TARGET_FILE:gen-regexp-special-case>"
   "${NODE_PORT_RUN_GEN-REGEXP-SPECIAL-CASE_GEN}/src/regexp/special-case.cc"
 )

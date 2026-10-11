@@ -64,4 +64,24 @@ SOURCES_WIN 有 recorder-win.cc	DEFINES_WIN 有 V8_ENABLE_SYSTEM_INSTRUMENTATION
 新 port（vcpkg-port-node）	有	没有（就这一行没了；win 段还少 V8_SHORT_BUILTIN_CALLS）
 而这两样在 gyp 里是同一个开关的两条分支：tools/v8_gypfiles/v8.gyp:1695（v8_enable_system_instrumentation==1 and is_win 加源）与 tools/v8_gypfiles/features.gypi:524（同名条件加宏）。所以"源在、宏没了"只能是重新生成时求值不一致 —— 宏那条分支没进来，源那条照旧收了。
 
+2026年10月11日 09点52分
+本机的环境可用，c盘work下有装好的vcpkg，且里面有downloads的目录node源码。
+我希望的是，目前项目处于非常早期，应该审视其正确性，而不是补丁式修复。我更加倾向于完整理解它后彻底重构，真正符合vcpkg官方port的高要求。你可以使用本机的环境做实验。
+另外，从node二进制拿配置json文件这个步骤能不能彻底去掉，从源码中取才是最符合vcpkg精神的？
+另外，既然上游已有cmake，直接用上游node的可能更好？总之，按最正确而不是改动最小的思想，重新过一遍，可以实际改动代码做实验，把成果记录到一份单独文档。
+本机有vs工具链，clang也是好的，vcpkg里面的工具链也是完整的（不需要本机安装cmake , ninja , python，vcpkg的 tools机制本身就包含了，且downloads/tools里面有缓存)。
+现在支持三平台，目标是主流六平台（x64/arm两个cpu * win/mac/linx 三个系统）、且debug/release，msvc/clang，动态、静态 最好都支持，尽量往vcpkg官方的高要求上面靠。
+test太少了。真正要考虑的是test作为用户，它会怎么用？它可能还会加入其他vcpkg库，和node这个port有无冲突？有没有符号重复、不稳定行为？因为node的依赖比较复杂，我更加倾向于把node依赖的库全部替换成vcpkg上的（v8可能不行，可以例外；对用户冲突可能明显无影响的库也可以例外，比如v8的依赖里面，做了名字空间隔离的。主要是openssl，simdutf等，按照vcpkg的精神，应该尽可能用vcpkg上的；node给这些库打的补丁也要综合考虑。非常复杂。），而且这个问题还牵扯到能否不走gyp->cmake，直接在vcpkg中按官方的gyp路径编译，但是如何利用vpckg里面的现有库替换node内部集成的呢？又是一个大问题。
+总之，按照最正确的方式再前进。要实测。
+
+2026年10月11日 10点08分
+你可以操作git提交，提交后就可以自由删改代码了（反正git会备份好）。
+1.路线=B
+2.验证
+3.要加补丁（只要补丁不是改变原始库的行为，导致test的用户感觉奇怪或影响其他传递依赖，都可以patch；而且不只是zlib一个）
+4.完整复测，编译时间长，可以接受，我有耐心等；只不过要避免每改一行代码就全量重编一次的浪费行为。
+5.系统tmp目录可以给你用，你随意做实验。
+
+
+
 

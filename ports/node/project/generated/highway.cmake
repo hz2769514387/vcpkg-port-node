@@ -2,13 +2,13 @@
 #   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
 #   指纹    ：../gyp2vcpkg/resolve.py dd1094c2b980abfe
 #             ../gyp2vcpkg/collect.py bad964667d786dc9
-#             ../gyp2vcpkg/generate.py faa73f3b43a0a9ef
+#             ../gyp2vcpkg/generate.py 073d946e6a47a475
 #             ../gyp2vcpkg/_dump_generator.py 1c32cb74b4bccbe1
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
 #             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
-#   蓝本    ：node-v24.21.0/tools/v8_gypfiles/v8.gyp（目标 highway，gyp 里的类型 static_library）
+#   蓝本    ：C:\work\git\fe\deps\node\node-v24.21.0\tools\v8_gypfiles\v8.gyp（目标 highway，gyp 里的类型 static_library）
 #   编译单元：win 7 / linux 7 / mac 7（另外 win 0、linux 0、mac 0 个是头文件）
 
 set(NODE_PORT_V8_HIGHWAY_IS_INTERFACE FALSE)
@@ -194,11 +194,18 @@ set(NODE_PORT_V8_HIGHWAY_MSVS_DISABLED_WARNINGS
 # RuntimeTypeInfo / ExceptionHandling 翻出来的开关（Windows 专用）
 set(NODE_PORT_V8_HIGHWAY_MSVS_FLAGS
   "/utf-8"
-  "-Wno-invalid-offsetof"
-  "-Wno-nullability-completeness"
   "/bigobj"
   "/Zc:__cplusplus"
   "/Zm2000"
+  "/W3"
+  "/GR-"
+  "/EHs-c-"
+)
+# 同上那份里 clang-cl 认的开关（`-` 开头）—— 与 MSVC 的 `/` 分开给，
+# 两个驱动各取一份（本仓库口径是三平台一律 clang，见 toolchains/clang-cl.cmake）
+set(NODE_PORT_V8_HIGHWAY_CLANG_FLAGS
+  "-Wno-invalid-offsetof"
+  "-Wno-nullability-completeness"
   "/W3"
   "/GR-"
   "/EHs-c-"

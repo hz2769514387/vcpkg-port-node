@@ -2,13 +2,13 @@
 #   生成命令：python ../gyp2vcpkg/gyp2vcpkg.py all --config ../gyp2vcpkg/config.json
 #   指纹    ：../gyp2vcpkg/resolve.py dd1094c2b980abfe
 #             ../gyp2vcpkg/collect.py bad964667d786dc9
-#             ../gyp2vcpkg/generate.py faa73f3b43a0a9ef
+#             ../gyp2vcpkg/generate.py 073d946e6a47a475
 #             ../gyp2vcpkg/_dump_generator.py 1c32cb74b4bccbe1
 #             ../gyp2vcpkg/config.json 4304a096a04026f7
 #             ../gyp2vcpkg/env/win-x64.json 2ac8390bd45101df
 #             ../gyp2vcpkg/env/linux-x64.json a37e3877ca8397b2
 #             ../gyp2vcpkg/env/darwin-arm64.json 50eb464ee2df40e5
-#   蓝本    ：node-v24.21.0/node.gyp 里 node_base 的 action「node_protocol_generated_sources」
+#   蓝本    ：C:\work\git\fe\deps\node\node-v24.21.0\node.gyp 里 node_base 的 action「node_protocol_generated_sources」
 #   输入 24 个；输出 19 个（1 个目录）
 
 # gyp 的 SHARED_INTERMEDIATE_DIR
@@ -95,14 +95,14 @@ set(NODE_PORT_NODE_PROTOCOL_GENERATED_SOURCES_IN_ALL
 )
 set(NODE_PORT_NODE_PROTOCOL_GENERATED_SOURCES_CMD
   "${Python3_EXECUTABLE}"
-  "${NODE_ROOT}/deps/inspector_protocol/code_generator.py"
+  "deps/inspector_protocol/code_generator.py"
   "--inspector_protocol_dir"
-  "${NODE_ROOT}/deps/inspector_protocol"
+  "deps/inspector_protocol"
   "--jinja_dir"
-  "${NODE_ROOT}/tools/inspector_protocol"
+  "tools/inspector_protocol"
   "--output_base"
   "${NODE_PORT_NODE_PROTOCOL_GENERATED_SOURCES_GEN}/src/"
   "--config"
-  "${NODE_ROOT}/src/inspector/node_protocol_config.json"
+  "src/inspector/node_protocol_config.json"
 )
 

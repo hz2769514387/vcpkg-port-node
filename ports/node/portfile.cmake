@@ -51,6 +51,16 @@ vcpkg_cmake_configure(
 vcpkg_cmake_build()
 vcpkg_cmake_install()
 
+# 5.1) 后置检查：安装树里不能留空目录。
+#      `include/node/api`（`node_api.h` 那一摊的目录）与 `include/node/res` 在安装后是空的 ——
+#      vcpkg 的 post-build validation 会告警（"Empty directories are not representable to
+#      several binary cache providers…"，CI run #8 的 linux job 实测），并直接给出这行修法。
+#      按官方建议删掉（**不**用 VCPKG_POLICY_ALLOW_EMPTY_FOLDERS 压掉告警：那是把问题藏起来）。
+file(REMOVE_RECURSE
+    "${CURRENT_PACKAGES_DIR}/include/node/api"
+    "${CURRENT_PACKAGES_DIR}/include/node/res"
+)
+
 # 6) 收尾
 file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")

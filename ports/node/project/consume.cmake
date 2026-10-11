@@ -150,8 +150,23 @@ function(node_port_add_v8_target name)
     if(WIN32 AND NODE_PORT_V8_${U}_MSVS_FLAGS)
       # MSVC/clang 的附加选项逐个包 COMPILE_LANGUAGE 限定 —— MASM 不认
       # -Wno-invalid-offsetof 这类 clang 参数（A1013），不限语言会被静默喂给它。
-      node_port_lang_opts(_msvs_genex "C,CXX" ${NODE_PORT_V8_${U}_MSVS_FLAGS})
-      target_compile_options(${name} PRIVATE ${_msvs_genex})
+      #
+      # **cl.exe 与 clang-cl 分开喂**（`<目标>_MSVS_FLAGS` = `/` 那一份，
+      # `<目标>_CLANG_FLAGS` = `-` 那一份，见 gyp2vcpkg/generate.py 的
+      # `_split_msvc_clang`）：gyp 的 `AdditionalOptions` 把两个驱动的开关混着写，
+      # 整份给 cl.exe 会报 D8021（`-Wno-invalid-offsetof` 不是 MSVC 参数，CI run #8
+      # 的 win 失败即此）。本仓库口径"三平台一律 clang"（toolchains/clang-cl.cmake）
+      # 要的是 `-` 那一份，所以**不是丢掉、是分流**。
+      if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
+        node_port_lang_opts(_msvs_genex "C,CXX" ${NODE_PORT_V8_${U}_MSVS_FLAGS})
+      elseif(NODE_PORT_V8_${U}_CLANG_FLAGS)
+        node_port_lang_opts(_msvs_genex "C,CXX" ${NODE_PORT_V8_${U}_CLANG_FLAGS})
+      else()
+        set(_msvs_genex "")
+      endif()
+      if(_msvs_genex)
+        target_compile_options(${name} PRIVATE ${_msvs_genex})
+      endif()
     endif()
 
     # gyp2vcpkg 提取的禁用警告（gyp 的 msvs_disabled_warnings）。
@@ -200,6 +215,29 @@ function(node_port_add_v8_target name)
     if(NODE_PORT_V8_${U}_LIBRARIES_${_plat})
       target_link_libraries(${name} ${_kw} ${NODE_PORT_V8_${U}_LIBRARIES_${_plat}})
     endif()
+  endif()
+
+  # ---- macOS：Security.framework（**清单里没有，得补**）-------------------------
+  #
+  # `node_base` 里的 `src/crypto/crypto_context.cc` 在 macOS 上直接调 Security.framework：
+  # `SecCertificateCopyData` / `SecItemCopyMatching` / `SecTrustCreateWithCertificates` /
+  # `SecTrustEvaluateWithError` / `kSecClass` / `kSecPolicyAppleSSL` …（系统钥匙串证书那段，
+  # 由 `NODE_OPENSSL_SYSTEM_CERT_PATH` 那条口径打开）。链接期这些符号必须由
+  # `-framework Security` 提供 —— 没有就报一屏 `Undefined symbols ... architecture arm64`
+  # （CI run #8 实测：`Release/bin/node_mksnapshot` 链接失败，`libnode_base.a[166](crypto_context.cc.o)`）。
+  #
+  # 为什么翻不出来：node 的 gyp 里**根本没有这一条**。查过上有的三处（`node.gyp` /
+  # `common.gypi` / `deps/ncrypto/ncrypto.gyp`），macOS 的 `xcode_settings.OTHER_LDFLAGS` 里
+  # **只有** `-framework CoreFoundation`（V8 那几个目标带的），没有 Security —— 上游已把构建
+  # 迁到 CMake/GN，这条 gyp 链接路径不再是官方的依赖来源。所以这不是"漏解析"，是**gyp 事实
+  # 就缺一件**：调用方按平台补上（与顶层 `CMakeLists.txt` 补 CoreFoundation 同一口径 ——
+  # "手写的 imported 目标带不了构建期的 INTERFACE_LINK_OPTIONS，所以在消费配置里显式补"）。
+  #
+  # 用 `${_kw}`（静态库是 PUBLIC / 可执行是 PRIVATE）而不是写死 INTERFACE：`node_base` 是
+  # 静态库，符号是**它自己**引的，框架必须随它一起下发给最终链接 `node` / `node_mksnapshot`
+  # 的那一步（PUBLIC → INTERFACE_LINK_OPTIONS），否则补了也白补。
+  if(APPLE AND name STREQUAL "node_base")
+    target_link_options(${name} ${_kw} "-framework Security")
   endif()
 
   # 只写在 msvs_settings 里的那两样：额外科系统库、编译器附加选项。
