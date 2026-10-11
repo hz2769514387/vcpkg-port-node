@@ -158,10 +158,11 @@ macro(_node_shared _opt _pkg _libnames)
     # 可选第 4 个参数：这一条的 --shared-*-includes 用什么目录（默认 ${_inc}）。
     # configure.py 的 configure_library() 是**按调用顺序**往 output['include_dirs'] 里 append 的，
     # 所以这里给的顺序就是最终 -I 的顺序（见下面 abseil/highway 那两条的用意）。
-    if(ARGC GREATER 3)
+    # ★ 注意：macro 里**没有 ARGC**（那是 function 的变量），必须用 ${ARGV3} 判断 ——
+    #   之前用 ARGC 导致这个分支永远走 else，注入静默失效（实测 config.gypi 里 14 条全是 ${_inc}）。
+    set(_node_this_inc "${_inc}")
+    if(NOT "${ARGV3}" STREQUAL "")
         set(_node_this_inc "${ARGV3}")
-    else()
-        set(_node_this_inc "${_inc}")
     endif()
     list(APPEND _node_shared_args
         "--shared-${_opt}"
