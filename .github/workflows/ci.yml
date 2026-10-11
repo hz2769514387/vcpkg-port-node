@@ -28,8 +28,9 @@
 # 策略：
 #   只编译 test（清单模式自动装依赖），不做单独的 vcpkg install。
 #   只出 Release（triplet 里设 VCPKG_BUILD_TYPE=release）。
-#   并发度收着用（VCPKG_MAX_CONCURRENCY=2）：macOS arm64 只有 3 核 / 7 GB，
-#   而且这个值会经 VCPKG_CONCURRENCY 传给 port 内部的 ninja -j。
+#   并发度**按平台**给（矩阵里的 vcpkg_conc）：x64 给 4、macOS 压到 2
+#   （3 核 / 7 GB，5 个并发 V8 编译单元容易 OOM）。这个值会经 VCPKG_CONCURRENCY
+#   传给 port 内部的 ninja -j —— 给 2 会让 node 的全量构建更容易撞 job 超时。
 
 name: ci
 
@@ -168,25 +169,33 @@ jobs:
       fail-fast: false
       matrix:
         include:
+          # vcpkg_conc：这个平台的 vcpkg/ninja 并发度。x64 的 runner 是 4 核起步，
+          # 给 2 会让 node 的全量构建更容易撞 job 超时；macOS 只有 3 核 / 7 GB，
+          # 必须压到 2（否则 5 个并发 V8 编译单元容易 OOM）。
           - os: ubuntu-latest
             preset: linux
             triplet: x64-linux
+            vcpkg_conc: 4
             allow_failure: false
           - os: ubuntu-24.04-arm
             preset: linux-arm64
             triplet: arm64-linux
+            vcpkg_conc: 4
             allow_failure: true
           - os: windows-latest
             preset: windows-clang-cl
             triplet: x64-windows-static-clang
+            vcpkg_conc: 4
             allow_failure: false
           - os: windows-latest
             preset: windows-clang-cl-arm64
             triplet: arm64-windows-static-clang
+            vcpkg_conc: 4
             allow_failure: true
           - os: macos-latest
             preset: macos
             triplet: arm64-osx
+            vcpkg_conc: 2
             allow_failure: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.allow_failure }}
@@ -195,6 +204,14 @@ jobs:
     timeout-minutes: 350
     steps:
       - uses: actions/checkout@v4
+
+      - name: 设定本平台的并发度
+        shell: bash
+        run: |
+          # 覆盖 workflow 级的 VCPKG_MAX_CONCURRENCY。它会经 VCPKG_CONCURRENCY 传进
+          # port 内部的 ninja -j（x64 给 4，macOS 压到 2）。
+          echo "VCPKG_MAX_CONCURRENCY=${{ matrix.vcpkg_conc }}" >> "$GITHUB_ENV"
+          echo "VCPKG_MAX_CONCURRENCY=${{ matrix.vcpkg_conc }}"
 
       - name: 记录可用磁盘
         if: always()
