@@ -9,6 +9,17 @@
          for line in out.splitlines():
              if (
                  not line.startswith("   Creating library ")
+@@ -218,4 +218,4 @@
+             # Load and normalize the manifests. mt.exe sometimes removes whitespace,
+             # and sometimes doesn't unfortunately.
+-            with open(our_manifest) as our_f, open(assert_manifest) as assert_f:
++            with open(our_manifest, encoding='utf-8') as our_f, open(assert_manifest, encoding='utf-8') as assert_f:
+                 translator = str.maketrans("", "", string.whitespace)
+@@ -229,3 +229,3 @@
+                     print("-----", file=sys.stderr)
+-                    with open(filename) as f:
++                    with open(filename, encoding='utf-8', errors='replace') as f:
+                         print(f.read(), file=sys.stderr)
 @@ -250,7 +250,7 @@
          popen = subprocess.Popen(
              args, shell=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT

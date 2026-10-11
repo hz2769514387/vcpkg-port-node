@@ -12,6 +12,26 @@
 include("${CMAKE_CURRENT_LIST_DIR}/msvc-command-line-env.cmake")
 
 # ---------------------------------------------------------------------------
+# vcpkg 平台 toolchain：设 CMAKE_MSVC_RUNTIME_LIBRARY（/MT vs /MD）、CMAKE_CXX_FLAGS 等。
+# 当本文件被设为 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 时，它会**替换** vcpkg 的默认平台
+# toolchain（scripts/toolchains/windows.cmake），导致 CRT 标志从不被设上——
+# 所有依赖 port 都会用 /MD 编，最终链接 node（/MT）时报 LNK2038 RuntimeLibrary 不匹配。
+# 这里显式 include 它来补回。
+# ---------------------------------------------------------------------------
+if(DEFINED _VCPKG_ROOT_DIR AND EXISTS "${_VCPKG_ROOT_DIR}/scripts/toolchains/windows.cmake")
+    include("${_VCPKG_ROOT_DIR}/scripts/toolchains/windows.cmake")
+elseif(DEFINED Z_VCPKG_ROOT_DIR AND EXISTS "${Z_VCPKG_ROOT_DIR}/scripts/toolchains/windows.cmake")
+    include("${Z_VCPKG_ROOT_DIR}/scripts/toolchains/windows.cmake")
+endif()
+# windows.cmake 设 CMAKE_RC_FLAGS="/c65001 /DWIN32"，但 cmcldeps 会把 RC 标志传给
+# clang-cl 做依赖追踪——clang-cl 不认 /c65001（那是 rc.exe 的 UTF-8 代码页开关）。
+# 去掉 /c65001，rc.exe 用系统代码页即可（资源文件都是 ASCII）。
+if(DEFINED CMAKE_RC_FLAGS)
+    string(REPLACE "/c65001 " "" CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS}")
+    set(CMAKE_RC_FLAGS "${CMAKE_RC_FLAGS}" CACHE STRING "" FORCE)
+endif()
+
+# ---------------------------------------------------------------------------
 # 找 clang-cl
 # ---------------------------------------------------------------------------
 set(_node_port_llvm_candidates "")
@@ -68,12 +88,9 @@ set(CMAKE_CXX_COMPILER "${NODE_PORT_LLVM_BIN}/clang-cl.exe" CACHE FILEPATH "" FO
 if(EXISTS "${NODE_PORT_LLVM_BIN}/lld-link.exe")
   set(CMAKE_LINKER "${NODE_PORT_LLVM_BIN}/lld-link.exe" CACHE FILEPATH "" FORCE)
 endif()
-if(EXISTS "${NODE_PORT_LLVM_BIN}/llvm-rc.exe")
-  set(CMAKE_RC_COMPILER "${NODE_PORT_LLVM_BIN}/llvm-rc.exe" CACHE FILEPATH "" FORCE)
-endif()
-if(EXISTS "${NODE_PORT_LLVM_BIN}/llvm-mt.exe")
-  set(CMAKE_MT "${NODE_PORT_LLVM_BIN}/llvm-mt.exe" CACHE FILEPATH "" FORCE)
-endif()
+# 不覆盖 CMAKE_RC_COMPILER：windows.cmake 设的 CMAKE_RC_FLAGS（/c65001）是给 rc.exe 的，
+# llvm-rc 走 cmake_llvm_rc 时会把 RC 标志传给 clang-cl，而 clang-cl 不认 /c65001。
+# msvc-command-line-env.cmake 已把 Windows SDK 的 rc.exe 放进 PATH。
 
 # ---------------------------------------------------------------------------
 # 目标架构（arm64 也留好代码路径，只是没有机器实测）

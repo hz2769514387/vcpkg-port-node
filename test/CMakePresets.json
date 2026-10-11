@@ -41,7 +41,7 @@
         "rhs": "Linux"
       },
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-linux-ci"
+        "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
     },
     {
@@ -54,7 +54,7 @@
         "rhs": "Darwin"
       },
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-osx-ci"
+        "VCPKG_TARGET_TRIPLET": "arm64-osx"
       }
     }
   ],

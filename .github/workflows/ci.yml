@@ -6,21 +6,15 @@
 #   2. 再用 test/ 里的消费端工程 find_package(node) + 链接 node::node + 真跑一段 JS；
 #   3. 覆盖三个平台：x64-linux / x64-windows / arm64-osx。
 #
-# 资源策略（**实测后收敛**，见 docs/调研文档.md §9.1）：
-#   实测空闲磁盘：macOS 132 GB / Linux 108 GB / Windows C: 40 GB + D: 157 GB —— 磁盘**不是**
-#   瓶颈。因此**不做任何"删 runner 预装大件"的清理动作**（那类动作会动到 runner 预置环境，
-#   属于自找麻烦；早先加过，现已去掉），只打印 df 留个记录。
-#   * 只出 Release：用 `triplets/*-ci.cmake` —— `VCPKG_BUILD_TYPE` 是 **triplet 变量**，
-#     写在 `env:` 里不生效（mac CI 实测会连 debug 一起编，V8 整棵树代价翻倍）。
-#   * 并发度收着用（`VCPKG_MAX_CONCURRENCY`）：macOS arm64 只有 3 核 / 7 GB。
+# 平台口径（路线 B）：
+#   * Windows：clang-cl + 静态 CRT + 静态库（x64-windows-static-clang）—— node 24+ 官方口径。
+#   * Linux：gcc + 静态库（x64-linux）。
+#   * macOS：clang + 静态库（arm64-osx）。
+#   triplets 在 test/cmake/triplets/ 下，toolchains 在 test/cmake/toolchains/ 下。
 #
-# 首次运行的经验（2026-10-10，run #1）：
-#   * lint 用 `vcpkg x-ci-verify-versions` 是**误用** —— 那是给 vcpkg 自身仓库用的，
-#     要求在 vcpkg 源码的 git 仓库里跑；改成"校验我们自己的 versions/ports 一致性"；
-#   * Windows 上 GNU tar 会把 `-C D:\...` 当成远程主机（`Cannot connect to D:`）→
-#     改为先 cd 到 $RUNNER_TEMP 再用相对路径；
-#   * macOS 依赖与三平台片段生成都成功；唯一失败是 `$<LINK_GROUP:RESCAN>` Apple 不支持
-#     （已改为 Apple 走"库列表重复一遍"）。
+# 资源策略：
+#   只出 Release（triplet 里设 VCPKG_BUILD_TYPE=release）。
+#   并发度收着用（VCPKG_MAX_CONCURRENCY=2）：macOS arm64 只有 3 核 / 7 GB。
 
 name: ci
 
@@ -29,21 +23,18 @@ on:
   pull_request:
   workflow_dispatch:
 
-# 同一个分支/PR 上只保留最新一次运行：新 push 会**取消**上一次还没跑完的任务
-# （每个账号的并发额度有限；本 port 一次要编 V8，绝不能几个旧 run 叠着占额度）。
 concurrency:
   group: ${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 env:
-  # 指定版本：与本地 C:\work\vcpkg-2026.07.29.zip 同源（该 Release 无二进制附件，用源码包自举）。
   VCPKG_REF: "2026.07.29"
   VCPKG_DISABLE_METRICS: "1"
-  VCPKG_MAX_CONCURRENCY: "2"     # macos arm64 只有 3 核；linux/windows 也在调研 §4.5.2 的建议区间内
+  VCPKG_MAX_CONCURRENCY: "2"
 
 jobs:
   # ---------------------------------------------------------------------------
-  # L1：静态校验。不依赖编译，所以不受磁盘限制；**不是 build 的前置**（build 永远跑）。
+  # L1：静态校验。
   # ---------------------------------------------------------------------------
   lint:
     runs-on: ubuntu-latest
@@ -70,8 +61,7 @@ jobs:
           echo "versions 里记的：$want"
           echo "HEAD 里的     ：$got"
           if [ "$want" != "$got" ]; then
-            echo "::error::versions/n-/node.json 的 git-tree 与 ports/node 不一致 —— 改了 port 就要刷新它"
-            echo "刷新方式：git add ports/node && git write-tree  然后取 <root tree>:ports/node"
+            echo "::error::versions/n-/node.json 的 git-tree 与 ports/node 不一致"
             exit 1
           fi
 
@@ -84,33 +74,55 @@ jobs:
       matrix:
         include:
           - os: ubuntu-latest
-            triplet: x64-linux-ci      # = 内置 x64-linux + 只出 Release
+            triplet: x64-linux
             allow_failure: false
           - os: windows-latest
-            triplet: x64-windows-ci    # = vcpkg 默认口径：MSVC + 动态 CRT（+ 只出 Release）
+            triplet: x64-windows-static-clang
             allow_failure: false
-          - os: macos-latest         # arm64（3C/7G）
-            triplet: arm64-osx-ci
-            # macOS 的 gyp/链接细节仍在收敛（RESCAN 刚修）；先允许失败，别挡住 linux/windows。
+          - os: macos-latest
+            triplet: arm64-osx
             allow_failure: true
     runs-on: ${{ matrix.os }}
     continue-on-error: ${{ matrix.allow_failure }}
     steps:
       - uses: actions/checkout@v4
 
-      # ---- 记录可用磁盘（**只打印，不删任何东西**）---------------------------
       - name: 记录可用磁盘
         if: always()
         shell: bash
         run: df -h || true
 
-      # ---- 装指定版本 vcpkg（2026.07.29）------------------------------------
+      # ---- Windows：确保 clang-cl 可用 ----------------------------------------
+      # GitHub Actions windows-latest 预装了 LLVM，但 VS 的 "C++ Clang 编译器" 组件
+      # 不一定装了。toolchain 的搜索顺序会查 Program Files/LLVM，这里把它设到
+      # NODE_PORT_LLVM_ROOT 以确保 toolchain 能找到。
+      - name: 定位 clang-cl（Windows）
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          # VS 自带的 LLVM（优先：与 MSVC 头文件/库匹配）
+          VS_LLVM=$(find "/c/Program Files/Microsoft Visual Studio" -path "*/VC/Tools/Llvm/x64/bin/clang-cl.exe" 2>/dev/null | head -1 || true)
+          if [ -n "$VS_LLVM" ]; then
+            LLVM_ROOT=$(dirname "$(dirname "$VS_LLVM")")
+            echo "NODE_PORT_LLVM_ROOT=$LLVM_ROOT" >> "$GITHUB_ENV"
+            echo "找到 VS 自带 LLVM：$LLVM_ROOT"
+            exit 0
+          fi
+          # 独立 LLVM
+          if [ -f "/c/Program Files/LLVM/bin/clang-cl.exe" ]; then
+            echo "NODE_PORT_LLVM_ROOT=/c/Program Files/LLVM" >> "$GITHUB_ENV"
+            echo "找到独立 LLVM"
+            exit 0
+          fi
+          echo "::error::找不到 clang-cl，需要安装 LLVM 或 VS 的 C++ Clang 组件"
+          exit 1
+
+      # ---- 装指定版本 vcpkg --------------------------------------------------
       - name: 安装 vcpkg ${{ env.VCPKG_REF }}
         shell: bash
         run: |
           set -euo pipefail
-          # 先 cd 到 $RUNNER_TEMP 再用**相对路径**：Windows 上 GNU tar 会把 `-C D:\...`
-          # 当成远程主机（`Cannot connect to D: resolve failed`）。
           cd "$RUNNER_TEMP"
           curl -L -o vcpkg.tar.gz \
             "https://github.com/microsoft/vcpkg/archive/refs/tags/${VCPKG_REF}.tar.gz"
@@ -125,16 +137,6 @@ jobs:
           echo "VCPKG_ROOT=$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_ENV"
           echo "$RUNNER_TEMP/vcpkg-src" >> "$GITHUB_PATH"
 
-      # ---- macOS 的 gyp 变量环境已入库 --------------------------------------
-      #
-      # `ports/node/gyp2vcpkg/env/darwin-arm64.json` 现在是**仓库自带**的（取自官方
-      # darwin-arm64 node v24.21.0 的 `process.config`），与 win/linux 两份同构。
-      # 因此：
-      #   * CI 不再需要每次现场导出（省一步、且片段入库即可三平台对齐）；
-      #   * 入库的 `generated/*.cmake` 已经是**三平台**片段，`gyp2vcpkg check` 直接通过，
-      #     port 构建期不会重新生成。
-      # 若将来要换 macOS 环境（换版本/换架构），再按同样方式导出后替换该文件即可。
-
       # ---- L2：装 port（含 16 个官方依赖）-----------------------------------
       - name: 装 node port（overlay）
         shell: bash
@@ -142,13 +144,8 @@ jobs:
           set -euo pipefail
           vcpkg install "node:${{ matrix.triplet }}" \
             --overlay-ports="$GITHUB_WORKSPACE/ports" \
-            --overlay-triplets="$GITHUB_WORKSPACE/triplets"
+            --overlay-triplets="$GITHUB_WORKSPACE/test/cmake/triplets"
 
-      # vcpkg 的失败摘要会把 out.log 截断（`Skipped N lines`）——**第一条 error**
-      # 常被截掉，只剩一堆级联报错。这里：①把首错直接打进 job 日志（免下载就能看）；
-      # ②把所有日志**收集并上传成 artifact** —— 配置期的
-      # `config-*-out.log` / `config-*-CMakeCache.txt.log` / `config-*-CMakeConfigureLog.yaml.log`
-      # 才是真因所在，它们原本只躺在 runner 的 buildtrees 里，外部拿不到。
       - name: 失败时打印首错
         if: failure()
         shell: bash
@@ -158,7 +155,6 @@ jobs:
             echo "===== $f ====="
             grep -n -m 25 -E "error:|fatal error|^FAILED|Error [0-9]+" "$f" || tail -n 60 "$f"
           done
-          # 配置期日志通常更短、离真因更近 —— 尾部直接打全。
           for f in "$VCPKG_ROOT"/buildtrees/node/config-*-out.log; do
             [ -f "$f" ] || continue
             echo "===== $f（tail 120）====="
@@ -193,10 +189,11 @@ jobs:
             -DCMAKE_BUILD_TYPE=Release \
             -DCMAKE_TOOLCHAIN_FILE="$VCPKG_ROOT/scripts/buildsystems/vcpkg.cmake" \
             -DVCPKG_TARGET_TRIPLET="${{ matrix.triplet }}" \
-            -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/triplets" \
+            -DVCPKG_OVERLAY_TRIPLETS="$GITHUB_WORKSPACE/test/cmake/triplets" \
+            -DVCPKG_OVERLAY_PORTS="$GITHUB_WORKSPACE/ports" \
             -DVCPKG_MANIFEST_MODE=OFF
           cmake --build build
-          SMOKE=./build/smoke
+          SMOKE=./build/app/smoke
           [ -f "$SMOKE.exe" ] && SMOKE="$SMOKE.exe"
           OUT="$("$SMOKE" -e "process.stdout.write(process.versions.node)")"
           echo "嵌入运行时报告的 node 版本：$OUT"

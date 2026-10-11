@@ -29,6 +29,7 @@
       ]
     },
     "simdjson",
+    "simdutf",
     "icu",
     "ngtcp2",
     "hdr-histogram"

@@ -175,6 +175,9 @@ if(NOT _node_port_sdk_version STREQUAL "")
   foreach(_node_port_part ucrt um)
     _node_port_env_prepend(LIB "${_node_port_kits_root}/Lib/${_node_port_sdk_version}/${_node_port_part}/${_node_port_msvc_arch}")
   endforeach()
+  # SDK bin 目录（rc.exe / mt.exe / signtool.exe 等）加入 PATH：
+  # CMake try-compile 用 --rc=rc（裸名），rc.exe 必须在 PATH 上。
+  _node_port_env_prepend(PATH "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_msvc_arch}")
 endif()
 
 # VERBOSE 而不是 STATUS：triplet 每个 port 都要加载一次，STATUS 会刷很多遍。

@@ -27,19 +27,19 @@ vcpkg_extract_source_archive(SOURCE_PATH
     ARCHIVE "${NODE_ARCHIVE}"
     SOURCE_BASE node-v24.21.0
     PATCHES
-        0001-icu-system-add-icudata.patch
-        0002-gyp-ninja-clang-cl-libpath-asm.patch
-        0003-gyp-msvs-emulation-rsp-pch-std.patch
-        0004-gyp-msvs-settings-language-standard.patch
-        0005-gyp-win-tool-utf8-decode.patch
-        0006-gyp-ninja-syntax-iterable-guard.patch
-        0007-gyp-common-predefines-clang-cl.patch
-        0008-configure-shared-syslibs-and-clang-cl.patch
-        0009-js2c-normalize-windows-paths.patch
-        0010-torque-normalize-windows-paths.patch
-        0011-v8-use-vcpkg-simdutf-target.patch
-        0012-v8-simdutf-system-include.patch
-        0013-v8-compiler-add-descriptor-array-inl.patch
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0001-icu-system-add-icudata.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0002-gyp-ninja-clang-cl-libpath-asm.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0003-gyp-msvs-emulation-rsp-pch-std.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0004-gyp-msvs-settings-language-standard.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0005-gyp-win-tool-utf8-decode.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0006-gyp-ninja-syntax-iterable-guard.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0007-gyp-common-predefines-clang-cl.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0008-configure-shared-syslibs-and-clang-cl.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0009-js2c-normalize-windows-paths.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0010-torque-normalize-windows-paths.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0011-v8-use-vcpkg-simdutf-target.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0012-v8-simdutf-system-include.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0013-v8-compiler-add-descriptor-array-inl.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。
@@ -57,7 +57,7 @@ set(_node_cxx "")
 if(VCPKG_TARGET_IS_WINDOWS)
     # 复用仓库的 toolchain 脚本：它发布 NODE_PORT_LLVM_BIN（clang-cl 所在目录）
     # 并设好 MSVC 命令行环境（INCLUDE/LIB/PATH）。
-    include("${CMAKE_CURRENT_LIST_DIR}/../../toolchains/clang-cl.cmake")
+    include("${CMAKE_CURRENT_LIST_DIR}/../../test/cmake/toolchains/clang-cl.cmake")
     set(_node_cc "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
     set(_node_cxx "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
     # gyp 在中文 locale 下的两个已知坑：VS 定位失败 / reg.exe 解码失败。
@@ -66,16 +66,35 @@ if(VCPKG_TARGET_IS_WINDOWS)
         set(ENV{GYP_MSVS_OVERRIDE_PATH} "${NODE_PORT_VS_INSTALL_ROOT}")
     endif()
     set(ENV{DXSDK_DIR} "C:/nonexistent")
-    # system-icu 需要 pkg-config（Windows 上由 msys2 提供）。
-    vcpkg_acquire_msys(_node_msys PACKAGES pkg-config)
-    vcpkg_add_to_path("${_node_msys}/usr/bin")
-    set(ENV{PKG_CONFIG} "${_node_msys}/mingw64/bin/pkg-config.exe")
+    # system-icu 需要 pkg-config：用 vcpkg_find_acquire_program(PKGCONFIG) 拿 MinGW 原生版
+    # （MSYS2 运行时版的 pkg-config 无法读 Windows 风格的 PKG_CONFIG_PATH）。
+    vcpkg_find_acquire_program(PKGCONFIG)
+    set(ENV{PKG_CONFIG} "${PKGCONFIG}")
+    # vcpkg 依赖的头文件和库文件加入 INCLUDE/LIB：gyp 的非 v8 目标（如 js2c）
+    # 也需要 simdutf.h，链接器需要 simdutf.lib —— 不加这里，每个目标都要单独配路径。
+    set(ENV{INCLUDE} "${CURRENT_INSTALLED_DIR}/include;$ENV{INCLUDE}")
+    set(ENV{LIB} "${CURRENT_INSTALLED_DIR}/lib;$ENV{LIB}")
+    # --clang-cl=<ver> 让 configure.py 设 clang=1，这使 v8.gyp 的 asm_to_inline_asm
+    # action 把 embedded.S 转成 embedded.cc（否则 embedded blob 符号丢失，链接失败）。
+    execute_process(
+        COMMAND "${_node_cc}" --version
+        OUTPUT_VARIABLE _clang_version_output
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    string(REGEX REPLACE "^clang version ([0-9]+\.[0-9]+\.[0-9]+).*" "\\1"
+           _llvm_version "${_clang_version_output}")
+    set(_node_clang_cl_arg "--clang-cl=${_llvm_version}")
 else()
     find_program(_node_c_prog NAMES cc gcc)
     find_program(_node_cxx_prog NAMES c++ g++ clang++)
     set(_node_cc "${_node_c_prog}")
     set(_node_cxx "${_node_cxx_prog}")
     set(ENV{PKG_CONFIG} "pkg-config")
+endif()
+
+# 非Windows 不需要 --clang-cl
+if(NOT VCPKG_TARGET_IS_WINDOWS)
+    set(_node_clang_cl_arg "")
 endif()
 
 # shlex 会吃反斜杠：CC/CCX 与 PKG_CONFIG 一律用正斜杠（Windows 上尤其重要）。
@@ -122,29 +141,20 @@ if(NOT VCPKG_TARGET_IS_WINDOWS)
 endif()
 
 # ---------------------------------------------------------------------------
-# 1) configure.py：生成 config.gypi（含 shared 归属、make_global_settings、openssl 版本）。
+# 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
+#    --ninja 让 configure.py 用 ninja 生成器（Windows 上 ninja-win，flavor=win）。
+#    -DVCPKG_SIMDUTF_INCLUDE 供 patches/0011 的 v8 simdutf 目标使用。
+#    configure.py 用 parse_known_args，未知位置参数会转发给 gyp（见 configure.py:2750）。
 # ---------------------------------------------------------------------------
 vcpkg_execute_required_process(
     COMMAND "${PYTHON3}" configure.py
+        --ninja
+        ${_node_clang_cl_arg}
         --with-intl=system-icu
         ${_node_shared_args}
-    WORKING_DIRECTORY "${SOURCE_PATH}"
-    LOGNAME configure
-)
-
-# ---------------------------------------------------------------------------
-# 2) gyp → ninja（generator 名就是 `ninja`，没有 `ninja-win`）。
-#    VCPKG_SIMDUTF_INCLUDE 供 patches/0011 的 v8 simdutf 目标使用。
-# ---------------------------------------------------------------------------
-vcpkg_execute_required_process(
-    COMMAND "${PYTHON3}" tools/gyp_node.py
-        -f ninja
-        "-Dpython=${PYTHON3}"
-        -Dconfiguring_node=1
-        -Dbuild_type=Release
         "-DVCPKG_SIMDUTF_INCLUDE=${_inc}"
     WORKING_DIRECTORY "${SOURCE_PATH}"
-    LOGNAME gyp
+    LOGNAME configure
 )
 
 # ---------------------------------------------------------------------------
@@ -162,6 +172,9 @@ vcpkg_execute_required_process(
 file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${CURRENT_PACKAGES_DIR}/include/node"
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
 file(INSTALL "${SOURCE_PATH}/deps/v8/include/" DESTINATION "${CURRENT_PACKAGES_DIR}/include")
+
+# src/api 和 src/res 只有 .cc 没有 .h，file(INSTALL) 会留空目录，vcpkg 校验会警告。
+file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/include/node/api" "${CURRENT_PACKAGES_DIR}/include/node/res")
 
 # 收集 gyp 产出的静态库（libnode 本体 + v8 各库 + 内嵌第三方库 + node_base 等）。
 if(VCPKG_TARGET_IS_WINDOWS)
@@ -184,12 +197,25 @@ endif()
 set(_cfg "# 由 node port 生成：node 的 CMake 消费配置。\n")
 string(APPEND _cfg "include(CMakeFindDependencyMacro)\n")
 foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
-             "unofficial-brotli CONFIG" "ZLIB" "ada CONFIG" "simdjson CONFIG"
+             "unofficial-brotli CONFIG" "ZLIB CONFIG" "ada CONFIG" "simdjson CONFIG"
              "simdutf CONFIG" "ngtcp2 CONFIG" "zstd CONFIG"
              "ICU COMPONENTS uc i18n data" "unofficial-sqlite3 CONFIG"
              "hdr_histogram CONFIG")
     string(APPEND _cfg "find_dependency(${_dep})\n")
 endforeach()
+# hdr_histogram-config.cmake 内部用 find_dependency(ZLIB) module mode，
+# 在 Windows static 下找不到 zs.lib。预先用 CONFIG 模式找到后设好 cache 变量。
+string(APPEND _cfg
+    "if(TARGET ZLIB::ZLIB)\n"
+    "  get_target_property(_zlib_loc ZLIB::ZLIB IMPORTED_LOCATION)\n"
+    "  if(_zlib_loc)\n"
+    "    set(ZLIB_LIBRARY \"\${_zlib_loc}\" CACHE FILEPATH \"Path to zlib library\")\n"
+    "  endif()\n"
+    "  get_target_property(_zlib_inc ZLIB::ZLIB INTERFACE_INCLUDE_DIRECTORIES)\n"
+    "  if(_zlib_inc)\n"
+    "    set(ZLIB_INCLUDE_DIR \"\${_zlib_inc}\" CACHE PATH \"Path to zlib headers\")\n"
+    "  endif()\n"
+    "endif()\n")
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
     "set(_node_lib \"\${_node_prefix}/lib\")\n")
@@ -225,6 +251,13 @@ foreach(_a IN LISTS _node_all_archives)
     endif()
 endforeach()
 string(APPEND _cfg ")\n")
+# nghttp2 没有 CMake config 文件，手动建 imported target。
+string(APPEND _cfg
+    "find_library(_nghttp2_lib nghttp2 HINTS \${_node_lib} REQUIRED)\n"
+    "if(NOT TARGET node::nghttp2)\n"
+    "  add_library(node::nghttp2 STATIC IMPORTED)\n"
+    "  set_target_properties(node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n"
+    "endif()\n")
 string(APPEND _cfg
     "target_link_libraries(node::node INTERFACE \${_node_link}"
     " OpenSSL::SSL OpenSSL::Crypto libuv::uv_a c-ares::cares"
@@ -232,7 +265,13 @@ string(APPEND _cfg
     " unofficial::brotli::brotlicommon ZLIB::ZLIB ada::ada simdjson::simdjson"
     " simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static"
     " ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3"
-    " hdr_histogram::hdr_histogram_static nghttp2)\n")
+    " hdr_histogram::hdr_histogram_static node::nghttp2"
+    " llhttp::llhttp_static)\n")
+# Windows 额外系统库：winmm（V8 timeGetTime）、clang_rt.builtins（hdr_histogram __cpu_model）
+if(VCPKG_TARGET_IS_WINDOWS)
+    string(APPEND _cfg
+        "target_link_libraries(node::node INTERFACE winmm clang_rt.builtins-x86_64)\n")
+endif()
 string(APPEND _cfg
     "set(node_NODE_SOURCE_MANIFEST \"\${CMAKE_CURRENT_LIST_DIR}/node.exe.extra.manifest\")\n")
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/node-config.cmake" "${_cfg}")

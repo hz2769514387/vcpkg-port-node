@@ -11,6 +11,9 @@ test/
 ├── vcpkg-configuration.json   # overlay-ports / overlay-triplets 指向本仓库
 ├── CMakePresets.json          # 统一构建入口（各平台一个 preset）
 ├── CMakeLists.txt             # 主项目：find_package(node)
+├── cmake/                     # toolchains + triplets（给消费端用）
+│   ├── toolchains/
+│   └── triplets/
 └── app/                       # 子项目：嵌入 node 的可执行
     ├── CMakeLists.txt
     └── main.cpp
@@ -33,7 +36,7 @@ cmake --preset linux && cmake --build --preset linux
 cmake --preset macos && cmake --build --preset macos
 ```
 
-只要 `vcpkg-configuration.json` 在，vcpkg manifest 模式会把 `../ports`、`../triplets`
+只要 `vcpkg-configuration.json` 在，vcpkg manifest 模式会把 `../ports`、`cmake/triplets`
 当作 overlay 自动纳入，**不需要**再手敲 `--overlay-ports=`。这就是"给使用者带个好头"的接入方式。
 
 ## 平台口径
@@ -41,5 +44,5 @@ cmake --preset macos && cmake --build --preset macos
 | preset | triplet | 说明 |
 |---|---|---|
 | `windows-clang-cl` | `x64-windows-static-clang` | clang-cl + 静态 CRT + 静态库（node 24+ Windows 官方口径） |
-| `linux` | `x64-linux-ci` | gcc，release-only |
-| `macos` | `arm64-osx-ci` | clang，release-only |
+| `linux` | `x64-linux` | gcc，release-only |
+| `macos` | `arm64-osx` | clang，release-only |
