@@ -27,8 +27,11 @@
 #include <brotli/encode.h>
 #include <fmt/format.h>
 #include <hwy/aligned_allocator.h>
+// ★ <node.h> 必须在 nghttp2 之前：nghttp2 的头用了 ssize_t，而 MSVC 的头里没有这个类型 ——
+// node 自己是在 node.h 里补的（node 的 node_http2.h 注释原话："nghttp2.h needs ssize_t"）。
+// 这也是"消费端怎么正确用 node 的头"的一个真实例子。
+#include <node.h>
 #include <nghttp2/nghttp2.h>
-#include <node.h>  // 消费方能用 node 的公开头
 #include <openssl/crypto.h>
 #include <simdutf.h>
 #include <sqlite3.h>

@@ -1236,3 +1236,30 @@ if %NODE_MAJOR_VERSION% GEQ 24 (
 导出 `node_EXECUTABLE` / `node_TOOLS_DIR` / `node_NPM` / `node_NPX` / `node_COREPACK`。
 消费端（`test/`）不猜路径，只用这些变量 —— 与 `share/node/test-suite` 的 `node_TEST_SUITE_DIR`
 同一套做法。
+
+### 15.10 ★ 依赖"特性/编译选项"与 node 期望的一致性审计（用户提出：ada 的 simdutf）
+
+用户观察：node 的 deps/ada 是**开了 simdutf** 的，而 vcpkg 的 ada-url port 没有这个选项
+——"感觉还会有其他类似问题"。于是做了一次系统审计 + **实测探针**（不靠推演）。
+
+**做法**：① 把 node 各依赖 gyp 里的 `defines` 列出来；② 对照 vcpkg 对应 port 的
+features / portfile 编译开关；③ 凡是"疑似会导致链接或行为差异"的，写一个**最小探针**
+（`.tmp/headerprobe/`）真的编译+链接+运行一遍。
+
+| 依赖 | node 侧 gyp 的设定 | vcpkg port | 结论 |
+|---|---|---|---|
+| **ada** | `ADA_USE_SIMDUTF=1`（用 v8 的 simdutf 做 UTF-8 校验） | ada-url **没有** simdutf 这个 feature | ★ **真实差异**：结果一致、**只是少了 SIMD 加速**（性能 delta）。可从我们这侧修不了（feature 不在 ada-url port 里）→ 记入欠账清单 |
+| sqlite3 | `SQLITE_ENABLE_COLUMN_METADATA`、`SQLITE_ENABLE_DBSTAT_VTAB`、`SQLITE_DEFAULT_MEMSTATUS=0` | dbstat ✓ 我们已开；**column metadata 看着没开** | 我先怀疑它会**链接失败**（node_sqlite.cc 无条件调用 `sqlite3_column_{origin,database,table}_name`）→ **探针实测：符号在、链接通过、程序能跑** ⇒ **虚警**，撤回该怀疑 |
+| nghttp2 / ngtcp2 / llhttp / brotli / zstd | `NGHTTP2_STATICLIB` / `NGTCP2_STATICLIB` / … 等 define；`ZSTD_MULTITHREAD` | 静态口径的头若按 dllimport 声明，链接静态库会挂 | **探针实测：不定义这些宏也能链接、能跑** ⇒ 这一族**不是问题**（vcpkg 静态口径装的头是可用的）。`ZSTD_MULTITHREAD_SUPPORT=1` vcpkg 的 zstd port 本来就开 ✓ |
+| zstd | `XXH_NAMESPACE=ZSTD_` | vcpkg 的 zstd 不设 | 只影响 zstd 内部 xxhash 的符号名；同一个进程里若再链 vcpkg 的 `xxhash` port 才可能撞 —— 属 vcpkg 全局行为，记一笔备查 |
+| zlib | `USE_SYSTEM_ZLIB` 等分支 | vcpkg zlib | 我们已换用 vcpkg 那份（方案 Z1）✓ |
+
+**探针的价值（写下方法，供以后复用）**：只要"怀疑某个依赖的头/库形状和 node 期望不一致"，
+就写个 5 行的 .cpp：包含对应的头 + 取几个符号的地址，用**我们自己的 triplet/toolchain**
+配一个小 CMake 工程链上去（`.tmp/headerprobe/` 里就是这么做的）。符号在不在、dllimport
+会不会咬，一次编译就能定性 —— 比读头文件猜快且准（本次两个"虚警"都是这么撤掉的）。
+
+**顺带发现的另一个坑**（不是 node 的问题，是我自己的测试）：`<nghttp2/nghttp2.h>` 在
+Windows 上需要 `ssize_t`，而它不在 MSVC 的头里 —— node 自己是在 `node.h` 里补的
+（`node_http2.h` 的注释原话："nghttp2.h needs ssize_t"）。所以消费端 include nghttp2 头
+**之前**要先 include `<node.h>`；我在 unit 测试里漏了这一步。

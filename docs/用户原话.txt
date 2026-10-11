@@ -131,5 +131,8 @@ macos-x64 ci机器紧张，先从ci里面去掉，并记入暂时还没做的清
 这次已经push，上一轮日志在#14
 这个事情做了没有：node port作为一个cunstom overlay port，应该参考qt，输出比其他经典port复杂：可能需要输出的东西：include、lib、还有参考tools\node_exe里面（有node.exe、npm包、corepack包、npm和npx的脚本，这些东西使用者特殊场景下很可能也需要用）；还有toolchains、triplets里面的东西？按照vcpkg规则是不是统一输出到share里面比较好？test从share里面拿？
 
-
+2026年10月11日 23点51分
+上一轮的日志在#15，本轮已经push。
+观察到node的ada是开启了simdutf的；ports\node的vcpkg的ada没有开启这个feature（vcpkg的ada-idna是有simdutf feature的），感觉还会有其他类似问题。
+test可能需要一个真正同时链接了node+链接了可能的其他vcpkg和node依赖冲突重复的库并调用了双方的功能进行互相操作的测试，有吗。
 

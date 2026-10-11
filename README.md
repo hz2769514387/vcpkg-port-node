@@ -93,7 +93,7 @@ ctest --test-dir build/windows-clang-cl --output-on-failure
 |---|---|
 | `smoke` | 链接成功 + 跑得起来 + `process.versions.node` 对得上 |
 | `unit` | gtest：一批 vcpkg 库自身可用；**同时链 `node::node`** 后仍可用；node 报告的依赖版本与我方直接调用得到的版本一致 |
-| `coexist` | 行为级：zlib / brotli / openssl / ICU / IDN / sqlite / llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑；外加符号审计（Windows，`tools/symbol_check.py`） |
+| `coexist` | 行为级三层：① `coexist.js` 把 zlib / brotli / openssl / ICU / IDN / sqlite / llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑；② **`mutual_roundtrip`：一个进程里同时链 node 与那些可能重复的 vcpkg 库，让 C++ 侧与同进程的 node 运行时互相消费对方产物并各自复核（双向）**；③ 符号审计（Windows，`tools/symbol_check.py`） |
 | `node-suite` | **node 官方测试套件**：官方 `tools/test.py --shell=<本工程编译出的可执行>`，上游 `*.status` 里的 SKIP/FLAKY 会被尊重 |
 | `tools` | port 的 `tools` feature 输出：用 `node_EXECUTABLE` 跑版本、`npm/npx/corepack --version`（生产者→产物→消费者这条链是通的） |
 | `symbols` | 符号审计（Windows）：node 自带库与 vcpkg 库之间有没有重复强符号 |

@@ -30,7 +30,7 @@ test/
 |---|---|---|
 | `smoke` | `node -e "process.stdout.write(process.versions.node)"` == `24.21.0` | 最小"链接成功 + 跑得起来 + 版本对得上" |
 | `unit` | gtest：`unit_vcpkg_baseline`（只链 vcpkg 库）与 `unit_node_coexist`（同时链 node::node） | 两个可执行分开，失败时能立刻区分"库自己有毛病"还是"共存有毛病" |
-| `coexist` | `coexist.js`（zlib/brotli/crypto/ICU/IDN/sqlite/http/http2/worker/wasm 全走一遍）+ 符号审计 | 行为级证据 |
+| `coexist` | ① `coexist.js`（zlib/brotli/crypto/ICU/IDN/sqlite/http/http2/worker/wasm 全走一遍）② **`mutual_roundtrip`（一个进程里同时链 node 与那批可能重复的 vcpkg 库，C++ 侧与同进程的 node 运行时互相消费对方产物、双向复核）** ③ 符号审计 | 行为级证据，② 是最硬的一层 |
 | `node-suite` | **node 官方测试套件**，由官方 `tools/test.py --shell=<本工程的可执行>` 驱动 | 见下 |
 | `tools` | port 的 `tools` feature 产物：`node_EXECUTABLE` 跑版本断言 + `npm/npx/corepack --version` | 只从 `find_package(node)` 导出的变量拿路径 |
 
