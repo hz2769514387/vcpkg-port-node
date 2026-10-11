@@ -65,6 +65,28 @@ if(MSVC)
   target_compile_options(unit_vcpkg_baseline PRIVATE /W0)
 endif()
 
+# hdr_histogram 用 __builtin_cpu_supports ⇒ 引用 __cpu_model，而这个符号在 clang 的
+# compiler-rt 内建库里。MSVC 前端下 CMake 直接调 lld-link、**绕过了 clang 驱动**，
+# 内建库不会自动带上（node 的消费配置里也是手工补的，同一处原因）。
+# 链 node 的那个可执行经由 node::node 已经拿到了，这里（不链 node）得自己补。
+if(WIN32)
+  if(DEFINED NODE_PORT_CLANG_RT_BUILTINS AND EXISTS "${NODE_PORT_CLANG_RT_BUILTINS}")
+    target_link_libraries(unit_vcpkg_baseline PRIVATE "${NODE_PORT_CLANG_RT_BUILTINS}")
+  else()
+    # 库名按架构取（与 node port 的口径一致）：x64 → x86_64，arm64 → aarch64
+    if(CMAKE_SIZEOF_VOID_P EQUAL 8)
+      if("${CMAKE_SYSTEM_PROCESSOR}" MATCHES "ARM64|aarch64|AARCH64")
+        set(_node_test_rt_arch "aarch64")
+      else()
+        set(_node_test_rt_arch "x86_64")
+      endif()
+    else()
+      set(_node_test_rt_arch "i386")
+    endif()
+    target_link_libraries(unit_vcpkg_baseline PRIVATE "clang_rt.builtins-${_node_test_rt_arch}")
+  endif()
+endif()
+
 add_test(NAME unit-vcpkg-baseline COMMAND unit_vcpkg_baseline)
 set_tests_properties(unit-vcpkg-baseline PROPERTIES LABELS "unit" TIMEOUT 600)
 
@@ -78,8 +100,12 @@ target_link_libraries(unit_node_coexist PRIVATE
 target_include_directories(unit_node_coexist PRIVATE "${NGHTTP2_INCLUDE_DIR}")
 target_compile_features(unit_node_coexist PRIVATE cxx_std_20)
 # 用它来起子进程问 node "你用的是哪一份依赖"（交叉核对，见测试源码里的说明）。
+# ★ 这里**不要**加转义引号：C++ 侧自己会加（RunNodeEval 里 `std::string("\"") + ...`）。
+#   加在这儿，MSVC 响应文件会把开头那个 \" 吃掉，命令行变成
+#     C:\...\node.exe" -p "process.versions.uv      <- 少了前面的引号
+#   cmd 于是报"不是内部或外部命令"，而现象看起来像"node 跑不起来"（实测踩到过）。
 target_compile_definitions(unit_node_coexist PRIVATE
-    "NODE_EMBED_PATH=\"$<TARGET_FILE:node_embed>\"")
+    "NODE_EMBED_PATH=$<TARGET_FILE:node_embed>")
 if(MSVC)
   target_compile_options(unit_node_coexist PRIVATE /W0)
 endif()

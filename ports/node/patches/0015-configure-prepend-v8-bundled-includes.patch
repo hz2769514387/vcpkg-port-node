@@ -1,0 +1,45 @@
+diff --git a/configure.py b/configure.py
+index 85bd0a7..70f7900 100644
+--- a/configure.py
++++ b/configure.py
+@@ -2645,6 +2645,40 @@ configure_static(output)
+ configure_inspector(output)
+ configure_section_file(output)
+ 
++# --- vcpkg port begin -------------------------------------------------------
++# Put v8's vendored abseil / highway include dirs FIRST.
++#
++# Why: vcpkg installs every package's headers into one single directory
++# (<prefix>/include). That directory is handed to configure.py via
++# --shared-<lib>-includes for every shared dep, and configure_library()
++# appends it to output['include_dirs'] -- which becomes
++# target_defaults.include_dirs, i.e. EVERY target sees it, including v8's.
++#
++# v8 ships its own abseil / highway copies and uses their INTERNAL symbols, so
++# it must keep them (verified: swapping them for the vcpkg ports compiles, but
++# fails at link -- LNK2019 on absl::SetMutexDeadlockDetectionMode,
++# container_internal::DeallocateBackingArray<8, ...>,
++# hash_internal::MixingHashState::kSeed).
++#
++# The two copies are NOT interchangeable. v8's absl/base/internal/spinlock.h
++# declares "explicit SpinLock(...)"; vcpkg's declares
++# "constexpr explicit SpinLock(...)". Compiling v8's own spinlock.cc against
++# the vcpkg header gives:
++#   error: redefinition of 'SpinLock::SpinLock(SchedulingMode)'
++# (run #17: x64-linux and arm64-linux both died here.)
++#
++# Why not just pass these dirs through --shared-openssl-includes /
++# --shared-zlib-includes (tried, failed): configure_library() appends in CALL
++# order and configure_openssl() is called LAST (line 2641), so its directory
++# always lands AFTER the vcpkg include dir. gyp then de-duplicates
++# include_dirs keeping the FIRST occurrence, so appending can never win the
++# front slot. Only a whole-list prepend does.
++output['include_dirs'] = [
++  'deps/v8/third_party/abseil-cpp',
++  'deps/v8/third_party/highway/src',
++] + output['include_dirs']
++# --- vcpkg port end ---------------------------------------------------------
++
+ # remove builtins that have been disabled
+ if options.without_amaro:
+     del shareable_builtins['amaro/dist/index']

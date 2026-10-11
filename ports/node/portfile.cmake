@@ -45,6 +45,11 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0012-v8-simdutf-system-include.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0013-v8-compiler-add-descriptor-array-inl.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0014-v8-use-vcpkg-zlib-target.patch"
+        # v8 自带的 abseil-cpp / highway/src 必须排在 <prefix>/include **之前**，
+        # 否则 v8 自己的 absl/*.cc 会编到 vcpkg 那份同名不同版本的 absl/*.h 上。
+        # 配一条可执行红线（下面的 scripts/redline-include-order.cmake）：这个顺序
+        # 一旦退化，构建当场红，而不是等到编 absl 时才炸。
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0015-configure-prepend-v8-bundled-includes.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。
@@ -154,19 +159,19 @@ set(ENV{PKG_CONFIG_PATH} "${CURRENT_INSTALLED_DIR}/lib/pkgconfig")
 set(_inc "${CURRENT_INSTALLED_DIR}/include")
 set(_lib "${CURRENT_INSTALLED_DIR}/lib")
 
+# 每一条的 --shared-*-includes 都是 ${_inc}：vcpkg 把所有包的头都装进同一个
+# <prefix>/include，单个包没有自己的独立 include 目录（manifest 模式下
+# CURRENT_INSTALLED_DIR 还是**整个工程共用**的 vcpkg_installed）。
+#
+# 顺序问题不在这里解决：configure_library() 按调用顺序 append，而
+# configure_openssl() 在 configure.py 里是**最后**被调用的（2641 行），所以靠
+# --shared-*-includes 抢不到前排；gyp 对 include_dirs 去重只保留首次出现，
+# 一旦 ${_inc} 先出现就永远赢。v8 自带 abseil / highway 的"排到最前"改由
+# patches/0015 在 configure.py 末尾整体前插，并用下面的红线断言钉住。
 macro(_node_shared _opt _pkg _libnames)
-    # 可选第 4 个参数：这一条的 --shared-*-includes 用什么目录（默认 ${_inc}）。
-    # configure.py 的 configure_library() 是**按调用顺序**往 output['include_dirs'] 里 append 的，
-    # 所以这里给的顺序就是最终 -I 的顺序（见下面 abseil/highway 那两条的用意）。
-    # ★ 注意：macro 里**没有 ARGC**（那是 function 的变量），必须用 ${ARGV3} 判断 ——
-    #   之前用 ARGC 导致这个分支永远走 else，注入静默失效（实测 config.gypi 里 14 条全是 ${_inc}）。
-    set(_node_this_inc "${_inc}")
-    if(NOT "${ARGV3}" STREQUAL "")
-        set(_node_this_inc "${ARGV3}")
-    endif()
     list(APPEND _node_shared_args
         "--shared-${_opt}"
-        "--shared-${_opt}-includes=${_node_this_inc}"
+        "--shared-${_opt}-includes=${_inc}"
         "--shared-${_opt}-libpath=${_lib}"
         "--shared-${_opt}-libname=${_libnames}")
 endmacro()
@@ -189,27 +194,12 @@ else()
 endif()
 set(_hdrhist_lib   "hdr_histogram_static")
 
-# ★★ 头两条故意把 **v8 自带的 abseil / highway 目录**放在最前面，而不是 ${_inc}。
-#
-# 原因（实测结论，别再试"换成 vcpkg 的"了）：v8 用 abseil / highway 的**内部符号**。
-# 上一轮试过让 v8 改用 vcpkg 的 abseil（patch 0015/0016 + port 依赖 abseil/highway），
-# 编译期不再重定义、但**链接期必挂**：
-#   node_mksnapshot link: LNK2019 无法解析的外部符号
-#     absl::SetMutexDeadlockDetectionMode
-#     absl::container_internal::DeallocateBackingArray<8, ...>
-#     absl::hash_internal::MixingHashState::kSeed
-# vcpkg 那份 abseil 不提供同一套内部符号 ⇒ **只能保留 v8 自带的那份**。
-#
-# 而 port 经 --shared-*-includes 交给 configure.py 的 ${_inc} 会进 target_defaults.include_dirs，
-# **所有目标都看得见**（含 v8 的）——于是 v8 自带的 absl/*.cc 编到了 vcpkg 的同名头文件上
-# （同名不同版本）→ 重定义：
-#   absl/base/internal/spinlock.cc:71: error: redefinition of Spinlock::SpinLock(...)
-# 修法就是把**自带头目录排到最前**：`#include "absl/..."` / "hwy/..." 一律命中自带那份，
-# vcpkg 的 include 仍在列表后面，其它头（simdutf.h / openssl / ...）照常拿得到。
-set(_v8_third_party_inc "${SOURCE_PATH}/deps/v8/third_party")
-
-_node_shared(openssl       openssl     "${_openssl_lib}"        "${_v8_third_party_inc}/abseil-cpp")
-_node_shared(zlib          zlib        "${_zlib_lib}"           "${_v8_third_party_inc}/highway/src")
+# 14 条共享依赖一律用 ${_inc}。v8 自带 abseil / highway 的头文件必须排在 ${_inc}
+# **之前**（否则 v8 的 absl/*.cc 会编到 vcpkg 那份同名不同版本的 absl/*.h 上，
+# run #17 的 x64-linux / arm64-linux 就是这么死的），这个前插由 patches/0015
+# 完成，紧跟在 configure 之后有红线断言检查它真的生效了。
+_node_shared(openssl       openssl     "${_openssl_lib}")
+_node_shared(zlib          zlib        "${_zlib_lib}")
 _node_shared(libuv         libuv       "${_libuv_lib}")
 _node_shared(cares         c-ares      "cares")
 _node_shared(brotli        brotli      "brotlidec,brotlienc,brotlicommon")
@@ -222,6 +212,30 @@ _node_shared(simdutf       simdutf     "simdutf")
 _node_shared(sqlite        sqlite3     "sqlite3")
 _node_shared(ada           ada-url     "ada")
 _node_shared(hdr-histogram hdr-histogram "${_hdrhist_lib}")
+
+# ---------------------------------------------------------------------------
+# 0) Windows：node.gyp 的 /WHOLEARCHIVE 路径是照 **msvs 生成器** 写的
+#    （<(PRODUCT_DIR)/lib/node_base.lib），但 ninja 生成器在 Windows 上把静态库
+#    放到 obj/ 下（gyp/generator/ninja.py 里 win 的 type_in_output_root 只有
+#    executable / loadable_module / shared_library，static_library 走
+#    GypPathToUniqueOutput）。于是 link.exe 报
+#    LNK1356: 找不到为延迟加载指定的库 lib/node_base.lib。
+#    Linux 那侧本来就写的是 <(obj_dir)/...，macOS 的 static_library 在 output root，
+#    只有 Windows 这一条对不上，所以只改 Windows。
+#
+#    ★ 必须在 **configure.py 之前** 改：改的是 gyp 的**输入**，而 ninja 文件是
+#    configure.py 内部调 gyp 生成的；放在后面改，gyp 早就把老路径写进
+#    node.exe.rsp 了（试过一次，替换确实生效、链接照样失败）。
+#    用 vcpkg_replace_string 而不是补丁：两处字符串各自唯一，不怕上游改行号。
+# ---------------------------------------------------------------------------
+if(VCPKG_TARGET_IS_WINDOWS)
+    vcpkg_replace_string("${SOURCE_PATH}/node.gyp"
+        "/WHOLEARCHIVE:<(PRODUCT_DIR)/lib/<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)"
+        "/WHOLEARCHIVE:<(obj_dir)/<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)")
+    vcpkg_replace_string("${SOURCE_PATH}/node.gyp"
+        "/WHOLEARCHIVE:<(PRODUCT_DIR)/lib/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)"
+        "/WHOLEARCHIVE:<(obj_dir)/tools/v8_gypfiles/<(STATIC_LIB_PREFIX)v8_base_without_compiler<(STATIC_LIB_SUFFIX)")
+endif()
 
 # ---------------------------------------------------------------------------
 # 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
@@ -240,6 +254,14 @@ vcpkg_execute_required_process(
     WORKING_DIRECTORY "${SOURCE_PATH}"
     LOGNAME configure
 )
+
+# ---------------------------------------------------------------------------
+# 1b) 红线裁判：config.gypi 的 target_defaults.include_dirs 前两条必须是
+#     v8 自带的 abseil-cpp 与 highway/src。判定逻辑单独放在 scripts/ 下，
+#     这样"故意弄坏一次"的正反两个方向都能真跑（见 .tmp/gen 的验证脚本），
+#     而不是只写在注释里说"应该如此"。
+# ---------------------------------------------------------------------------
+include("${CMAKE_CURRENT_LIST_DIR}/scripts/redline-include-order.cmake")
 
 # ---------------------------------------------------------------------------
 # 2) ninja 构建可链接库 `libnode`（gyp 目标名，见 node.gyp 的 node_lib_target_name）。
@@ -283,6 +305,20 @@ file(GLOB_RECURSE _node_archives "${SOURCE_PATH}/out/Release/obj/*${_node_lib_su
 foreach(_a IN LISTS _node_archives)
     file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
 endforeach()
+
+# 记下"本 port 到底装了哪些库"（只要文件名），写进消费配置给符号审计用。
+#
+# 为什么必须显式给：manifest 模式下 <prefix>/lib 是**整个工程共用**的目录，里面还
+# 混着使用者自己声明的库（本仓库的 test 工程就声明了 gtest / fmt / ...）。审计如果
+# 把整个目录当成"node 的库"，再拿去和 vcpkg 的 packages 目录比，就成了"自己比自己"
+# —— 每次都报一堆 gtest.lib vs gtest/gtest.lib 这种假阳性，闸门等于常红、没人再看。
+set(_node_installed_libs "")
+foreach(_a IN LISTS _node_archives)
+    get_filename_component(_node_lib_name "${_a}" NAME)
+    list(APPEND _node_installed_libs "${_node_lib_name}")
+endforeach()
+list(REMOVE_DUPLICATES _node_installed_libs)
+unset(_node_lib_name)
 
 # Windows 平台兼容性清单：消费方也要嵌（缺了一跑退出码 216）。
 if(VCPKG_TARGET_IS_WINDOWS)
@@ -398,7 +434,31 @@ foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
 endforeach()
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
-    "set(_node_lib \"\${_node_prefix}/lib\")\n")
+    "set(_node_lib \"\${_node_prefix}/lib\")\n"
+    # 本 port 装进 <prefix>/lib 的库文件名清单。符号审计靠它把"node 的库"和
+    # "使用者自己装的库"分开（<prefix>/lib 是共用的，见上面那段说明）。
+    "set(node_INSTALLED_LIBRARIES \"${_node_installed_libs}\")\n")
+
+# tools feature 的输出位置也要导出 —— 光把文件装出去、不给变量，使用者只能自己去猜
+# 路径（而 vcpkg 的规矩正是"由 config 导出变量"，见 directx-dxc 的 DIRECTX_DXC_TOOL）。
+# ★ 2026-10-12 补：之前**只装了文件没导变量**，于是消费端 ctest 的 tools 组一直是
+#   "没有 node_EXECUTABLE → 跳过"，静默地什么都没验。
+if("tools" IN_LIST FEATURES)
+    if(VCPKG_TARGET_IS_WINDOWS)
+        # Windows 上给 .cmd 垫片：POSIX sh 脚本在 cmd / PowerShell 下跑不起来。
+        set(_node_exe_name "node.exe")
+        set(_node_shim_ext ".cmd")
+    else()
+        set(_node_exe_name "node")
+        set(_node_shim_ext "")
+    endif()
+    string(APPEND _cfg
+        "set(node_TOOLS_DIR \"\${_node_prefix}/tools/node\")\n"
+        "set(node_EXECUTABLE \"\${_node_prefix}/tools/node/${_node_exe_name}\")\n"
+        "set(node_NPM \"\${_node_prefix}/tools/node/npm${_node_shim_ext}\")\n"
+        "set(node_NPX \"\${_node_prefix}/tools/node/npx${_node_shim_ext}\")\n"
+        "set(node_COREPACK \"\${_node_prefix}/tools/node/corepack${_node_shim_ext}\")\n")
+endif()
 
 # node 自身口径下需要串起来的静态库全集（gyp 目标）。
 set(_node_all_archives

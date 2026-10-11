@@ -28,4 +28,6 @@ add_test(NAME smoke-node-version
          COMMAND node_embed -e "process.stdout.write(process.versions.node)")
 set_tests_properties(smoke-node-version PROPERTIES
   LABELS "smoke"
-  PASS_REGULAR_EXPRESSION "^24\\.21\\.0$")
+  # Windows 上 node 的输出以 CRLF 结尾，`$` 卡在 `\r` 前面所以匹配不上
+  # （实测：输出确实是 24.21.0，但断言还是红）。把行尾空白放开。
+  PASS_REGULAR_EXPRESSION "^24\\.21\\.0[[:space:]]*$")

@@ -164,6 +164,40 @@ jobs:
           fi
           echo "port 自包含检查通过"
 
+      - name: patches/ 里的补丁必须都挂进 portfile 的 PATCHES
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 为什么单独立一条红线：2026-10-12 我把 0015 落盘后**忘了加进 PATCHES 列表**，
+          # 补丁从头到尾没被应用。那一枪是 configure 阶段的红线替我挡的 —— 那是运气，
+          # 不是机制。漏挂的补丁是**静默失效**：源码照旧、症状要到很后面才出现，
+          # 而且外表看不出"补丁没打"和"补丁没生效"的区别。
+          python3 - <<'PY'
+          import pathlib, re, sys
+
+          portfile = pathlib.Path("ports/node/portfile.cmake").read_text(encoding="utf-8")
+          m = re.search(r"\bPATCHES\b(.*?)\n\)", portfile, re.S)
+          if not m:
+              print("::error::portfile.cmake 里找不到 PATCHES 块")
+              sys.exit(1)
+          block = m.group(1)
+          pdir = pathlib.Path("ports/node/patches")
+
+          bad = [p.name for p in sorted(pdir.glob("*.patch")) if p.name not in block]
+          for name in bad:
+              print("::error file=ports/node/patches/%s::补丁存在但没挂进 PATCHES（会静默失效）" % name)
+
+          # 反向：PATCHES 里写的每个文件都得真的存在（防止改名后留下死引用）
+          missing = [r for r in re.findall(r"patches/([0-9A-Za-z._-]+\.patch)", block)
+                     if not (pdir / r).is_file()]
+          for name in missing:
+              print("::error::PATCHES 引用了不存在的补丁 %s" % name)
+
+          total = len(list(pdir.glob("*.patch")))
+          print("patches/ 共 %d 个；未挂载 %d 个；死引用 %d 个" % (total, len(bad), len(missing)))
+          sys.exit(1 if (bad or missing) else 0)
+          PY
+
   # ---------------------------------------------------------------------------
   # L2 + L3：编译 test（清单模式自动装 node + 依赖）+ 消费端冒烟。
   # ---------------------------------------------------------------------------

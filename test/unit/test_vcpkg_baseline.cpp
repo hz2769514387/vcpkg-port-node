@@ -20,6 +20,14 @@
 #include <fmt/format.h>
 #include <hdr/hdr_histogram.h>            // node 依赖（hdr-histogram）
 #include <hwy/aligned_allocator.h>        // v8 内嵌 highway
+// ★ MSVC 的头里没有 ssize_t，而 nghttp2.h 直接就用它。node 自己是在 node.h 里补的
+//   （node 的 node_http2.h 注释原话："nghttp2.h needs ssize_t"）；但**本可执行故意不链
+//   node**（那正是"基线"的意义），所以这里自己补一个 —— Windows 上的对应物就是
+//   BaseTsd.h 的 SSIZE_T。
+#if defined(_WIN32) && !defined(_SSIZE_T_DEFINED)
+#include <BaseTsd.h>
+using ssize_t = SSIZE_T;
+#endif
 #include <nghttp2/nghttp2.h>              // node 依赖（HTTP/2）
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
@@ -124,7 +132,12 @@ TEST(VcpkgBaseline, SimdutfAsciiAndUtf16) {
 TEST(VcpkgBaseline, SimdjsonParses) {
   simdjson::dom::parser parser;
   simdjson::dom::element doc;
-  ASSERT_EQ(simdjson::SUCCESS, parser.parse(R"({"a":1,"b":"x"})").get(doc));
+  // 单参数的 parse() 在这个版本里是 `&&` 重载、**被 delete 掉了**（simdjson 不接受
+  // "不知道长度、也没保证尾部有填充"的输入）。给 (data, size) 两个参数走
+  // realloc_if_needed 那条路（默认 true），由它自己去补填充。
+  const std::string json_src = R"({"a":1,"b":"x"})";
+  ASSERT_EQ(simdjson::SUCCESS,
+            parser.parse(json_src.data(), json_src.size()).get(doc));
   int64_t a = 0;
   ASSERT_EQ(simdjson::SUCCESS, doc["a"].get_int64().get(a));
   EXPECT_EQ(a, 1);

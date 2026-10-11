@@ -11,7 +11,13 @@
 //     另一份拷贝（版本不同／行为漂移），对照值就会不一致。
 //
 // 交接方式：工作目录里的文件（stage1.* 由 C++ 写、stage2.* 由 JS 写）。
+// ★ ada_c.h **没有 extern "C" 保护**（它开头就写了 "This is a C file, not C++"），
+//   C++ 里直接 include 会把 ada_parse / ada_is_valid 这些声明按 C++ 修饰，
+//   而 ada.lib 里导出的是 C 符号 ⇒ 链接期 undefined symbol（名字对不上，
+//   不是"没链上"——ada.lib 确实在链接行上）。
+extern "C" {
 #include <ada_c.h>
+}
 #include <openssl/crypto.h>
 #include <openssl/evp.h>
 #include <simdjson.h>
@@ -223,7 +229,8 @@ int main(int argc, char** argv) {
     return Fail("openssl 版本不一致：C++=" + Digits(OpenSSL_version(OPENSSL_VERSION)) +
                 " JS=" + Digits(std::string(js_openssl)));
   if (std::string(js_icu) != cxx_icu)
-    return Fail("icu 版本不一致：C++=" + cxx_icu + " JS=" + std::string(js_icu));
+    return Fail("icu 版本不一致：C++=" + std::string(cxx_icu) +
+                " JS=" + std::string(js_icu));
   if (!js_sqlite.empty() && std::string(js_sqlite) != sqlite3_libversion())
     return Fail("sqlite 版本不一致：C++=" + std::string(sqlite3_libversion()) +
                 " JS=" + std::string(js_sqlite));

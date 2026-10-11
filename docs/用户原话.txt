@@ -136,3 +136,10 @@ macos-x64 ci机器紧张，先从ci里面去掉，并记入暂时还没做的清
 观察到node的ada是开启了simdutf的；ports\node的vcpkg的ada没有开启这个feature（vcpkg的ada-idna是有simdutf feature的），感觉还会有其他类似问题。
 test可能需要一个真正同时链接了node+链接了可能的其他vcpkg和node依赖冲突重复的库并调用了双方的功能进行互相操作的测试，有吗。
 
+2026年10月12日 00点25分
+node给openssl打了补丁，现在改成用vcpkg上的openssl，会有行为不一致的情况发生吗？
+tools/symbol_check.py是不是应该是ctest的一部分，做到test目录里面去作为测试？而且ctest里面都是c或js代码，应该用js或c实现更一致。
+上一轮日志已就位。
+
+
+

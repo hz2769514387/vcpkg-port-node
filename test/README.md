@@ -82,8 +82,16 @@ ctest --test-dir build/<preset> -N                              # 只列用例
    字节必须完全一致。
 3. **行为对**：`coexist.js` 把 zlib / brotli / openssl / ICU / ada / sqlite / llhttp /
    nghttp2 / libuv / V8 提供的 node 能力逐个真跑。
-4. **符号审计**：`tools/symbol_check.py` 扫 node 自带库与 vcpkg 库的**强符号**交集
-   （COMDAT 重复是允许的，单独评估）。有交集即红（Windows/dumpbin）。
+4. **符号审计**：`tools/symbol_check.js` 扫 node 自带库与 vcpkg 库的**强符号**交集
+   （COMDAT / 弱符号重复是允许的，单独评估）。有交集即红。
+   Windows 走 `dumpbin /symbols`、其它平台走 `nm -g --defined-only`；
+   由**本工程自己编出来的 node**（`node_embed`）执行 —— ctest 里跑的都是 C / JS，
+   工具也该一致，顺带还是一次自检。
+   **只扫 node 自己装的那几个库**：`<prefix>/lib` 在 manifest 模式下是整个工程共用的，
+   里面还混着本工程自己声明的 gtest / fmt；不区分就会"自己比自己"、满屏假阳性。
+   清单来自 `node-config.cmake` 导出的 `node_INSTALLED_LIBRARIES`。
+5. **openssl 行为面**：`coexist/openssl_surface.js`（标签 `openssl`）——
+   node 自带 openssl 换成 vcpkg 那份后的能力核对，见根 `docs/暂时还没做.md` §5h。
 
 ## 依赖方向（只有一条）
 

@@ -14,6 +14,19 @@ set_tests_properties(coexist-node-runtime PROPERTIES
   TIMEOUT 900
   PASS_REGULAR_EXPRESSION "COEXIST-OK")
 
+# openssl 行为面核对：node 自带 openssl 换成 vcpkg 的 openssl 之后，
+# 算法面与端到端功能是否还对得上（provider 有没有起来、算法有没有被裁掉）。
+# 为什么单列一个用例：那件事的结论原本只是"比对两份 configuration.h 得出来的"，
+# 属于文档结论；这里把它变成可执行的，回归时自己会红。
+# 脚本里也写明了那条链路的保险 —— node 把 nodejs-openssl.cnf 编进二进制后用
+# NODE_OPENSSL_CONF_NAME 显式激活 provider，跟用哪份 openssl 无关。
+add_test(NAME coexist-openssl-surface
+         COMMAND node_embed "${CMAKE_CURRENT_SOURCE_DIR}/openssl_surface.js")
+set_tests_properties(coexist-openssl-surface PROPERTIES
+  LABELS "coexist;openssl"
+  TIMEOUT 900
+  PASS_REGULAR_EXPRESSION "OPENSSL-SURFACE-OK")
+
 find_package(ZLIB CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
 find_package(unofficial-sqlite3 CONFIG REQUIRED)

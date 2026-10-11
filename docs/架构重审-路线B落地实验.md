@@ -1123,14 +1123,18 @@ if %NODE_MAJOR_VERSION% GEQ 24 (
 3. **行为对**：`coexist.js` 把 zlib / brotli / openssl / ICU / ada(IDN) / sqlite /
    llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑（h2c 不需要证书，正好用来
    验 nghttp2）。
-4. **符号审计**：`tools/symbol_check.py` 扫 node 自带库与 vcpkg 库的**强符号**交集。
+4. **符号审计**：`test/tools/symbol_check.js` 扫 node 自带库与 vcpkg 库的**强符号**交集。
+   （2026-10-12 迁移：原 `tools/symbol_check.py` 已删除，逻辑搬到 JS 并由本工程编出来的
+   node 执行；补上了 `nm` 分支，不再是 Windows 专用。）
    链接成功 ≠ 没隐患 —— 同名 **COMDAT**（inline/template、同名第三方库的不同版本）
    会被静默折叠，运行时用哪一份由链接器决定。这个只能扫符号发现。
    新增 `--fail-on-duplicates` 让它能当闸门（默认仍是只报告）。
 
-> 注意 `tools/symbol_check.py` 目前是 Windows/dumpbin 专用；Linux 的 `nm` 版本还没写
-> （已记在 `docs/暂时还没做.md`）。ctest 里 `--dumpbin` 由 CMake 在**配置期**解析绝对
-> 路径传进去 —— ctest 进程不在 vcvars 环境里，光靠 PATH 找不到。
+> 【2026-10-12 更新】上面这段是当时的状态。现在 `test/tools/symbol_check.js` 两套都
+> 实现了（Windows 走 `dumpbin`、其它走 `nm`）。ctest 里 `--dumpbin` / `--nm` 仍由 CMake
+> 在**配置期**解析绝对路径传进去 —— ctest 进程不在 vcvars 环境里，光靠 PATH 找不到。
+> 另外修了一个会让闸门常红的缺陷：`<prefix>/lib` 是整个工程共用的，必须只扫
+> `node_INSTALLED_LIBRARIES` 清单里的库，否则会和 vcpkg packages 里的同名库"自己比自己"。
 
 ### 15.5 ★★ vcpkg 2026.07.29 的脚本要求 **CMake 4.x**，而 portfile 的解释器就是 PATH 上的 cmake
 

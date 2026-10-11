@@ -45,7 +45,8 @@ test/                消费端验证工程（主项目 + 子项目），同时�
 ├── tests/            ctest 胶水：node 官方套件 + 符号审计
 ├── cmake/triplets/   六个平台的 triplet      ← 属于消费端
 └── cmake/toolchains/ clang-cl + MSVC 命令行环境 ← 属于消费端
-tools/               维护工具：version_tree.py（版本表）、symbol_check.py、gyp2vcpkg/
+tools/               维护工具：version_tree.py（版本表）、gyp2vcpkg/
+                     （符号审计已搬到 test/tools/symbol_check.js，由编出来的 node 自己跑）
 versions/            vcpkg 版本表（versions/n-/node.json）
 docs/                调研与决策记录（架构重审、路线抉择、落地实验）
 ```
@@ -97,7 +98,8 @@ ctest --test-dir build/windows-clang-cl --output-on-failure
 |---|---|
 | `smoke` | 链接成功 + 跑得起来 + `process.versions.node` 对得上 |
 | `unit` | gtest：一批 vcpkg 库自身可用；**同时链 `node::node`** 后仍可用；node 报告的依赖版本与我方直接调用得到的版本一致 |
-| `coexist` | 行为级三层：① `coexist.js` 把 zlib / brotli / openssl / ICU / IDN / sqlite / llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑；② **`mutual_roundtrip`：一个进程里同时链 node 与那些可能重复的 vcpkg 库，让 C++ 侧与同进程的 node 运行时互相消费对方产物并各自复核（双向）**；③ 符号审计（Windows，`tools/symbol_check.py`） |
+| `coexist` | 行为级三层：① `coexist.js` 把 zlib / brotli / openssl / ICU / IDN / sqlite / llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑；② **`mutual_roundtrip`：一个进程里同时链 node 与那些可能重复的 vcpkg 库，让 C++ 侧与同进程的 node 运行时互相消费对方产物并各自复核（双向）**；③ 符号审计 `test/tools/symbol_check.js`（Windows 用 dumpbin、其它用 `nm`；由本工程编出来的 node 自己执行） |
+| `openssl` | **openssl 行为面**：node 自带 openssl 换成 vcpkg 那份之后，算法面（getHashes/getCiphers/getCurves）与端到端功能（sha256/HMAC 已知向量、aes-256-gcm 往返、ed25519 验签、secp256k1 ECDH、`tls.createSecureContext()`、TLS 1.3 套件）是否还对得上。见 `docs/暂时还没做.md` §5h 的逐项比对 |
 | `node-suite` | **node 官方测试套件**：官方 `tools/test.py --shell=<本工程编译出的可执行>`，上游 `*.status` 里的 SKIP/FLAKY 会被尊重 |
 | `tools` | port 的 `tools` feature 输出：用 `node_EXECUTABLE` 跑版本、`npm/npx/corepack --version`（生产者→产物→消费者这条链是通的） |
 | `symbols` | 符号审计（Windows）：node 自带库与 vcpkg 库之间有没有重复强符号 |

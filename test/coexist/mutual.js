@@ -54,7 +54,11 @@ if (process.versions.sqlite) {
   const db = new DatabaseSync(path.join(workdir, 'stage1.sqlite'));
   sqliteRows = db.prepare('SELECT a, b FROM t ORDER BY a').all();
   db.close();
-  assert.deepStrictEqual(sqliteRows, [{ a: 1, b: 'one' }, { a: 2, b: 'two' }],
+  // node:sqlite 返回的行是**null 原型**对象，跟字面量 `{...}` 的原型不同，
+  // deepStrictEqual 会只因为这个就失败（实测：两边键值完全一样照样红）。
+  // 这里要比的是"读出来的值对不对"，不是原型，所以先过一遍 JSON 归一化。
+  const plain = JSON.parse(JSON.stringify(sqliteRows));
+  assert.deepStrictEqual(plain, [{ a: 1, b: 'one' }, { a: 2, b: 'two' }],
                          'node:sqlite 读 vcpkg sqlite3 写的库，结果不对');
 }
 
