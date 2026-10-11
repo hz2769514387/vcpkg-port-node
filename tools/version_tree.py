@@ -76,10 +76,14 @@ def repo_root(cwd):
 
 
 def compute_git_tree(root, port_rel, port_dir_rel):
-    """把工作区的 port 目录放进临时索引，write-tree 得到 its tree 哈希。
+    """把工作区的 port 目录放进临时索引，取出**该目录自己的** tree 哈希。
 
     port_rel     ：相对仓库根的 port 目录（如 ports/node）
     port_dir_rel ：传给 `git add` 的 pathspec（本脚本里与 port_rel 相同）
+
+    注意：`git write-tree` 给出的是**整个仓库根目录**的 tree 对象，必须再
+    `rev-parse <root-tree>:ports/node` 才能拿到 port 目录那一层的 tree ——
+    后者才是 vcpkg 版本表里的 git-tree（等价于 `git rev-parse HEAD:ports/node`）。
     """
     with tempfile.TemporaryDirectory(prefix="vcpkg-version-tree-") as tmp:
         env = os.environ.copy()
@@ -100,7 +104,10 @@ def compute_git_tree(root, port_rel, port_dir_rel):
 
         # --force：即使该路径被 .gitignore 命中也要收进来（port 目录绝不该被忽略）。
         _git(["add", "--force", "--", port_dir_rel], cwd=root, env=env)
-        return _git(["write-tree"], cwd=root, env=env)
+        root_tree = _git(["write-tree"], cwd=root, env=env)
+
+        # 取子树：这才是 ports/<port> 那一层的 tree 哈希。
+        return _git(["rev-parse", "%s:%s" % (root_tree, port_rel)], cwd=root, env=env)
 
 
 def versions_path(root, versions_root, port):
@@ -145,13 +152,15 @@ def main(argv=None):
     args = ap.parse_args(argv)
 
     root = repo_root(args.cwd)
-    port_rel = os.path.join(args.ports_root, args.port)
-    port_abs = os.path.join(root, port_rel)
+    # git 的 pathspec 与 tree 里的路径**一律用正斜杠**（Windows 上 os.path.join 会给反斜杠，
+    # 那样 `rev-parse <tree>:ports\node` 会直接报 path not found）。
+    port_rel = "/".join(p.strip("/") for p in (args.ports_root, args.port) if p.strip("/"))
+    port_abs = os.path.join(root, *port_rel.split("/"))
     if not os.path.isdir(port_abs):
         raise SystemExit("找不到 port 目录：%s" % port_abs)
 
     manifest = load_manifest(os.path.join(port_abs, "vcpkg.json"))
-    tree = compute_git_tree(root, port_rel, port_rel.replace(os.sep, "/"))
+    tree = compute_git_tree(root, port_rel, port_rel)
     vfile = versions_path(root, args.versions_root, args.port)
 
     if args.do_print:
@@ -212,7 +221,12 @@ def main(argv=None):
         fh.write(render(entries))
     print(
         "%s %s  version=%s  git-tree=%s"
-        % ("已更新" if updated else "无需改动", os.path.relpath(vfile, root), want["version"], tree)
+        % (
+            "已更新" if updated else "无需改动",
+            os.path.relpath(vfile, root).replace(os.sep, "/"),
+            want["version"],
+            tree,
+        )
     )
     return 0
 

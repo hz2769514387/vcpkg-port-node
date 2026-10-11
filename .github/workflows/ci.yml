@@ -109,9 +109,21 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          # 真正的裁判是脚本（tools/version_tree.py），CI 与本地用同一份逻辑；
-          # 它比对的是 ports/node 这个目录的 tree 哈希，与机器、core.autocrlf 无关。
+          # 两条**互相独立**的路径必须给出同一个数字，两者都过才算过：
+          #  (a) 脚本按 vcpkg x-add-version 的方式算（临时索引 + write-tree + 取子树），
+          #      不依赖"先提交"，本地也能用；
+          #  (b) 直接读 HEAD 里 ports/node 的 tree。
+          # 只留 (a) 会漏掉"脚本本身算错"这种故障（开发这个脚本时就真的漏过一次），
+          # 所以 (b) 是必须的对照。
           python3 tools/version_tree.py --check
+          recorded="$(python3 -c "import json;print(json.load(open('versions/n-/node.json'))['versions'][0]['git-tree'])")"
+          head_tree="$(git rev-parse HEAD:ports/node)"
+          echo "版本表记录：$recorded"
+          echo "HEAD 里的 ：$head_tree"
+          if [ "$recorded" != "$head_tree" ]; then
+            echo "::error::版本表与 HEAD 里的 ports/node 不一致"
+            exit 1
+          fi
 
       - name: port 必须自包含（不引用 port 目录外的任何东西）
         shell: bash
