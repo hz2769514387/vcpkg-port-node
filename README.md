@@ -76,6 +76,7 @@ Windows 需要 clang-cl 时，triplet 用 vcpkg 的标准变量 `VCPKG_CHAINLOAD
 | `<prefix>/share/node/node-config.cmake` | `node::node` 及其全部传递依赖的导入目标 |
 | `<prefix>/share/node/node.exe.extra.manifest` | Windows 平台兼容性清单（变量 `node_NODE_SOURCE_MANIFEST`） |
 | `<prefix>/share/node/test-suite/` | **可选 feature `test-suite`**：node 官方测试套件（`test/` 全量 + `tools/test.py`），消费端可用它跑官方用例（变量 `node_TEST_SUITE_DIR`）。约 80 MB |
+| `<prefix>/tools/node/` | **可选 feature `tools`**：node 可执行 + npm / npx / corepack（官方发行版布局：可执行 + `node_modules/{npm,corepack}` + 垫片；垫片有 POSIX sh 与 Windows `.cmd` 两套）。变量 `node_EXECUTABLE` / `node_TOOLS_DIR` / `node_NPM` / `node_NPX` / `node_COREPACK`。约 25 MB |
 
 ## 怎么验证它能用（不只是冒烟）
 
@@ -94,6 +95,8 @@ ctest --test-dir build/windows-clang-cl --output-on-failure
 | `unit` | gtest：一批 vcpkg 库自身可用；**同时链 `node::node`** 后仍可用；node 报告的依赖版本与我方直接调用得到的版本一致 |
 | `coexist` | 行为级：zlib / brotli / openssl / ICU / IDN / sqlite / llhttp / nghttp2 / libuv / V8 提供的 node 能力逐个真跑；外加符号审计（Windows，`tools/symbol_check.py`） |
 | `node-suite` | **node 官方测试套件**：官方 `tools/test.py --shell=<本工程编译出的可执行>`，上游 `*.status` 里的 SKIP/FLAKY 会被尊重 |
+| `tools` | port 的 `tools` feature 输出：用 `node_EXECUTABLE` 跑版本、`npm/npx/corepack --version`（生产者→产物→消费者这条链是通的） |
+| `symbols` | 符号审计（Windows）：node 自带库与 vcpkg 库之间有没有重复强符号 |
 
 用 `-L` 只跑其中一组，例如 `ctest --test-dir build/<preset> -L unit --output-on-failure`。
 细节（分片、跳过表、为什么不用 `node --test`）见 `test/README.md`。

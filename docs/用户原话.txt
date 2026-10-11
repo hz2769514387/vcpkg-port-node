@@ -126,3 +126,10 @@ test要做成不是仅仅是冒烟，而是需要做成真正的把node的测试
 已经push，上一轮部分机器已经失败，日志：\log\#13
 macos-x64 ci机器紧张，先从ci里面去掉，并记入暂时还没做的清单。
 
+2026年10月11日 设计
+这次本地构建完后，你不能拿C:\work\tmp这种我根本不知道的目录去做实验（仓库外，又不是系统tmp）。用系统tmp或本仓库建立tmp。而且，构建本仓库node port更应该用本仓库的test跑ctest去做，而不是另外架起一口锅。
+这次已经push，上一轮日志在#14
+这个事情做了没有：node port作为一个cunstom overlay port，应该参考qt，输出比其他经典port复杂：可能需要输出的东西：include、lib、还有参考tools\node_exe里面（有node.exe、npm包、corepack包、npm和npx的脚本，这些东西使用者特殊场景下很可能也需要用）；还有toolchains、triplets里面的东西？按照vcpkg规则是不是统一输出到share里面比较好？test从share里面拿？
+
+
+

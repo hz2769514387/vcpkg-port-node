@@ -13,7 +13,7 @@
 
 ```
 test/
-├── vcpkg.json                 # 依赖：node[test-suite] + 一批"共存候选"库（显式声明）
+├── vcpkg.json                 # 依赖：node[test-suite,tools] + 一批"共存候选"库（显式声明）
 ├── vcpkg-configuration.json   # overlay-ports -> ../ports；overlay-triplets -> cmake/triplets
 ├── CMakePresets.json          # 六个平台的构建入口
 ├── CMakeLists.txt             # 主项目：find_package(node)、enable_testing()、编排子目录
@@ -32,6 +32,7 @@ test/
 | `unit` | gtest：`unit_vcpkg_baseline`（只链 vcpkg 库）与 `unit_node_coexist`（同时链 node::node） | 两个可执行分开，失败时能立刻区分"库自己有毛病"还是"共存有毛病" |
 | `coexist` | `coexist.js`（zlib/brotli/crypto/ICU/IDN/sqlite/http/http2/worker/wasm 全走一遍）+ 符号审计 | 行为级证据 |
 | `node-suite` | **node 官方测试套件**，由官方 `tools/test.py --shell=<本工程的可执行>` 驱动 | 见下 |
+| `tools` | port 的 `tools` feature 产物：`node_EXECUTABLE` 跑版本断言 + `npm/npx/corepack --version` | 只从 `find_package(node)` 导出的变量拿路径 |
 
 ```sh
 ctest --test-dir build/<preset> --output-on-failure            # 全部

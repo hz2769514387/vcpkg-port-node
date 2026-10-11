@@ -1170,3 +1170,69 @@ if %NODE_MAJOR_VERSION% GEQ 24 (
   见 15.3）。
 - 但这条**只是**让 zstd 之类的依赖能过；node 自己在交叉构建下还有更硬的障碍
   （构建期工具 mksnapshot/torque 必须在宿主上**运行**），见 `docs/暂时还没做.md` 第 2 项。
+
+### 15.7 ★★★ v8 内嵌 abseil 与 vcpkg 的 abseil 撞车（run #14，x64-linux）
+
+- 现象（node 已开编、`[48/1902]`）：
+  ```
+  ../../deps/v8/third_party/abseil-cpp/absl/base/internal/spinlock.cc:71:1: error:
+      redefinition of absl::lts_20260107::base_internal::SpinLock::SpinLock(SchedulingMode)
+  In file included from spinlock.cc:15:
+      <vcpkg_installed>/x64-linux/include/absl/base/internal/spinlock.h:66:22: note:
+      'constexpr ... SpinLock(SchedulingMode)' previously defined here
+  ```
+- 编译行给出了真因（**顺序**）：
+  ```
+  -I<vcpkg_installed>/include  -I<vcpkg_installed>/include  -I../../deps/v8/third_party/abseil-cpp
+  ```
+  port 通过 `--shared-*-includes=${CURRENT_INSTALLED_DIR}/include` 把 vcpkg 的 include 交给
+  configure.py，而它进的是 **target_defaults.include_dirs —— 所有目标**。于是 v8 自带那份
+  `absl/*.cc` 编到了 vcpkg 的同名头文件上（同名、同 LTS、内容不同）→ 重定义。
+- **影响面比"某个依赖装不上"大得多**：只要使用者工程里出现 abseil（protobuf / grpc / re2 /
+  abseil 本身都会把它拖进来），**node port 就编不过**。这正是"vcpkg 库能不能与 node port
+  共存"要防的那一类问题 —— 用户的验证需求把它逼出来了。
+- 修法（与 simdutf、v8_zlib 同一手法）：**让 v8 用 vcpkg 那一份**。
+  * `patches/0015-v8-use-vcpkg-abseil.patch`：`tools/v8_gypfiles/abseil.gyp` 的 abseil 目标
+    从 `static_library` + 300 行 sources 改成 `type: 'none'` + `direct_dependent_settings.libraries`
+    （头目录与库都由 vcpkg 提供）；
+  * `patches/0016-v8-use-vcpkg-highway.patch`：`v8.gyp` 的 highway 目标同样处理
+    （并**故意丢掉**原来的 `HWY_BROKEN_TARGETS` 等 define —— 现在 hwy 是 vcpkg 预编译的，
+    在依赖方再定义这些宏只会让头里的 inline 代码与预编译库的派发配置不一致）；
+  * port 依赖里加 `abseil` / `highway`；node-config.cmake 把 absl/hwy 一起链上
+    （静态库不进归档，最终链接要带）。Linux 上用 `-Wl,--start-group … --end-group`
+    包住那 91 个 absl 库（GNU ld 对顺序敏感；ld64 自己会重扫归档，不需要也不支持）。
+- 换完的收益：头与库同源，**进程里只剩一份 abseil / highway**，也消掉了"两份同名符号被
+  链接器静默折叠"的隐患（与 simdutf 的 S1 同性质）。
+
+### 15.8 ★ 给 gyp 的"列表变量"只能用 `-I`，不能用 `-D` + `includes`
+
+- 需求：abseil 有 **91 个**静态库，库名不能写死在补丁里，得由 portfile 按 vcpkg 里实际的
+  文件名 glob 后注入。而 gyp 的 `-D` 走 `NameValueListToDict`，**只能传字符串**（列表会被当成
+  一个字面量）。
+- 于是想到"生成一个小 gypi，用 `includes` 引进来"—— 实测不行：
+  ```
+  gyp: <(vcpkg_deps_gypi) not found ... while reading includes of exp.gyp
+  ```
+  gyp 解析 `includes` 的时机**早于** `-D` 变量生效。
+- 正确做法：用 gyp 自己的 **`-I <gypi>`**（它的存在意义就是这个）。portfile 生成
+  `${CURRENT_BUILDTREES_DIR}/vcpkg-deps.gypi`，configure.py 会把未知参数原样转给 gyp
+  （`configure.py` 末尾 `gyp_args += [arg for arg in args ...]`），所以直接传 `-I<path>` 即可。
+- 验证手法：拿一个最小 gyp 工程 + 假 gypi，跑 gyp 看 `<@(vcpkg_abseil_libs)` 是否展开、
+  `-labsl_base` 是否变成 `absl_base.lib`。
+
+### 15.9 output surface：可执行/工具按 vcpkg 规则进 `tools/`，不是 `share/`
+
+用户问"是不是统一输出到 share 里比较好"。查 vcpkg 里几个"复杂 port"的实际做法后定案：
+
+| 内容 | 去处 | 依据 |
+|---|---|---|
+| 可执行文件 / 工具（node.exe、npm 垫片） | `<prefix>/tools/<port>/` | `directx-dxc` 装 `tools/directx-dxc/dxc.exe`；`vtk` → `tools/vtk`；`qtbase` → `tools/Qt6/bin` |
+| cmake 配置 / usage / 数据（官方测试套件） | `<prefix>/share/<port>/` | 常规 |
+| triplet / toolchain | **不输出** | 属于消费端的构建配置；port 自带 triplet 会让它无法在别人的 triplet 下工作 |
+| 使用者怎么拿 | **由 `<port>-config.cmake` 导出变量** | `directx-dxc` 导 `DIRECTX_DXC_TOOL` 就是同一套路 |
+
+于是 port 多了一个可选 feature `tools`：装 `tools/node/`（可执行 + `node_modules/{npm,corepack}`
++ 垫片，垫片 POSIX sh 与 Windows `.cmd` 各一套，只用相对路径定位），并在 node-config.cmake 里
+导出 `node_EXECUTABLE` / `node_TOOLS_DIR` / `node_NPM` / `node_NPX` / `node_COREPACK`。
+消费端（`test/`）不猜路径，只用这些变量 —— 与 `share/node/test-suite` 的 `node_TEST_SUITE_DIR`
+同一套做法。

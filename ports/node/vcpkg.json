@@ -5,16 +5,21 @@
   "license": "MIT",
   "supports": "windows | linux | osx",
   "dependencies": [
+    "abseil",
+    "ada-idna",
+    "ada-url",
+    "brotli",
+    "c-ares",
+    "hdr-histogram",
+    "highway",
+    "icu",
     "libuv",
     "llhttp",
-    "zlib",
-    "brotli",
-    "zstd",
-    "ada-url",
-    "ada-idna",
-    "openssl",
     "nghttp2",
-    "c-ares",
+    "ngtcp2",
+    "openssl",
+    "simdjson",
+    "simdutf",
     {
       "name": "sqlite3",
       "features": [
@@ -28,15 +33,15 @@
         "session"
       ]
     },
-    "simdjson",
-    "simdutf",
-    "icu",
-    "ngtcp2",
-    "hdr-histogram"
+    "zlib",
+    "zstd"
   ],
   "features": {
     "test-suite": {
       "description": "额外安装 Node.js 官方测试套件（test/ 全量 + tools/test.py 驱动）到 share/node/test-suite。消费端可以用它自己的 node 嵌入可执行（tools/test.py --shell=<你的可执行>）把官方 JS 用例真跑一遍；不装则只有库与头文件。约 80 MB。"
+    },
+    "tools": {
+      "description": "额外把 node 可执行与 npm / npx / corepack 装到 tools/node（官方发行版那样的布局：可执行 + node_modules/{npm,corepack} + 垫片）。使用者特殊场景下需要独立用 node/npm 时开这个；不装则只有库与头文件。约 25 MB。"
     }
   }
 }

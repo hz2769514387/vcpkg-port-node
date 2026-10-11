@@ -107,6 +107,9 @@ jobs:
           files = [p.decode("utf-8") for p in ls.split(b"\x00") if p]
           bad = []
           for f in files:
+              if f.endswith('.cmd'):
+                  # 声明过的例外：Windows 批处理用 CRLF（见 .gitattributes 的 *.cmd 行）
+                  continue
               try:
                   if b"\r" in pathlib.Path(f).read_bytes():
                       bad.append(f)
@@ -147,7 +150,7 @@ jobs:
           for p in ports/node/* ports/node/.[!.]*; do
             [ -e "$p" ] || continue
             case "$(basename "$p")" in
-              portfile.cmake|vcpkg.json|usage|patches) ;;
+              portfile.cmake|vcpkg.json|usage|patches|scripts) ;;
               *) echo "::error::ports/node 出现了不该有的条目：$p"; exit 1 ;;
             esac
           done
@@ -446,6 +449,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
+          # head 会提前关管道 → 上游 tar/ls 收到 SIGPIPE 而非零退出；配合 pipefail 会让这一步
+          # 整步失败（run #14 就是这么把 logs job 弄红的）。这里统一给 `|| true`。
           ls -R all-logs | head -n 60 || true
           tar -czf ci-logs.tar.gz -C all-logs .
           ls -lh ci-logs.tar.gz
@@ -455,7 +460,7 @@ jobs:
             echo "下载 ci-logs artifact 即可拿到**全部平台**的日志（一个文件，目录名区分平台）。"
             echo ""
             echo '```'
-            tar -tzf ci-logs.tar.gz | head -n 60
+            tar -tzf ci-logs.tar.gz | head -n 60 || true
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 

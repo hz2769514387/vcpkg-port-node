@@ -1,0 +1,35 @@
+# port 的 tools feature 输出（node 可执行 + npm/npx/corepack）也要被真跑一遍。
+#
+# 这一组存在的意义：确认"使用者从 port 的安装产物里拿到可执行"这条路是通的 ——
+# test 不自己去猜路径，只用 node-config.cmake 导出的变量（vcpkg 惯例）。
+if(NOT node_EXECUTABLE)
+  message(STATUS "tools 用例：未启用 node 的 tools feature（没有 node_EXECUTABLE），跳过")
+  return()
+endif()
+
+message(STATUS "tools 用例：node_EXECUTABLE=${node_EXECUTABLE}")
+
+add_test(NAME tools-node-runs COMMAND "${node_EXECUTABLE}" -p "process.versions.node")
+set_tests_properties(tools-node-runs PROPERTIES
+  LABELS "tools"
+  PASS_REGULAR_EXPRESSION "24\\.21\\.0")
+
+# Windows 上 npm 是 .cmd，得经 cmd.exe 才能起（CreateProcess 不能直接跑 .cmd）
+if(WIN32)
+  add_test(NAME tools-npm-version COMMAND cmd /c "${node_NPM}" --version)
+  add_test(NAME tools-npx-version COMMAND cmd /c "${node_NPX}" --version)
+else()
+  add_test(NAME tools-npm-version COMMAND "${node_NPM}" --version)
+  add_test(NAME tools-npx-version COMMAND "${node_NPX}" --version)
+endif()
+set_tests_properties(tools-npm-version tools-npx-version PROPERTIES
+  LABELS "tools"
+  TIMEOUT 300)
+
+# corepack --version 在有些环境会去读 HOME/缓存；读到就把版本打出来，读不到也不该挂。
+if(WIN32)
+  add_test(NAME tools-corepack-version COMMAND cmd /c "${node_COREPACK}" --version)
+else()
+  add_test(NAME tools-corepack-version COMMAND "${node_COREPACK}" --version)
+endif()
+set_tests_properties(tools-corepack-version PROPERTIES LABELS "tools" TIMEOUT 300)

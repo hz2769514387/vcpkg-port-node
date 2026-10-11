@@ -63,6 +63,7 @@ add_subdirectory(coexist)
 
 include(${CMAKE_CURRENT_LIST_DIR}/tests/ctest_node_suite.cmake)
 include(${CMAKE_CURRENT_LIST_DIR}/tests/ctest_symbols.cmake)
+include(${CMAKE_CURRENT_LIST_DIR}/tests/ctest_tools.cmake)
 
 # ---------------------------------------------------------------------------
 # 一眼看清这次会跑什么（CI 日志里很有用）
