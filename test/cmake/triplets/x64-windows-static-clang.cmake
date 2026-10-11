@@ -34,3 +34,8 @@ set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE
 # 在 configure 命令行上传策略才有效 —— 写在 chainload 的 toolchain 里已经太晚，
 # 那个文件是被 project() 读的，而 cmake_minimum_required() 早就选完了。
 set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW")
+# clang-cl 22.x（VS 18 自带）比 19.x 严格：-Wincompatible-pointer-types 默认是 error。
+# hdr-histogram 等 upstream C 代码有真实的类型不匹配（uint32_t* vs unsigned long*），
+# 在 MSVC 上是 warning，在 clang-cl 上是 error。降为 warning 以便构建通过。
+set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types")
+set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types")

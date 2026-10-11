@@ -1,0 +1,74 @@
+--- a/tools/v8_gypfiles/v8.gyp	2026-10-11 18:30:43.504455700 +0800
++++ b/tools/v8_gypfiles/v8.gyp	2026-10-11 18:27:12.535781800 +0800
+@@ -2295,63 +2295,28 @@
+     },  # postmortem-metadata
+ 
+     {
++      # Z1: use vcpkg zlib instead of the vendored chromium copy.
++      # The core zlib .c files are removed (they produced duplicate symbols
++      # alongside vcpkg's zs.lib). Only compression_utils_portable.cc remains
++      # (chromium-specific convenience wrapper). CHROMIUM_ZLIB_NO_CHROMECONF
++      # disables the Cr_z_ symbol prefix so code calls standard zlib names
++      # (deflate, inflate, adler32, ...) provided by vcpkg's zs.lib at link time.
+       'target_name': 'v8_zlib',
+       'type': 'static_library',
+       'toolsets': ['host', 'target'],
+-      'conditions': [
+-        ['OS=="win"', {
+-          'conditions': [
+-            ['"<(target_arch)"=="arm64" and _toolset=="target"', {
+-              'defines': ['CPU_NO_SIMD']
+-            }, {
+-              'defines': ['X86_WINDOWS']
+-            }]
+-          ]
+-        }],
+-      ],
+       'direct_dependent_settings': {
++        'defines': ['CHROMIUM_ZLIB_NO_CHROMECONF'],
+         'include_dirs': [
+           '<(V8_ROOT)/third_party/zlib',
+           '<(V8_ROOT)/third_party/zlib/google',
+         ],
+       },
+-      'defines': [ 'ZLIB_IMPLEMENTATION' ],
++      'defines': ['CHROMIUM_ZLIB_NO_CHROMECONF'],
+       'include_dirs': [
+         '<(V8_ROOT)/third_party/zlib',
+         '<(V8_ROOT)/third_party/zlib/google',
+       ],
+       'sources': [
+-        '<(V8_ROOT)/third_party/zlib/adler32.c',
+-        '<(V8_ROOT)/third_party/zlib/chromeconf.h',
+-        '<(V8_ROOT)/third_party/zlib/compress.c',
+-        '<(V8_ROOT)/third_party/zlib/contrib/optimizations/insert_string.h',
+-        '<(V8_ROOT)/third_party/zlib/contrib/optimizations/insert_string.h',
+-        '<(V8_ROOT)/third_party/zlib/cpu_features.c',
+-        '<(V8_ROOT)/third_party/zlib/cpu_features.h',
+-        '<(V8_ROOT)/third_party/zlib/crc32.c',
+-        '<(V8_ROOT)/third_party/zlib/crc32.h',
+-        '<(V8_ROOT)/third_party/zlib/deflate.c',
+-        '<(V8_ROOT)/third_party/zlib/deflate.h',
+-        '<(V8_ROOT)/third_party/zlib/gzclose.c',
+-        '<(V8_ROOT)/third_party/zlib/gzguts.h',
+-        '<(V8_ROOT)/third_party/zlib/gzlib.c',
+-        '<(V8_ROOT)/third_party/zlib/gzread.c',
+-        '<(V8_ROOT)/third_party/zlib/gzwrite.c',
+-        '<(V8_ROOT)/third_party/zlib/infback.c',
+-        '<(V8_ROOT)/third_party/zlib/inffast.c',
+-        '<(V8_ROOT)/third_party/zlib/inffast.h',
+-        '<(V8_ROOT)/third_party/zlib/inffixed.h',
+-        '<(V8_ROOT)/third_party/zlib/inflate.c',
+-        '<(V8_ROOT)/third_party/zlib/inflate.h',
+-        '<(V8_ROOT)/third_party/zlib/inftrees.c',
+-        '<(V8_ROOT)/third_party/zlib/inftrees.h',
+-        '<(V8_ROOT)/third_party/zlib/trees.c',
+-        '<(V8_ROOT)/third_party/zlib/trees.h',
+-        '<(V8_ROOT)/third_party/zlib/uncompr.c',
+-        '<(V8_ROOT)/third_party/zlib/zconf.h',
+-        '<(V8_ROOT)/third_party/zlib/zlib.h',
+-        '<(V8_ROOT)/third_party/zlib/zutil.c',
+-        '<(V8_ROOT)/third_party/zlib/zutil.h',
+         '<(V8_ROOT)/third_party/zlib/google/compression_utils_portable.cc',
+         '<(V8_ROOT)/third_party/zlib/google/compression_utils_portable.h',
+       ],

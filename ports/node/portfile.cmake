@@ -40,6 +40,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0011-v8-use-vcpkg-simdutf-target.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0012-v8-simdutf-system-include.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0013-v8-compiler-add-descriptor-array-inl.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0014-v8-use-vcpkg-zlib-target.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。
@@ -119,9 +120,26 @@ macro(_node_shared _opt _pkg _libnames)
 endmacro()
 
 set(_node_shared_args "")
-_node_shared(openssl       openssl     "libcrypto,libssl")
-_node_shared(zlib          zlib        "zs")            # Windows+static 的 zlib 库名是 zs
-_node_shared(libuv         libuv       "libuv")
+
+# Windows static-clang 和 Linux/macOS 的静态库名不同：
+#   * Windows：zlib→zs, openssl→libcrypto,libssl, libuv→libuv, hdr→hdr_histogram_static
+#   * Linux/macOS：zlib→z, openssl→crypto,ssl, libuv→uv, hdr→hdr_histogram
+# 其余依赖库名两平台一致。
+if(VCPKG_TARGET_IS_WINDOWS)
+    set(_zlib_lib      "zs")
+    set(_openssl_lib   "libcrypto,libssl")
+    set(_libuv_lib     "libuv")
+    set(_hdrhist_lib   "hdr_histogram_static")
+else()
+    set(_zlib_lib      "z")
+    set(_openssl_lib   "crypto,ssl")
+    set(_libuv_lib     "uv")
+    set(_hdrhist_lib   "hdr_histogram")
+endif()
+
+_node_shared(openssl       openssl     "${_openssl_lib}")
+_node_shared(zlib          zlib        "${_zlib_lib}")
+_node_shared(libuv         libuv       "${_libuv_lib}")
 _node_shared(cares         c-ares      "cares")
 _node_shared(brotli        brotli      "brotlidec,brotlienc,brotlicommon")
 _node_shared(nghttp2       nghttp2     "nghttp2")
@@ -132,13 +150,7 @@ _node_shared(simdjson      simdjson    "simdjson")
 _node_shared(simdutf       simdutf     "simdutf")
 _node_shared(sqlite        sqlite3     "sqlite3")
 _node_shared(ada           ada-url     "ada")
-_node_shared(hdr-histogram hdr-histogram "hdr_histogram_static")
-
-# Linux/macOS 上 zlib 静态库名是 z，不是 zs —— 平台修正。
-if(NOT VCPKG_TARGET_IS_WINDOWS)
-    string(REPLACE "libname=zs" "libname=z" _node_shared_args "${_node_shared_args}")
-    string(REPLACE "libname=hdr_histogram_static" "libname=hdr_histogram" _node_shared_args "${_node_shared_args}")
-endif()
+_node_shared(hdr-histogram hdr-histogram "${_hdrhist_lib}")
 
 # ---------------------------------------------------------------------------
 # 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。

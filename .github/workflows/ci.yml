@@ -150,12 +150,15 @@ jobs:
         if: failure()
         shell: bash
         run: |
-          for f in "$VCPKG_ROOT"/buildtrees/node/*-out.log; do
+          # 搜索所有 buildtrees（不只是 node）的日志中的错误
+          for f in "$VCPKG_ROOT"/buildtrees/*/*-out.log; do
             [ -f "$f" ] || continue
-            echo "===== $f ====="
-            grep -n -m 25 -E "error:|fatal error|^FAILED|Error [0-9]+" "$f" || tail -n 60 "$f"
+            if grep -q -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$f" 2>/dev/null; then
+              echo "===== $f ====="
+              grep -n -m 30 -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$f" || tail -n 80 "$f"
+            fi
           done
-          for f in "$VCPKG_ROOT"/buildtrees/node/config-*-out.log; do
+          for f in "$VCPKG_ROOT"/buildtrees/*/config-*-out.log; do
             [ -f "$f" ] || continue
             echo "===== $f（tail 120）====="
             tail -n 120 "$f"
@@ -166,9 +169,30 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/ci-logs"
-          for f in "$VCPKG_ROOT"/buildtrees/node/*.log; do
-            [ -f "$f" ] && cp "$f" "$RUNNER_TEMP/ci-logs/$(basename "$f")"
+          # 收集所有 buildtrees 的日志（不只是 node），用 port 名做前缀防冲突
+          for f in "$VCPKG_ROOT"/buildtrees/*/*.log; do
+            [ -f "$f" ] || continue
+            port="$(basename "$(dirname "$f")")"
+            cp "$f" "$RUNNER_TEMP/ci-logs/${port}_$(basename "$f")"
           done
+          # 收集环境信息
+          {
+            echo "=== vcpkg version ==="
+            vcpkg version 2>&1 || true
+            echo "=== triplet ==="
+            echo "${{ matrix.triplet }}"
+            echo "=== compiler ==="
+            cc --version 2>&1 || true
+            c++ --version 2>&1 || true
+            clang-cl --version 2>&1 || true
+            echo "=== installed libs ==="
+            ls -la "$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/" 2>&1 || true
+            echo "=== installed pkgconfig ==="
+            ls "$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/pkgconfig/" 2>&1 || true
+            echo "=== disk space ==="
+            df -h 2>&1 || true
+          } > "$RUNNER_TEMP/ci-logs/env_info.txt"
+          echo "收集了 $(ls -1 "$RUNNER_TEMP/ci-logs" | wc -l) 个文件"
           ls -la "$RUNNER_TEMP/ci-logs" || true
 
       - name: 上传日志 artifact
@@ -177,7 +201,7 @@ jobs:
         with:
           name: vcpkg-logs-${{ matrix.triplet }}
           path: ${{ runner.temp }}/ci-logs
-          if-no-files-found: ignore
+          if-no-files-found: error
           retention-days: 7
 
       # ---- L3：消费端冒烟（find_package + 链接 + 真跑 JS）-------------------
