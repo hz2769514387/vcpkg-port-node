@@ -333,24 +333,53 @@ if(VCPKG_TARGET_IS_WINDOWS)
 endif()
 
 # ---- 可选 feature：官方测试套件 -------------------------------------------------
-# 消费端要跑 node 官方用例，就得有 test/ 与 tools/test.py。它是经**安装产物**
-# （share/node/test-suite）给出的，而不是让消费端去 port 源码目录里拿 ——
-# 依赖方向只有一条：消费端 -> port。
+# 消费端要跑 node 官方用例，就得有测试套件**以及它运行时会读的那部分源码树**。
+# 它是经**安装产物**（share/node/test-suite）给出的，而不是让消费端去 port 源码目录里拿
+# —— 依赖方向只有一条：消费端 -> port。
 #
 # 为什么要连 tools/test.py 一起装：node 官方的 skip / flaky 列表（各套件下的
 # *.status）只有 tools/test.py 会读，直接 `node --test` 会把这些状态全丢掉、
 # 于是满屏假失败。test.py 用 --shell=<你的 node 嵌入可执行> 驱动，
 # 且它按 dirname(sys.argv[0])/.. 推 workspace，所以 tools/ 与 test/ 必须同层。
+#
+# ★ run #21 的教训：只装 test/ + tools/test.py 不够。官方用例是按"在源码树里跑"
+#   写的，有一批会去读套件目录的**兄弟目录**，缺了就是 ENOENT/MODULE_NOT_FOUND
+#   （28 个失败里 12 个属于这一类，全是假失败）：
+#     doc/node.1、doc/api/cli.md      → test-cli-node-cli-manpage-*、test-cli-node-options-docs、
+#                                       test-process-env-allowed-flags-are-documented
+#     doc/changelogs/CHANGELOG_V24.md、CHANGELOG.md、src/node_version.h
+#                                     → test-release-changelog
+#     deps/npm/{package.json,bin/npm-cli.js} → test-npm-version、test-npm-install、test-release-npm
+#     deps/corepack/package.json      → test-corepack-version
+#     deps/acorn/acorn/package.json   → test-process-versions
+#     benchmark/_cli.js               → test-benchmark-cli
+#     lib/                            → test-process-load-env-file
+#     tools/icu/icu_versions.json     → test-icu-minimum-version
+#   doc/ 是这里最贵的一块（约 54 MB），但少了它那几个文档一致性用例永远跑不了。
 if("test-suite" IN_LIST FEATURES)
     set(_node_suite "${CURRENT_PACKAGES_DIR}/share/node/test-suite")
     file(INSTALL "${SOURCE_PATH}/test/" DESTINATION "${_node_suite}/test")
-    file(INSTALL
-        "${SOURCE_PATH}/tools/test.py"
-        "${SOURCE_PATH}/tools/utils.py"
-        DESTINATION "${_node_suite}/tools")
-    if(EXISTS "${SOURCE_PATH}/tools/run-worker.js")
-        file(INSTALL "${SOURCE_PATH}/tools/run-worker.js" DESTINATION "${_node_suite}/tools")
-    endif()
+    # 整棵 tools/（约 6 MB）：test.py / utils.py 是驱动，tools/icu/icu_versions.json
+    # 等是上游用例会读的数据。
+    file(INSTALL "${SOURCE_PATH}/tools/" DESTINATION "${_node_suite}/tools")
+
+    # 用例会按相对路径读的兄弟目录（漏一个就多一片假失败）。
+    file(INSTALL "${SOURCE_PATH}/benchmark/" DESTINATION "${_node_suite}/benchmark")
+    file(INSTALL "${SOURCE_PATH}/doc/" DESTINATION "${_node_suite}/doc")
+    file(INSTALL "${SOURCE_PATH}/lib/" DESTINATION "${_node_suite}/lib")
+    file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${_node_suite}/src"
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+    file(INSTALL "${SOURCE_PATH}/CHANGELOG.md" DESTINATION "${_node_suite}")
+
+    # deps/ 只装用例真正引用的那几份：整棵 deps/ 有 400+ MB（openssl 230、v8 94），
+    # 而用例只碰这几个包的 package.json / bin / 少量 js。
+    foreach(_node_dep IN ITEMS npm corepack acorn)
+        if(EXISTS "${SOURCE_PATH}/deps/${_node_dep}")
+            file(INSTALL "${SOURCE_PATH}/deps/${_node_dep}"
+                DESTINATION "${_node_suite}/deps/${_node_dep}")
+        endif()
+    endforeach()
+    unset(_node_dep)
 endif()
 
 # ---- 可选 feature：tools（node 可执行 + npm / npx / corepack）--------------------
@@ -478,6 +507,7 @@ set(_node_all_archives
     v8_initializers_slow v8_snapshot v8_libbase v8_libplatform v8_zlib
     abseil highway
     ncrypto ncrypto_engine nbytes merve uvwasi crdtp)
+set(_node_archive_links "")
 foreach(_a IN LISTS _node_all_archives)
     _node_archive_filename("${_a}" _node_file)
     string(APPEND _cfg
@@ -486,6 +516,7 @@ foreach(_a IN LISTS _node_all_archives)
         "  set_target_properties(node::${_a} PROPERTIES IMPORTED_LOCATION"
         " \"\${_node_lib}/${_node_file}\")\n"
         "endif()\n")
+    string(APPEND _node_archive_links " node::${_a}")
 endforeach()
 unset(_node_file)
 
@@ -493,14 +524,6 @@ string(APPEND _cfg
     "add_library(node::node INTERFACE IMPORTED)\n"
     "set_target_properties(node::node PROPERTIES"
     " INTERFACE_INCLUDE_DIRECTORIES \"\${_node_prefix}/include;\${_node_prefix}/include/node\")\n")
-# 链接顺序：libnode 先，其余静态库在后；循环引用由链接器自行处理（Windows 直接列）。
-string(APPEND _cfg "set(_node_link node::libnode node::node_base")
-foreach(_a IN LISTS _node_all_archives)
-    if(NOT _a STREQUAL "libnode" AND NOT _a STREQUAL "node_base")
-        string(APPEND _cfg " node::${_a}")
-    endif()
-endforeach()
-string(APPEND _cfg ")\n")
 # nghttp2 没有 CMake config 文件，手动建 imported target。
 string(APPEND _cfg
     "find_library(_nghttp2_lib nghttp2 HINTS \${_node_lib} REQUIRED)\n"
@@ -508,15 +531,54 @@ string(APPEND _cfg
     "  add_library(node::nghttp2 STATIC IMPORTED)\n"
     "  set_target_properties(node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n"
     "endif()\n")
+# ---------------------------------------------------------------------------
+# ★ 非 Windows 必须把**整条输入列表**包进 link group —— 这不是优化，是正确性。
+#
+# 这些 gyp 静态库之间有环：libnode ↔ node_base（node_base 的 embed_helpers.cc 调
+# node::SnapshotBuilder::GetEmbeddedSnapshotData()，而它由 libnode 的
+# src/node_snapshot_stub.cc 提供 —— node_use_node_snapshot!="true" 时 node.gyp 把它塞进
+# node_lib）；v8_compiler → v8_base_without_compiler（MachineReprToString / IsSubtype /
+# CodeFactory::CEntry 等）。
+#
+# MSVC 的 link.exe 会反复扫描整条列表，所以"顺序随便"在 Windows 上侥幸成立；
+# GNU ld / ld64 是**单趟左到右**：已经扫过的 archive 不会再回头 —— 于是
+# run #21 的 x64-linux / arm64-linux 在**消费端链接**时炸出几百条
+# `undefined reference`（arm64-osx 同样，只是先被 framework 缺失挡住）。
+#
+# 上游自己就是这么处理的：gyp 的非 Windows 链接规则把 LD_INPUTS 与 LIBS 一起包住 ——
+#   tools/gyp/pylib/gyp/generator/make.py:159/260  cmd_link = … -Wl,--start-group $(LD_INPUTS) … -Wl,--end-group
+#   tools/gyp/pylib/gyp/generator/ninja.py:2577   link = $ld $ldflags -o $out -Wl,--start-group $in $solibs $libs -Wl,--end-group
+# 注释原文就写着 "Due to circular dependencies between libraries :(, …"。make.py 的
+# LINK_COMMANDS_MAC（209 行起）用的是同一条命令 ⇒ macOS 的 ld64 也认这组开关。
+#
+# 组装成"自己与自己双向消费"那种链接也没问题：消费端把 vcpkg 库列在 node 之前时，
+# 那些库同样在组内，会被重新扫描。
+# ---------------------------------------------------------------------------
 string(APPEND _cfg
-    "target_link_libraries(node::node INTERFACE \${_node_link}"
-    " OpenSSL::SSL OpenSSL::Crypto libuv::uv_a c-ares::cares"
-    " unofficial::brotli::brotlidec unofficial::brotli::brotlienc"
-    " unofficial::brotli::brotlicommon ZLIB::ZLIB ada::ada simdjson::simdjson"
-    " simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static"
-    " ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3"
-    " hdr_histogram::hdr_histogram_static node::nghttp2"
-    " llhttp::llhttp_static)\n")
+    "set(_node_archives_link ${_node_archive_links})\n"
+    "set(_node_deps_link OpenSSL::SSL OpenSSL::Crypto libuv::uv_a c-ares::cares\n"
+    "    unofficial::brotli::brotlidec unofficial::brotli::brotlienc\n"
+    "    unofficial::brotli::brotlicommon ZLIB::ZLIB ada::ada simdjson::simdjson\n"
+    "    simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static\n"
+    "    ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3\n"
+    "    hdr_histogram::hdr_histogram_static node::nghttp2 llhttp::llhttp_static)\n"
+    "if(WIN32)\n"
+    "  # link.exe 自己会反复扫描，不需要 group。\n"
+    "  target_link_libraries(node::node INTERFACE \${_node_archives_link} \${_node_deps_link})\n"
+    "else()\n"
+    "  target_link_libraries(node::node INTERFACE\n"
+    "    \"-Wl,--start-group\" \${_node_archives_link} \${_node_deps_link} \"-Wl,--end-group\")\n"
+    "endif()\n")
+# macOS 系统 framework：node 自己的 node.gypi 就是这么链的
+# （node.gypi:258 `'libraries': [ '-framework CoreFoundation -framework Security' ]`），
+# 用来提供 CFArray*/CFDictionary*/CFTimeZone*（abseil 的 cctz 本地时区）与
+# SecTrust*/SecItem*（node 的 crypto_context.cc 走钥匙串）。缺了它们 arm64-osx 在
+# 消费端链接时就是一堆 `_CFArrayCreateMutable … not found`（run #21 实测）。
+if(VCPKG_TARGET_IS_OSX)
+    string(APPEND _cfg
+        "target_link_libraries(node::node INTERFACE"
+        " \"-framework CoreFoundation\" \"-framework Security\")\n")
+endif()
 # Windows 额外系统库：
 #   * winmm：V8 的 timeGetTime。
 #   * compiler-rt 内建库：hdr_histogram（以及别的 clang 编出来的 C 代码）用

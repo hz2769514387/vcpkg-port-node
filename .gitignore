@@ -67,14 +67,13 @@ vcpkg_installed/
 Testing/
 .cache/
 
-# python caches（gyp2vcpkg 是 python 工具，跑一次就会生成 __pycache__）
+# python caches
 __pycache__/
 *.py[cod]
 
-# 本地实验用的 node 发行包（三平台二进制，勿入库）
-tools/node_exe/
+# personal files
+.workbuddy/
 
-log/
-
-# 本仓库自己的临时/验证场地（不要用仓库外的自造目录做实验）
+# temporary
 .tmp/
+log/

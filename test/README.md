@@ -44,15 +44,27 @@ ctest --test-dir build/<preset> -N                              # 只列用例
 ## 官方测试套件是怎么跑起来的
 
 * 套件**不由 port 源码目录提供**，而是 port 的 `test-suite` feature 装到
-  `<prefix>/share/node/test-suite/`（`test/` 全量 + `tools/test.py`），
-  消费端从**安装产物**里拿 —— 依赖方向仍然只有"消费端 → port"。
+  `<prefix>/share/node/test-suite/`（`test/` 全量 + `tools/` + `doc/` + `deps/{npm,corepack,acorn}`
+  + `benchmark/` `lib/` `src/` `CHANGELOG.md`），消费端从**安装产物**里拿 ——
+  依赖方向仍然只有"消费端 → port"。
+  为什么要连那些兄弟目录一起装：官方用例是按"在源码树里跑"写的，有一批会读
+  `doc/api/cli.md`、`deps/npm/package.json`、`benchmark/_cli.js` …，缺了就是
+  ENOENT/MODULE_NOT_FOUND 的假失败（run #21 里 12 个失败属于这一类）。
 * 驱动用 node 官方的 `tools/test.py`，`--shell=` 指向本工程编译出来的 `app/node`。
   为什么不用 `node --test`：各套件下的 `*.status` 记录着上游标记的 SKIP / FLAKY 用例，
   **只有 test.py 会读**；`node --test` 会把这些状态全丢掉，于是满屏假失败。
 * `app/main.cpp` 因此要**忠实**：argv 原样交给 `node::Start`，Windows 上按上游用
   `wmain` 并把 argv 转成 UTF-8（官方 `src/node_main.cc` 就是这么写的）。
-* 分片：test.py 原生支持 `--run=<第几片>,<总片数>`，本工程把它映射成多个 ctest 用例，
-  交给 `ctest -j` 并行：`-DNODE_PORT_TEST_SHARDS=4`。
+* 默认口径 = 上游的 `make jstest`：**一个 test.py 进程**（套件全列在位置参数上），
+  并行度交给 `-j`（CI 里由 `$VCPKG_MAX_CONCURRENCY` 决定），并在 ctest 里标 `RUN_SERIAL`
+  —— 不与其他用例并发。理由：
+  * `test/common/tmpdir.js` 用 `.tmp.${TEST_SERIAL_ID||TEST_THREAD_ID}` 命名临时目录，这两个
+    id 都是**每个 test.py 进程内部**从 0 起算的 ⇒ 两个并发 test.py 会撞同一个 `.tmp.1`，
+    互相删掉对方的临时目录（EPERM / unlink ENOENT，run #21 实测 3 个）。
+  * `sequential/` 的用例是"独占机器"写的（固定端口），并发跑就是 `EADDRINUSE`（run #21 实测）。
+* 想分片也可以：`-DNODE_PORT_TEST_SHARDS=4` 会退回"套件 × 分片"的多个 ctest 用例；
+  此时每个用例都会拿到自己的 `--temp-dir`（`build/<preset>/node-suite-tmp/<用例名>`），
+  sequential 那几个分片会被标成 `RUN_SERIAL`（一次只跑一个）。
 * 上游标记的 flaky 用例默认按 `dontcare` 处理（跑，但不拿它的失败点红灯）——
   我们不是上游 CI，用默认的 `run` 会让已知不稳定用例反复把红灯点亮。
 
@@ -62,9 +74,9 @@ ctest --test-dir build/<preset> -N                              # 只列用例
 |---|---|---|
 | `NODE_PORT_TEST_NODE_SUITE` | `ON` | 是否注册官方套件用例 |
 | `NODE_PORT_TEST_SUITES` | `parallel,sequential,message,abort,async-hooks,known_issues,module-hooks,es-module,report` | 要跑哪些套件（逗号分隔；留空 = test.py 默认集合） |
-| `NODE_PORT_TEST_SHARDS` | 空 | 每个套件切几片 |
+| `NODE_PORT_TEST_SHARDS` | 空 | 每个套件切几片（空 = 一个进程跑完，见上） |
 | `NODE_PORT_TEST_SKIP` | 空 | 追加跳过表（只该放环境相关、非库问题的用例） |
-| `NODE_PORT_TEST_JOBS` | 空 | test.py 的 `-j` |
+| `NODE_PORT_TEST_JOBS` | `$env{VCPKG_MAX_CONCURRENCY}` | test.py 的 `-j` |
 | `NODE_PORT_TEST_FLAKY_MODE` | `dontcare` | `--flaky-tests` 取值 |
 
 ## 共存是怎么被"证明"的

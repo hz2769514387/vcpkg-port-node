@@ -27,5 +27,14 @@ set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW")
 #（incompatible-pointer-types：upstream C 代码真不匹配；unused-command-line-argument：
 # clang-cl 不实现 /MP 而上游 CMake 会加它，遇到 /WX 就变硬错误 —— gtest 即如此）。
 # 必须是空格分隔的单个字符串，不能用 list(APPEND)（那会拼成 `a;b` 一个参数）。
-set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument")
-set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument")
+#
+# ★ `--target=aarch64-pc-windows-msvc` 是**交叉编译的必需项**，不是冗余：
+#   CMake 端口由 chainload toolchain 里的 CMAKE_C_COMPILER_TARGET 覆盖（CMake 自己会
+#   加 --target=），但**不经 CMake 的端口**只看 triplet 的 VCPKG_C_FLAGS/CXX_FLAGS ——
+#   icu 走 autotools（vcpkg-make）就是这种。少了它 clang-cl 退回宿主默认的
+#   x86_64-pc-windows-msvc，编出 x64 目标文件，链接期报
+#     lld-link: error: …\conftest-….obj: machine type x64 conflicts with arm64
+#   而 autotools 只会把它读成 "error: C compiler cannot create executables"
+#   （run #21 实测，config.log 里那一行才是真因）。
+set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument --target=aarch64-pc-windows-msvc")
+set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument --target=aarch64-pc-windows-msvc")

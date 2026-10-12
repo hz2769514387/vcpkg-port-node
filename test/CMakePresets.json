@@ -15,8 +15,8 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "NODE_PORT_TEST_SHARDS": "4",
-        "NODE_PORT_TEST_JOBS": "1"
+        "NODE_PORT_TEST_SHARDS": "",
+        "NODE_PORT_TEST_JOBS": "$env{VCPKG_MAX_CONCURRENCY}"
       }
     },
     {

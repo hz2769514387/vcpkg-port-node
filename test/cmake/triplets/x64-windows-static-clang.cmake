@@ -43,8 +43,14 @@ set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW")
 #   list(APPEND)。它们会被直接拼进编译命令，列表会被写成 `-Wno-a;-Wno-b` 这种
 #   **一个**参数（分号没被拆开），clang-cl 只会报 "argument unused" —— 实测就是这么
 #   把 gtest 搞挂的。
-set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument")
-set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument")
+#
+# ★ `--target=x86_64-pc-windows-msvc` 是**显式写出来的**（虽然 clang-cl 的宿主默认
+#   就是它，不写也能过）：不经 CMake 的端口（icu 走 autotools/vcpkg-make）只看这两个
+#   变量，没有目标三元组就会退回宿主默认值 —— arm64 那一档就是这么死的
+#   （见 arm64-windows-static-clang.cmake 里的 config.log 证据）。
+#   写清楚，别让"默认值恰好对"成为一档平台的隐性依赖。
+set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument --target=x86_64-pc-windows-msvc")
+set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument --target=x86_64-pc-windows-msvc")
 
 # 第二条抑制开关（-Wno-unused-command-line-argument）的来由：
 # clang-cl 不实现 MSVC 的 /MP（多进程编译），而上游 CMake 工程只要 `if(MSVC)` 就会加它，
