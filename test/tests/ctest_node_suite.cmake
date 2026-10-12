@@ -69,7 +69,14 @@ foreach(_suite IN LISTS _node_suite_list)
       set_tests_properties("node-suite-${_suite}-shard${_shard}" PROPERTIES
         LABELS "node-suite;node-suite-${_suite}"
         TIMEOUT ${NODE_PORT_TEST_SUITE_TIMEOUT}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        # node 官方套件的 test/common/index.js 会检查"有没有冒出它不认识的全局"
+        # （Unexpected global(s) found）。宿主环境里任何 NODE_OPTIONS=--require 的
+        # 预载（本机就是 WorkBuddy 注入的 node-language-shim.cjs）都会往每个 node
+        # 进程里塞 __CODEBUDDY_NODE_* 全局，一跑就红 257 个 —— 全是环境问题，
+        # 不是库的问题（实测：直接跑同一个用例，清掉 NODE_OPTIONS 就过）。
+        # 所以这里把 NODE_OPTIONS 清空，套件进程不继承宿主的任何预载。
+        ENVIRONMENT "NODE_OPTIONS=")
       math(EXPR _node_suite_count "${_node_suite_count} + 1")
     endforeach()
   else()
@@ -78,7 +85,8 @@ foreach(_suite IN LISTS _node_suite_list)
     set_tests_properties("node-suite-${_suite}" PROPERTIES
       LABELS "node-suite;node-suite-${_suite}"
       TIMEOUT ${NODE_PORT_TEST_SUITE_TIMEOUT}
-      WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}")
+      WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+      ENVIRONMENT "NODE_OPTIONS=")
     math(EXPR _node_suite_count "${_node_suite_count} + 1")
   endif()
 endforeach()
