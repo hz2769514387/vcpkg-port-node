@@ -38,3 +38,26 @@ set(VCPKG_CMAKE_CONFIGURE_OPTIONS "-DCMAKE_POLICY_DEFAULT_CMP0091=NEW")
 #   （run #21 实测，config.log 里那一行才是真因）。
 set(VCPKG_C_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument --target=aarch64-pc-windows-msvc")
 set(VCPKG_CXX_FLAGS "-Wno-error=incompatible-pointer-types -Wno-unused-command-line-argument --target=aarch64-pc-windows-msvc")
+
+# ★ 把 --target 塞进 ENV{CC}/ENV{CXX} —— autotools 端口（如 icu）的链接测试靠它。
+#
+# 背景：vcpkg_configure_make 的 z_vcpkg_configure_make_process_flags 会把 CFLAGS 和
+# CXXFLAGS 的公共部分（--target=…）移到 CPPFLAGS。但 configure 的链接测试
+# （"C compiler cannot create executables"）不带 $CPPFLAGS，只看 $CC + $CFLAGS，
+# 于是 --target 丢失 → clang-cl 退回宿主默认的 x86_64 →
+#   lld-link: error: …\conftest-….obj: machine type x64 conflicts with arm64
+#
+# 修法：z_vcpkg_append_to_configure_environment 在 CMAKE_HOST_WIN32 上会**优先用
+# ENV{CC}** 而不是默认的 `compile ${VCPKG_DETECTED_CMAKE_C_COMPILER}`。
+# 把 ENV{CC} 设成 `compile clang-cl.exe --target=…`，automake 的 compile 包装器
+# 会把 --target=… 透传给 clang-cl.exe（`-*` 分支直通，见 automake lib/compile），
+# 链接测试就能编出 ARM64 目标文件。
+#
+# 为什么放三元组而不是 toolchain：z_vcpkg_get_cmake_vars 跑的是**子进程**，
+# toolchain 文件在那个子进程里加载——set(ENV{CC} …) 只影响子进程，
+# 回到 portfile 的 CMake 进程时 ENV{CC} 已经没了。三元组文件在 portfile
+# 的 CMake 进程里加载，ENV{CC} 能活到 z_vcpkg_append_to_configure_environment 检查它。
+# compile 和 clang-cl.exe 在 configure 运行时都在 PATH 里（vcpkg_configure_make
+# 会把 make_wrapper / automake 目录和编译器目录加到 PATH）。
+set(ENV{CC} "compile clang-cl.exe --target=aarch64-pc-windows-msvc")
+set(ENV{CXX} "compile clang-cl.exe --target=aarch64-pc-windows-msvc")
