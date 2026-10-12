@@ -69,7 +69,7 @@ foreach(_suite IN LISTS _node_suite_list)
       set_tests_properties("node-suite-${_suite}-shard${_shard}" PROPERTIES
         LABELS "node-suite;node-suite-${_suite}"
         TIMEOUT ${NODE_PORT_TEST_SUITE_TIMEOUT}
-        WORKING_DIRECTORY "${CMAKE_CURRENT_BINARY_DIR}"
+        WORKING_DIRECTORY "${node_TEST_SUITE_DIR}"
         # node 官方套件的 test/common/index.js 会检查"有没有冒出它不认识的全局"
         # （Unexpected global(s) found）。宿主环境里任何 NODE_OPTIONS=--require 的
         # 预载（本机就是 WorkBuddy 注入的 node-language-shim.cjs）都会往每个 node

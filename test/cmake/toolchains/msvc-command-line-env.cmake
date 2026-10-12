@@ -175,9 +175,21 @@ if(NOT _node_port_sdk_version STREQUAL "")
   foreach(_node_port_part ucrt um)
     _node_port_env_prepend(LIB "${_node_port_kits_root}/Lib/${_node_port_sdk_version}/${_node_port_part}/${_node_port_msvc_arch}")
   endforeach()
-  # SDK bin 目录（rc.exe / mt.exe / signtool.exe 等）加入 PATH：
-  # CMake try-compile 用 --rc=rc（裸名），rc.exe 必须在 PATH 上。
-  _node_port_env_prepend(PATH "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_msvc_arch}")
+  # SDK bin 目录放的是 rc.exe / mt.exe / signtool.exe 等**宿主工具**：按 vcvars
+  # 的规矩用**宿主**架构挑目录（x64_arm64 交叉时是 x64）。用目标架构会把
+  # ARM64 的 rc.exe 放上 PATH —— 那种可执行文件在 x64 宿主上根本起不来
+  # （CreateProcess: not a valid Win32 application），CMake try-compile 在
+  # vs_link_exe 的 RC 阶段报 "unknown error"。
+  set(_node_port_sdk_bin_arch "x64")
+  if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
+    set(_node_port_sdk_bin_arch "arm64")
+  elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(x86|i386|i686)$")
+    set(_node_port_sdk_bin_arch "x86")
+  endif()
+  if(NOT EXISTS "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}/rc.exe")
+    set(_node_port_sdk_bin_arch "${_node_port_msvc_arch}")
+  endif()
+  _node_port_env_prepend(PATH "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}")
 endif()
 
 # VERBOSE 而不是 STATUS：triplet 每个 port 都要加载一次，STATUS 会刷很多遍。
@@ -185,7 +197,7 @@ endif()
 # 后者不支持 `-outputresource:`（实测直接回 "ignoring unsupported 'outputresource:'
 # option"，什么都不做）。路径跟着上面算出来的 SDK 版本走，不写死版本号。
 if(NOT _node_port_sdk_version STREQUAL "")
-  set(NODE_PORT_WINSDK_MT "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_msvc_arch}/mt.exe"
+  set(NODE_PORT_WINSDK_MT "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}/mt.exe"
       CACHE FILEPATH "Windows SDK 的 mt.exe（嵌清单；llvm-mt 不支持 -outputresource）")
 endif()
 
@@ -197,3 +209,4 @@ unset(_node_port_msvc_root)
 unset(_node_port_kits_root)
 unset(_node_port_sdk_version)
 unset(_node_port_part)
+unset(_node_port_sdk_bin_arch)

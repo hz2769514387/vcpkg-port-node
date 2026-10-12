@@ -1,0 +1,12 @@
+diff --git a/tools/gyp/pylib/gyp/generator/ninja.py b/tools/gyp/pylib/gyp/generator/ninja.py
+--- a/tools/gyp/pylib/gyp/generator/ninja.py
++++ b/tools/gyp/pylib/gyp/generator/ninja.py
+@@ -1607,7 +1607,7 @@
+         elif spec["type"] == "static_library":
+             self.target.binary = self.ComputeOutput(spec)
+             if (
+-                self.flavor not in ("ios", "mac", "netbsd", "openbsd", "win")
++                self.flavor not in ("ios", "mac", "netbsd", "openbsd", "win", "linux")
+                 and not self.is_standalone_static_library
+             ):
+                 self.ninja.build(

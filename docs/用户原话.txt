@@ -141,5 +141,5 @@ node给openssl打了补丁，现在改成用vcpkg上的openssl，会有行为不
 tools/symbol_check.py是不是应该是ctest的一部分，做到test目录里面去作为测试？而且ctest里面都是c或js代码，应该用js或c实现更一致。
 上一轮日志已就位。
 
-
+有node源码：C:\work\vcpkg\downloads\nodejs-node-v24.21.0.tar.gz
 

@@ -50,6 +50,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         # 配一条可执行红线（下面的 scripts/redline-include-order.cmake）：这个顺序
         # 一旦退化，构建当场红，而不是等到编 absl 时才炸。
         "${CMAKE_CURRENT_LIST_DIR}/patches/0015-configure-prepend-v8-bundled-includes.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0016-gyp-ninja-no-thin-archives.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。
@@ -302,6 +303,11 @@ else()
     set(_node_lib_suffix ".a")
 endif()
 file(GLOB_RECURSE _node_archives "${SOURCE_PATH}/out/Release/obj/*${_node_lib_suffix}")
+# macOS：gyp 把 static_library 直接放在 out/Release 根下（ninja.py 的 type_in_output_root
+# 含 static_library），不在 obj/ 里。不补这一条，装出来的包没有 libnode.a，
+# 消费端 ninja 报 "libnode.a ... missing and no known rule to make it"。
+file(GLOB _node_archives_root "${SOURCE_PATH}/out/Release/*${_node_lib_suffix}")
+list(APPEND _node_archives ${_node_archives_root})
 foreach(_a IN LISTS _node_archives)
     file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
 endforeach()
@@ -353,7 +359,7 @@ endif()
 #   * 由 <port>-config.cmake 导出变量给使用者 —— directx-dxc 导 DIRECTX_DXC_TOOL 就是这个套路，
 #     使用者因此不用去猜路径；
 #   * triplet / toolchain **不输出** —— 那是消费端的构建配置（本 port 目录里也没有，
-#     使用者在自己的工程里放 triplet，本仓库 test/cmake/ 下有一份可抄的参考）。
+#     使用者在自己的工程里放 triplet，本仓库 test/ 下的 cmake/ 子目录里有一份可抄的参考）。
 #
 # 布局照 node 官方发行版：可执行 + node_modules/{npm,corepack} + 垫片。
 # 垫片两套都装（POSIX sh 与 Windows .cmd）—— 这样 cmd / PowerShell / Git-Bash / 跨平台
