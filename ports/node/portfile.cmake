@@ -40,7 +40,7 @@ if(NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
         "  V8 的 debug 构建体积/时长约翻倍、内存占用显著上升，且路线 B 的几个补丁\n"
         "  （PCH、/std: 分语言发出、rsp 文本处理）在 debug 下没有验证过。\n"
         "  能建起来的话欢迎反馈；建不起来也属预期。要避开：用设了 VCPKG_BUILD_TYPE=release\n"
-        "  的 triplet（本仓库 test/cmake/triplets/ 下有一份可抄的参考）。")
+        "  的 triplet（本仓库的消费端示例工程里，cmake/triplets/ 下有一份可抄的参考）。")
 endif()
 
 vcpkg_download_distfile(NODE_ARCHIVE
