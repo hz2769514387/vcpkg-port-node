@@ -92,11 +92,19 @@ set_tests_properties(unit-vcpkg-baseline PROPERTIES LABELS "unit" TIMEOUT 600)
 
 # ---- 共存 --------------------------------------------------------------------
 add_executable(unit_node_coexist test_node_coexist.cpp)
+# ★ 不重复链 node::node 的依赖：node-config.cmake 把 node 的静态库与依赖一起包在
+#   -Wl,--start-group ... -Wl,--end-group 里（GNU ld 单趟左到右，组内反复扫）。
+#   如果这里又显式链同一批 vcpkg 库（libuv / zlib / openssl / brotli / sqlite / icu …），
+#   CMake 去重后只保留组外那份 → node 的静态库在组内找不到这些符号 → undefined reference。
+#   所以这里只链 node::node 没有覆盖到的：fmt（node 不用）、nghttp2（手动 find_library
+#   的那份，node::nghttp2 是 imported target 但没设 INTERFACE_INCLUDE_DIRECTORIES）。
+#   其余 vcpkg 库的头文件与符号经 node::node 的 INTERFACE 传递自动可用。
 target_link_libraries(unit_node_coexist PRIVATE
     GTest::gtest_main
     node::node          # 把 node 的整棵静态库（含 v8 与 uvwasi/merve/nbytes/...）链进来
     node::nghttp2
-    ${NODE_PORT_TEST_VCPKG_LIBS})
+    fmt::fmt
+    "${NGHTTP2_LIBRARY}")
 target_include_directories(unit_node_coexist PRIVATE "${NGHTTP2_INCLUDE_DIR}")
 target_compile_features(unit_node_coexist PRIVATE cxx_std_20)
 # 用它来起子进程问 node "你用的是哪一份依赖"（交叉核对，见测试源码里的说明）。

@@ -35,14 +35,11 @@ find_package(ada CONFIG REQUIRED)
 find_package(ICU COMPONENTS uc i18n data REQUIRED)
 
 add_executable(mutual_roundtrip mutual_roundtrip.cpp)
+# ★ 同 unit_node_coexist：不重复链 node::node 的依赖（CMake 去重会把 vcpkg 库挪到
+#   --start-group 外，导致 node 静态库在组内找不到符号）。node::node 的 INTERFACE
+#   传递已覆盖 ZLIB / OpenSSL / sqlite3 / simdjson / ada / ICU 的头文件与符号。
 target_link_libraries(mutual_roundtrip PRIVATE
-    node::node            # 内含 v8、vcpkg 的 abseil/highway，以及下面这些依赖
-    ZLIB::ZLIB            # v8 内嵌 zlib 已并入这一份
-    OpenSSL::Crypto OpenSSL::SSL
-    unofficial::sqlite3::sqlite3
-    simdjson::simdjson
-    ada::ada              # node 的 URL 解析就用它（含 idna 数据）
-    ICU::uc ICU::i18n ICU::data)
+    node::node)            # 内含 v8、vcpkg 的 abseil/highway，以及下面这些依赖
 target_compile_features(mutual_roundtrip PRIVATE cxx_std_20)
 if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
   # 与 app/ 同样的原因：Windows 上目标必须嵌 node 的平台兼容性清单，否则一启动就退出码 216
