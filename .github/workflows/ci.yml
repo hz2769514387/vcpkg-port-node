@@ -362,9 +362,13 @@ jobs:
       - name: 构建 test
         shell: bash
         run: |
-          set -euo pipefail
+          # ★ tee 进文件：下面的"首错"步骤只扫 buildtrees 的日志，**看不见**这一步的
+          #   输出。run #18 实测：node port 四个平台全建成功了，但 test 工程的
+          #   NODE_EMBED_PATH 链接/编译失败让 job 红，而"首错"却显示
+          #   "没有匹配到错误行（若本 job 成功属正常）"—— 误导。
+          set -o pipefail
           cd test
-          cmake --build --preset ${{ matrix.preset }}
+          cmake --build --preset ${{ matrix.preset }} 2>&1 | tee "$RUNNER_TEMP/test-build.log"
 
       - name: 列出将要跑的 ctest 用例
         shell: bash
@@ -410,6 +414,16 @@ jobs:
               } >> "$summary"
             fi
           done
+          # ★ test 工程的构建输出也扫进来 —— 它不在 buildtrees 下，之前扫不到，
+          #   于是 job 红了而"首错"却说没问题（run #18 实测）。
+          if [ -f "$RUNNER_TEMP/test-build.log" ]; then
+            if grep -q -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$RUNNER_TEMP/test-build.log" 2>/dev/null; then
+              {
+                echo "===== test-build.log ====="
+                grep -n -m 30 -E "error:|fatal error|^FAILED|Error [0-9]+|LNK[0-9]+" "$RUNNER_TEMP/test-build.log" || tail -n 80 "$RUNNER_TEMP/test-build.log"
+              } >> "$summary"
+            fi
+          fi
           if [ -s "$summary" ]; then
             cat "$summary"
             {
@@ -427,6 +441,9 @@ jobs:
         shell: bash
         run: |
           mkdir -p "$RUNNER_TEMP/ci-logs"
+          for f in "$RUNNER_TEMP/test-build.log" "$RUNNER_TEMP/ctest.log" "$RUNNER_TEMP/ctest-list.txt"; do
+            [ -f "$f" ] && cp "$f" "$RUNNER_TEMP/ci-logs/" || true
+          done
           for f in "$VCPKG_ROOT"/buildtrees/*/*.log; do
             [ -f "$f" ] || continue
             port="$(basename "$(dirname "$f")")"
