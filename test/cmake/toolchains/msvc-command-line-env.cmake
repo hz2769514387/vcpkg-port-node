@@ -87,20 +87,44 @@ if(_node_port_vs_root STREQUAL "" AND NOT _node_port_pf_x86 STREQUAL "")
     HINTS "${_node_port_pf_x86}/Microsoft Visual Studio/Installer"
     NO_CACHE)
   if(_node_port_vswhere)
-    execute_process(COMMAND "${_node_port_vswhere}" -latest -products *
-      -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64
-      -property installationPath
-      OUTPUT_VARIABLE _node_port_vswhere_out
-      ERROR_QUIET
-      OUTPUT_STRIP_TRAILING_WHITESPACE)
-    string(REPLACE "\n" ";" _node_port_vswhere_lines "${_node_port_vswhere_out}")
-    if(_node_port_vswhere_lines)
-      list(GET _node_port_vswhere_lines 0 _node_port_vs_root)
-    endif()
+    # ★ 三条查询按"严 → 宽"排，**第一条就是原来那条**，所以 x64 机器上行为一字不变。
+    #   为什么需要后两条：原来硬要求 `Microsoft.VisualStudio.Component.VC.Tools.x86.x64`，
+    #   那是**x64 中心**的组件名。2026-10-13 起 arm64-windows 走原生 arm64 runner，
+    #   那个镜像上的 VS 若只装了 ARM64 工具集，这条查询返回空 ⇒ INCLUDE / LIB / nmake
+    #   全都**静默**不挂（vcpkg 的 nmake 支路于是报"找不到 nmake"，离真因很远）。
+    #   第二条用 `-requiresAny`：任一 C++ 工具组件在就算命中；第三条兜"任意 VS"。
+    #
+    #   ★ 参数用 '|' 分隔，**不能用 ';'**：';' 是 CMake 的列表分隔符，写成
+    #     "-requires;ID" 放进 list 会被拆成两个元素，下面的 foreach 就变成"按 token 迭代"
+    #     （第一条查询成了裸的 `-requires`，vswhere 会吐版本横幅，被误判成命中）。
+    #     这个坑是**把这段真跑一遍**才发现的，光看代码看不出来。
+    set(_node_port_vswhere_queries
+      "-requires|Microsoft.VisualStudio.Component.VC.Tools.x86.x64"
+      "-requiresAny|-requires|Microsoft.VisualStudio.Component.VC.Tools.x86.x64|Microsoft.VisualStudio.Component.VC.Tools.ARM64|Microsoft.VisualStudio.Component.VC.Tools.ARM64EC"
+      ""
+    )
+    foreach(_node_port_vswhere_query IN LISTS _node_port_vswhere_queries)
+      string(REPLACE "|" ";" _node_port_vswhere_query_args "${_node_port_vswhere_query}")
+      set(_node_port_vswhere_args -latest -products * -property installationPath ${_node_port_vswhere_query_args})
+      execute_process(COMMAND "${_node_port_vswhere}" ${_node_port_vswhere_args}
+        OUTPUT_VARIABLE _node_port_vswhere_out
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+      if(NOT _node_port_vswhere_out STREQUAL "")
+        string(REPLACE "\n" ";" _node_port_vswhere_lines "${_node_port_vswhere_out}")
+        list(GET _node_port_vswhere_lines 0 _node_port_vs_root)
+        message(VERBOSE "node-port: vswhere 命中（查询 [${_node_port_vswhere_query}]）→ ${_node_port_vs_root}")
+        break()
+      endif()
+    endforeach()
+    unset(_node_port_vswhere_args)
+    unset(_node_port_vswhere_query)
+    unset(_node_port_vswhere_query_args)
   endif()
   unset(_node_port_vswhere)
   unset(_node_port_vswhere_out)
   unset(_node_port_vswhere_lines)
+  unset(_node_port_vswhere_queries)
 endif()
 
 # vswhere 与环境变量都报原生路径（反斜杠），而 file(GLOB) **不认反斜杠** ——
