@@ -125,7 +125,6 @@ if(NOT _node_port_vs_root STREQUAL "")
 endif()
 
 # 目标架构决定 lib 目录（arm64 也要能走通 —— 无机器实测不等于不支持）。
-# 宿主工具目录恒为 Hostx64（我们只在 x64 宿主上构建）。
 set(_node_port_msvc_arch "x64")
 if(DEFINED VCPKG_TARGET_ARCHITECTURE AND NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "")
   if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
@@ -137,8 +136,28 @@ if(DEFINED VCPKG_TARGET_ARCHITECTURE AND NOT VCPKG_TARGET_ARCHITECTURE STREQUAL 
   endif()
 endif()
 
+# 宿主工具目录（nmake / cl.exe / dumpbin 所在）——**按宿主架构挑，不要写死 Hostx64**。
+# ★ 原来这里写的是"宿主工具目录恒为 Hostx64（我们只在 x64 宿主上构建）"。
+#   2026-10-13 起 arm64-windows 这一档走**原生 arm64 runner**（windows-11-arm），
+#   那个前提就不成立了：arm64 宿主上 VS 的工具目录是 `Hostarm64/arm64`。
+#   两个都挂上、存在才加（_node_port_env_prepend 自带 EXISTS 检查），
+#   这样 x64 宿主的行为与之前完全一致，arm64 宿主也能拿到 nmake。
+set(_node_port_msvc_host_dir "Hostx64/x64")          # 默认：x64 宿主（行为与之前一致）
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
+  set(_node_port_msvc_host_dir "Hostarm64/arm64")
+endif()
+
 if(NOT _node_port_msvc_root STREQUAL "")
-  _node_port_env_prepend(PATH "${_node_port_msvc_root}/bin/Hostx64/x64")
+  # 两个布局都挂上（存在才加）。★ 注意 prepend 是"插到最前"，所以**后调用的排在更前** ——
+  # 先挂备选、再挂宿主架构那个，保证宿主原生工具优先。
+  if(_node_port_msvc_host_dir STREQUAL "Hostx64/x64")
+    set(_node_port_msvc_host_alt "Hostarm64/arm64")
+  else()
+    set(_node_port_msvc_host_alt "Hostx64/x64")
+  endif()
+  _node_port_env_prepend(PATH "${_node_port_msvc_root}/bin/${_node_port_msvc_host_alt}")
+  _node_port_env_prepend(PATH "${_node_port_msvc_root}/bin/${_node_port_msvc_host_dir}")
+  unset(_node_port_msvc_host_alt)
   _node_port_env_prepend(INCLUDE "${_node_port_msvc_root}/include")
   _node_port_env_prepend(LIB "${_node_port_msvc_root}/lib/${_node_port_msvc_arch}")
 endif()
