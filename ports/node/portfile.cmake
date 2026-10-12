@@ -785,11 +785,20 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "target_link_options(unofficial::node::node INTERFACE \"/STACK:${_node_stack_reserve}\")\n")
 endif()
 # 装了 test-suite feature 就导出官方套件的根目录（tools/test.py 以它的父目录为 workspace）。
+# ★ 本文件现在装在 share/unofficial-node/（目录名必须与**包名**一致，find_package(unofficial-node)
+#   才找得到，见上面那段），而套件仍在 share/node/test-suite/ ⇒ 相对路径要走隔壁那层。
 string(APPEND _cfg
-    "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/test-suite/tools/test.py\")\n"
-    "  set(node_TEST_SUITE_DIR \"\${CMAKE_CURRENT_LIST_DIR}/test-suite\")\n"
+    "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/../node/test-suite/tools/test.py\")\n"
+    "  set(node_TEST_SUITE_DIR \"\${CMAKE_CURRENT_LIST_DIR}/../node/test-suite\")\n"
     "endif()\n")
-file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/unofficial-node-config.cmake" "${_cfg}")
+# Windows 平台兼容性清单：消费端的目标必须嵌它，否则进程一启动就退出码 216（实测）。
+# ★ 这个变量此前**根本没导出** ⇒ test/app 里 `if(DEFINED node_NODE_SOURCE_MANIFEST)` 一直为假、
+#   清单从来没被嵌上（与欠账 §5l「tools feature 只装文件没导变量」是同一类静默失效）。
+if(VCPKG_TARGET_IS_WINDOWS)
+    string(APPEND _cfg
+        "set(node_NODE_SOURCE_MANIFEST \"\${_node_prefix}/share/node/node.exe.extra.manifest\")\n")
+endif()
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config.cmake" "${_cfg}")
 
 # ---------------------------------------------------------------------------
 # node-config-version.cmake —— 让 `find_package(node 24.21.0 CONFIG)` 能工作，
@@ -819,7 +828,7 @@ if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86" OR VCPKG_TARGET_ARCHITECTURE STREQUA
 endif()
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
-    "${CURRENT_PACKAGES_DIR}/share/node/unofficial-node-config-version.cmake"
+    "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config-version.cmake"
     VERSION "${VERSION}"
     COMPATIBILITY SameMajorVersion)
 
