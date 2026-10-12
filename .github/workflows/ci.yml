@@ -171,6 +171,15 @@ jobs:
           fi
           echo "ports/node 下的 cmake 文件全部可被 CMake 解析"
 
+          # ★ 上一条挡不住的盲区（2026-10-13 实测付出 2h37m 的代价）：
+          #   `cmake -P` 只在**执行到某一行**时才报"引号内变量引用没闭合"，
+          #   而 portfile 执行到第一个 `vcpkg_*` 命令就停下了（那是预期的）——
+          #   于是 `"${_cfg"`（少一个 `}`）这种错它**永远报不出来**。
+          #   这里补一个纯文本检查器（带自测），专治这一类。
+          echo "=== 引号内变量引用是否闭合 ==="
+          python3 tools/check_cmake_strings.py --self-test
+          python3 tools/check_cmake_strings.py ports/node
+
       - name: port 必须自包含（不引用 port 目录外的任何东西）
         shell: bash
         run: |
@@ -420,23 +429,34 @@ jobs:
       #   （run #21 实测 automake-1.17.tar.gz）。vcpkg 自身没有可配的重试间隔，
       #   这里在 cmake --preset 外面套一层：失败后 10s / 1m / 2m 重试共 3 次。
       #   vcpkg 会缓存已下载的文件，重试只补拉失败的那个，不会从头来。
-      - name: 配置 test（cmake preset，带下载重试）
+      #
+      # ★★ 但**只对下载/网络类失败重试**（2026-10-13 加）。
+      #   为什么：一次"配置 test"会把整棵 node 重编一遍（x64-windows 实测 **32 分钟**）。
+      #   对**确定性**失败重试 = 把故障时间乘 4。实测代价：portfile 里一个笔误
+      #   （`"${_cfg"` 少一个 `}`）被重试了 4 次，白烧 **2 小时 37 分钟**，
+      #   而真因一行就能看出来。所以：不像下载问题的，立刻失败，把时间留给下一次修复。
+      - name: 配置 test（cmake preset，只对下载类失败重试）
         shell: bash
         run: |
           set -uo pipefail
           cd test
+          log="$RUNNER_TEMP/configure.log"
           delays=(10 60 120)
           for attempt in 0 1 2 3; do
-            if cmake --preset ${{ matrix.preset }}; then
+            if cmake --preset ${{ matrix.preset }} 2>&1 | tee "$log"; then
               echo "配置成功（第 $((attempt+1)) 次尝试）"
               exit 0
             fi
+            if ! grep -qE "Failed to download|Could not resolve|Timeout was reached|curl:|Failed to connect|connection (timed out|reset)|502 Bad Gateway|503 Service|vcpkg_download_distfile" "$log"; then
+              echo "::error::配置失败，且输出里看不到下载/网络类特征 —— 不再重试（重试要重编整棵 node，约半小时起）"
+              exit 1
+            fi
             if [ "$attempt" -eq 3 ]; then
-              echo "::error::配置失败，已重试 3 次（10s/1m/2m），放弃"
+              echo "::error::配置失败（疑似下载问题），已重试 3 次（10s/1m/2m），放弃"
               exit 1
             fi
             wait=${delays[$attempt]}
-            echo "::warning::第 $((attempt+1)) 次配置失败，${wait} 秒后重试..."
+            echo "::warning::第 $((attempt+1)) 次配置失败，疑似下载问题，${wait} 秒后重试..."
             sleep "$wait"
           done
 

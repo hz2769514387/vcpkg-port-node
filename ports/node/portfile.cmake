@@ -745,7 +745,7 @@ string(APPEND _cfg
     "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/test-suite/tools/test.py\")\n"
     "  set(node_TEST_SUITE_DIR \"\${CMAKE_CURRENT_LIST_DIR}/test-suite\")\n"
     "endif()\n")
-file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/node-config.cmake" "${_cfg")
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/node-config.cmake" "${_cfg}")
 
 # ---------------------------------------------------------------------------
 # node-config-version.cmake —— 让 `find_package(node 24.21.0 CONFIG)` 能工作，
