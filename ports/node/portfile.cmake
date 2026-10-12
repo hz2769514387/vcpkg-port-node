@@ -367,19 +367,30 @@ if("test-suite" IN_LIST FEATURES)
     file(INSTALL "${SOURCE_PATH}/benchmark/" DESTINATION "${_node_suite}/benchmark")
     file(INSTALL "${SOURCE_PATH}/doc/" DESTINATION "${_node_suite}/doc")
     file(INSTALL "${SOURCE_PATH}/lib/" DESTINATION "${_node_suite}/lib")
+    # .cc 也要装：test-cli-node-options-docs 读 src/node_options.cc 去核对
+    # CLI 选项与文档的一致性。只装 .h/.hpp 会让它 ENOENT。
     file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${_node_suite}/src"
-        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
+        FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.cc")
     file(INSTALL "${SOURCE_PATH}/CHANGELOG.md" DESTINATION "${_node_suite}")
 
     # deps/ 只装用例真正引用的那几份：整棵 deps/ 有 400+ MB（openssl 230、v8 94），
     # 而用例只碰这几个包的 package.json / bin / 少量 js。
     foreach(_node_dep IN ITEMS npm corepack acorn)
         if(EXISTS "${SOURCE_PATH}/deps/${_node_dep}")
+            # file(INSTALL <dir> DEST) 把 <dir> 本体拷进 DEST → DEST/<dir>/...
+            # 所以 DEST 给 .../deps 而不是 .../deps/<dir>（后者会出 deps/npm/npm/）。
             file(INSTALL "${SOURCE_PATH}/deps/${_node_dep}"
-                DESTINATION "${_node_suite}/deps/${_node_dep}")
+                DESTINATION "${_node_suite}/deps")
         endif()
     endforeach()
     unset(_node_dep)
+
+    # test-icu-minimum-version 读 deps/v8/src/objects/intl-objects.h 去核对
+    # ICU 版本与 V8 里硬编码的版本一致。整棵 deps/v8 有 94 MB，只装这一个文件。
+    if(EXISTS "${SOURCE_PATH}/deps/v8/src/objects/intl-objects.h")
+        file(INSTALL "${SOURCE_PATH}/deps/v8/src/objects/intl-objects.h"
+            DESTINATION "${_node_suite}/deps/v8/src/objects")
+    endif()
 endif()
 
 # ---- 可选 feature：tools（node 可执行 + npm / npx / corepack）--------------------
