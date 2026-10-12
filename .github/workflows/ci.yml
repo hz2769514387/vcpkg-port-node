@@ -249,16 +249,29 @@ jobs:
             triplet: arm64-linux
             vcpkg_conc: 4
             allow_failure: true
+          # expect_arch：产物的 PE Machine 断言用（见"断言产物架构"那一步）。
           - os: windows-latest
             preset: windows-clang-cl
             triplet: x64-windows-static-clang
             vcpkg_conc: 4
             allow_failure: false
-          - os: windows-latest
+            expect_arch: x64
+          # ★ arm64 走 **原生 arm64 runner（windows-11-arm）**，不做 x64 宿主交叉编译。
+          #   原因（run #23 / #24 实测）：交叉编译会打开 gyp 的 host toolset
+          #   —— configure.py 里 `want_separate_host_toolset = int(cross_compiling)` ——
+          #   而 `--with-intl=system-icu` 让 ICU 变成"只有目标架构一份"的**外部**库；
+          #   gyp 的 host toolset 机制能给树内依赖编一份宿主的，但变不出宿主架构的外部 ICU。
+          #   于是宿主工具（gen-regexp-special-case → 之后还有 mksnapshot）用 x64 链接器
+          #   去链 ARM64 的 icu*.lib，报一堆 LNK2019 + 21 条 LNK4272。
+          #   宿主==目标时这个开关是 0 ⇒ 整类问题消失（这也是上游自己对 win-arm64 的做法）。
+          #   ⚠️ 该镜像带 **x64 仿真**：配置不当会"静默产出 x64 二进制"（它在 arm64 上照样跑），
+          #   所以下一步的产物架构断言是必须的，不是装饰。
+          - os: windows-11-arm
             preset: windows-clang-cl-arm64
             triplet: arm64-windows-static-clang
             vcpkg_conc: 4
             allow_failure: true
+            expect_arch: ARM64
           - os: macos-latest
             preset: macos
             triplet: arm64-osx
@@ -302,7 +315,9 @@ jobs:
             Linux-X64)   asset="cmake-$ver-linux-x86_64.tar.gz";    inner="cmake-$ver-linux-x86_64" ;;
             Linux-ARM64) asset="cmake-$ver-linux-aarch64.tar.gz";   inner="cmake-$ver-linux-aarch64" ;;
             macOS-*)     asset="cmake-$ver-macos-universal.tar.gz"; inner="cmake-$ver-macos-universal/CMake.app/Contents" ;;
-            Windows-*)   asset="cmake-$ver-windows-x86_64.zip";     inner="cmake-$ver-windows-x86_64" ;;
+            # arm64 Windows 有官方资产，别拿 x86_64 那份在仿真下跑（慢且徒增变量）。
+            Windows-ARM64) asset="cmake-$ver-windows-arm64.zip";  inner="cmake-$ver-windows-arm64" ;;
+            Windows-*)     asset="cmake-$ver-windows-x86_64.zip"; inner="cmake-$ver-windows-x86_64" ;;
             *) echo "::error::未知平台 ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
           esac
           cd "$RUNNER_TEMP"
@@ -325,16 +340,30 @@ jobs:
           "$bin/cmake" --version | head -1
 
       # ---- Windows：确保 clang-cl 可用 ----------------------------------------
+      # ★ 不能只找 `Llvm/x64`（那是 x64 宿主的布局），也不能"随便挑一个"：
+      #   本机实测 VS 会**同时装 x64 与 ARM64 两套 LLVM**（`Llvm/x64`、`Llvm/ARM64`），
+      #   按字典序挑会选中 ARM64，把 x64 档的编译器悄悄换掉。所以**按 runner 自己的架构挑**，
+      #   找不到再放宽到任意架构兜底。
+      #   NODE_PORT_LLVM_ROOT 取 `<...>/Llvm/<arch>` —— clang-cl.cmake 会在它下面
+      #   先找 `x64/bin` 再找 `bin/`，两种布局都覆盖，所以 x64 档行为不变。
       - name: 定位 clang-cl（Windows）
         if: runner.os == 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          VS_LLVM=$(find "/c/Program Files/Microsoft Visual Studio" -path "*/VC/Tools/Llvm/x64/bin/clang-cl.exe" 2>/dev/null | head -1 || true)
+          case "$RUNNER_ARCH" in
+            ARM64) llvm_arch="ARM64" ;;
+            *)     llvm_arch="x64" ;;
+          esac
+          VS_LLVM=$(find "/c/Program Files/Microsoft Visual Studio" -path "*/VC/Tools/Llvm/${llvm_arch}/bin/clang-cl.exe" 2>/dev/null | head -1 || true)
+          if [ -z "$VS_LLVM" ]; then
+            # 兜底：VS 的布局万一不是 Llvm/<arch>/（比如只装了一份 LLVM）。
+            VS_LLVM=$(find "/c/Program Files/Microsoft Visual Studio" -path "*/VC/Tools/Llvm/*/bin/clang-cl.exe" 2>/dev/null | head -1 || true)
+          fi
           if [ -n "$VS_LLVM" ]; then
             LLVM_ROOT=$(dirname "$(dirname "$VS_LLVM")")
             echo "NODE_PORT_LLVM_ROOT=$LLVM_ROOT" >> "$GITHUB_ENV"
-            echo "找到 VS 自带 LLVM：$LLVM_ROOT"
+            echo "找到 VS 自带 LLVM：$LLVM_ROOT（clang-cl: $VS_LLVM）"
             exit 0
           fi
           if [ -f "/c/Program Files/LLVM/bin/clang-cl.exe" ]; then
@@ -342,7 +371,11 @@ jobs:
             echo "找到独立 LLVM"
             exit 0
           fi
+          # 失败时把"实际上有什么"打出来 —— 一行错误信息不该让人再花一轮 CI 去猜。
           echo "::error::找不到 clang-cl，需要安装 LLVM 或 VS 的 C++ Clang 组件"
+          echo "--- 实际存在的东西 ---"
+          ls -d "/c/Program Files/LLVM"* "/c/Program Files (x86)/LLVM"* 2>/dev/null || echo "(没有 LLVM 目录)"
+          find "/c/Program Files/Microsoft Visual Studio" -maxdepth 5 -name "clang-cl.exe" 2>/dev/null | head -10 || true
           exit 1
 
       # ---- 装指定版本 vcpkg --------------------------------------------------
@@ -417,6 +450,44 @@ jobs:
           set -o pipefail
           cd test
           cmake --build --preset ${{ matrix.preset }} 2>&1 | tee "$RUNNER_TEMP/test-build.log"
+
+      # ---- 断言产物架构 --------------------------------------------------------
+      # 为什么需要（不是装饰）：arm64 Windows runner 带 **x64 仿真** —— 工具链配置不当
+      # （target 没传下去 / 拿错 triplet）时构建会**悄悄**产出 x64 二进制，而它在 arm64 上
+      # 照样能跑，于是 ctest 全绿却什么也没证明。这条直接读 PE 头，一眼定架构。
+      # 用 od 而不是 dumpbin：后者要先把 VS 环境摆好，而这个断言要能在**任何**一步失败后
+      # 用最少的前提跑起来。
+      - name: 断言产物架构（Windows）
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          exe="test/build/${{ matrix.preset }}/app/node.exe"
+          want="${{ matrix.expect_arch }}"
+          if [ ! -f "$exe" ]; then
+            echo "::error::$exe 不存在，无法断言架构"
+            exit 1
+          fi
+          # PE：e_lfanew（4 字节，偏移 0x3C）指向 "PE\0\0"，其后 2 字节是 Machine。
+          e_lfanew=$(od -An -tu4 -j 60 -N 4 "$exe" | tr -d ' ')
+          sig=$(od -An -tx1 -j "$e_lfanew" -N 4 "$exe" | tr -d ' \n')
+          machine=$(od -An -tx2 -j $((e_lfanew + 4)) -N 2 "$exe" | tr -d ' ')
+          if [ "$sig" != "50450000" ]; then
+            echo "::error::$exe 不是 PE 文件（签名读出 $sig）"
+            exit 1
+          fi
+          case "$machine" in
+            8664) got="x64" ;;
+            aa64) got="ARM64" ;;
+            014c) got="x86" ;;
+            01c4) got="ARM" ;;
+            *)    got="0x$machine" ;;
+          esac
+          echo "$exe：Machine=0x$machine（$got），期望 $want"
+          if [ "$got" != "$want" ]; then
+            echo "::error::产物架构不对：$got != $want。arm64 runner 带 x64 仿真，x64 产物也能跑 —— 必须在这里挡住。"
+            exit 1
+          fi
 
       - name: 列出将要跑的 ctest 用例
         shell: bash
