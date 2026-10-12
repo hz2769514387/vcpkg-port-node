@@ -118,6 +118,28 @@ set(CMAKE_CXX_COMPILER_FRONTEND_VARIANT "MSVC")
 set(CMAKE_C_COMPILER_TARGET "${_node_port_compiler_target}" CACHE STRING "" FORCE)
 set(CMAKE_CXX_COMPILER_TARGET "${_node_port_compiler_target}" CACHE STRING "" FORCE)
 
+# ---------------------------------------------------------------------------
+# arm64 交叉编译：把 --target 塞进 CC/CXX 环境变量
+#
+# vcpkg_configure_make 对 autotools 端口（如 icu）会把 CFLAGS 里的 --target=
+# 移到 CPPFLAGS（z_vcpkg_configure_make_process_flags 的"Filter common CPPFLAGS"段）。
+# 但部分 configure 脚本的 link test 不带 $CPPFLAGS，于是 --target 丢了，
+# clang-cl 退回宿主默认的 x86_64，编出 x64 目标文件 →
+#   lld-link: error: …\conftest-….obj: machine type x64 conflicts with arm64
+# 而 autotools 只会把它读成 "error: C compiler cannot create executables"。
+#
+# 这里直接设 ENV{CC}/ENV{CXX}：vcpkg_configure_make 的
+# z_vcpkg_append_to_configure_environment 在 Windows 上会优先用 ENV{CC}
+# 而不是默认的 VCPKG_DETECTED_CMAKE_C_COMPILER。这样 --target 就不经过
+# CFLAGS/CPPFLAGS 过滤，始终跟着编译器走。
+# 只对非默认架构（arm64）做：x64 是 clang-cl 的宿主默认，不需要。
+# ---------------------------------------------------------------------------
+if(NOT _node_port_target_arch STREQUAL "x86_64")
+  set(ENV{CC} "${CMAKE_C_COMPILER} --target=${_node_port_compiler_target}")
+  set(ENV{CXX} "${CMAKE_CXX_COMPILER} --target=${_node_port_compiler_target}")
+  message(VERBOSE "node-port: arm64 交叉编译，CC/CXX 已注入 --target=${_node_port_compiler_target}")
+endif()
+
 # CRT 口径**由 triplet 决定，这里不写死**：vcpkg 的 windows toolchain 会按
 # VCPKG_CRT_LINKAGE 设好 CMAKE_MSVC_RUNTIME_LIBRARY（static → /MT，dynamic → /MD）。
 # 本文件作为 chainload toolchain 在 vcpkg 之后加载，若在此 FORCE 覆盖，就会让

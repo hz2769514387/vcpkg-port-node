@@ -352,12 +352,30 @@ jobs:
       # ---- L2 + L3：配置 + 构建 + 运行消费端冒烟 ------------------------------
       # 清单模式：test/vcpkg.json 声明依赖 node，vcpkg 自动装（含 overlay port）。
       # CMake preset 指定 triplet 和 toolchain，无需手敲 -D。
-      - name: 配置 test（cmake preset）
+      #
+      # ★ 下载重试：vcpkg 从 ftpmirror.gnu.org 等外站拉源码包时可能超时
+      #   （run #21 实测 automake-1.17.tar.gz）。vcpkg 自身没有可配的重试间隔，
+      #   这里在 cmake --preset 外面套一层：失败后 10s / 1m / 2m 重试共 3 次。
+      #   vcpkg 会缓存已下载的文件，重试只补拉失败的那个，不会从头来。
+      - name: 配置 test（cmake preset，带下载重试）
         shell: bash
         run: |
-          set -euo pipefail
+          set -uo pipefail
           cd test
-          cmake --preset ${{ matrix.preset }}
+          delays=(10 60 120)
+          for attempt in 0 1 2 3; do
+            if cmake --preset ${{ matrix.preset }}; then
+              echo "配置成功（第 $((attempt+1)) 次尝试）"
+              exit 0
+            fi
+            if [ "$attempt" -eq 3 ]; then
+              echo "::error::配置失败，已重试 3 次（10s/1m/2m），放弃"
+              exit 1
+            fi
+            wait=${delays[$attempt]}
+            echo "::warning::第 $((attempt+1)) 次配置失败，${wait} 秒后重试..."
+            sleep "$wait"
+          done
 
       - name: 构建 test
         shell: bash
