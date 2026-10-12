@@ -21,6 +21,28 @@
 
 vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
+# ---------------------------------------------------------------------------
+# debug 口径：**从未实测过**，所以这里明说，而不是沉默。
+#
+# 事实（欠账 §1）：CI 全部 triplet 都是 VCPKG_BUILD_TYPE=release，debug 从未被编译过。
+# 路线 B 的补丁（PCH、`/std:` 分语言发出、rsp 文本处理）在 debug 下都没验证过，
+# V8 的 debug 构建体积/时长约翻倍 + 内存占用显著上升。
+#
+# 为什么只 WARNING 不 FATAL_ERROR：我们**确实不知道**它能否建起来 ——
+# 断言"一定失败"是过度声称，而阻塞一个也许能成功的用法更糟。
+# 等哪天真跑通了（或真确认不行），再把这里换成对应的结论。
+#
+# ★ 来源：1013 评审报告 G6。这条我接受一半 —— 接受"必须显式声明"，
+#   不接受"直接报错"（依据不足）。
+if(NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
+    message(WARNING
+        "node port 的 **debug 口径从未实测**（CI 只跑 release，见欠账清单 §1）。\n"
+        "  V8 的 debug 构建体积/时长约翻倍、内存占用显著上升，且路线 B 的几个补丁\n"
+        "  （PCH、/std: 分语言发出、rsp 文本处理）在 debug 下没有验证过。\n"
+        "  能建起来的话欢迎反馈；建不起来也属预期。要避开：用设了 VCPKG_BUILD_TYPE=release\n"
+        "  的 triplet（本仓库 test/cmake/triplets/ 下有一份可抄的参考）。")
+endif()
+
 vcpkg_download_distfile(NODE_ARCHIVE
     URLS "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
     SHA512 8bb098aa786298ceaf25797adb5551ff4edcafcdc19a669e530a42c60ca71c1b12da2f93253ded2dd7e9ac5a5d0a922e81789542912905e1c16b1754dcf628b8
@@ -691,7 +713,39 @@ string(APPEND _cfg
     "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/test-suite/tools/test.py\")\n"
     "  set(node_TEST_SUITE_DIR \"\${CMAKE_CURRENT_LIST_DIR}/test-suite\")\n"
     "endif()\n")
-file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/node-config.cmake" "${_cfg}")
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/node-config.cmake" "${_cfg")
+
+# ---------------------------------------------------------------------------
+# node-config-version.cmake —— 让 `find_package(node 24.21.0 CONFIG)` 能工作，
+# 并给消费端一个 node_VERSION 变量。
+#
+# ★ 来源：1013 评审报告把它列为【严重】（S2）。**这条我接受** —— vcpkg 要求提供
+#   CMake config 的端口必须同时提供 version 文件，而缺了它的直接后果就是
+#   `find_package(node 24.21.0 CONFIG)` 直接失败、`node_VERSION` 为空。
+#
+# ★ 但**不接受**评审建议里的 `ARCH_INDEPENDENT`：我们交付的是**按架构编译的静态库**，
+#   关掉架构校验会让消费端可能匹配到别的架构那份；这里保留 CMake 默认的架构检查。
+#   兼容性用 SameMajorVersion（Node 的 embedder API 不保证跨大版本 ABI 稳定）。
+# ---------------------------------------------------------------------------
+if(VERSION STREQUAL "")
+    message(FATAL_ERROR
+        "portfile 里拿不到 VERSION（vcpkg 应从 vcpkg.json 注入）—— "
+        "version 文件会写成 0.0.0，宁可在这里红。")
+endif()
+# ★ 为什么要显式给 CMAKE_SIZEOF_VOID_P：portfile 的 CMake 进程**没有配置过编译器**，
+#   这个变量是空的；而 write_basic_package_version_file 的模板在"生成时它也为空"时会
+#   直接 `return()` —— 实测：**悄悄跳过整段架构校验**，等于变相 ARCH_INDEPENDENT。
+#   我们交付的是按架构编译的静态库，所以按目标架构把指针宽度告诉它，让校验真正生效
+#   （否则消费端拿错架构那份，报错会晚到链接期且很难读）。
+set(CMAKE_SIZEOF_VOID_P 8)
+if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86" OR VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
+    set(CMAKE_SIZEOF_VOID_P 4)
+endif()
+include(CMakePackageConfigHelpers)
+write_basic_package_version_file(
+    "${CURRENT_PACKAGES_DIR}/share/node/node-config-version.cmake"
+    VERSION "${VERSION}"
+    COMPATIBILITY SameMajorVersion)
 
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
 file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage" DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
