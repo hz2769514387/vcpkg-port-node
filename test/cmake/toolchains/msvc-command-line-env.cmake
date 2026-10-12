@@ -136,6 +136,13 @@ endif()
 # 给 clang-cl.cmake 用：它要从同一个安装里取 VC/Tools/Llvm。
 set(NODE_PORT_VS_INSTALL_ROOT "${_node_port_vs_root}")
 
+# 宿主架构（x64 / arm64）——决定各处"**宿主**工具"的目录。
+# 注意与 _node_port_msvc_arch（**目标**架构）区分开：宿主工具必须能在构建机上跑。
+set(_node_port_host_arch "x64")
+if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
+  set(_node_port_host_arch "arm64")
+endif()
+
 # --- MSVC -------------------------------------------------------------------
 set(_node_port_msvc_root "")
 if(NOT _node_port_vs_root STREQUAL "")
@@ -166,21 +173,19 @@ endif()
 #   那个前提就不成立了：arm64 宿主上 VS 的工具目录是 `Hostarm64/arm64`。
 #   两个都挂上、存在才加（_node_port_env_prepend 自带 EXISTS 检查），
 #   这样 x64 宿主的行为与之前完全一致，arm64 宿主也能拿到 nmake。
-set(_node_port_msvc_host_dir "Hostx64/x64")          # 默认：x64 宿主（行为与之前一致）
-if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
-  set(_node_port_msvc_host_dir "Hostarm64/arm64")
-endif()
-
 if(NOT _node_port_msvc_root STREQUAL "")
   # 两个布局都挂上（存在才加）。★ 注意 prepend 是"插到最前"，所以**后调用的排在更前** ——
   # 先挂备选、再挂宿主架构那个，保证宿主原生工具优先。
-  if(_node_port_msvc_host_dir STREQUAL "Hostx64/x64")
-    set(_node_port_msvc_host_alt "Hostarm64/arm64")
-  else()
+  if(_node_port_host_arch STREQUAL "arm64")
+    set(_node_port_msvc_host_dir "Hostarm64/arm64")
     set(_node_port_msvc_host_alt "Hostx64/x64")
+  else()
+    set(_node_port_msvc_host_dir "Hostx64/x64")
+    set(_node_port_msvc_host_alt "Hostarm64/arm64")
   endif()
   _node_port_env_prepend(PATH "${_node_port_msvc_root}/bin/${_node_port_msvc_host_alt}")
   _node_port_env_prepend(PATH "${_node_port_msvc_root}/bin/${_node_port_msvc_host_dir}")
+  unset(_node_port_msvc_host_dir)
   unset(_node_port_msvc_host_alt)
   _node_port_env_prepend(INCLUDE "${_node_port_msvc_root}/include")
   _node_port_env_prepend(LIB "${_node_port_msvc_root}/lib/${_node_port_msvc_arch}")
@@ -219,19 +224,49 @@ if(NOT _node_port_sdk_version STREQUAL "")
     _node_port_env_prepend(LIB "${_node_port_kits_root}/Lib/${_node_port_sdk_version}/${_node_port_part}/${_node_port_msvc_arch}")
   endforeach()
   # SDK bin 目录放的是 rc.exe / mt.exe / signtool.exe 等**宿主工具**：按 vcvars
-  # 的规矩用**宿主**架构挑目录（x64_arm64 交叉时是 x64）。用目标架构会把
-  # ARM64 的 rc.exe 放上 PATH —— 那种可执行文件在 x64 宿主上根本起不来
-  # （CreateProcess: not a valid Win32 application），CMake try-compile 在
-  # vs_link_exe 的 RC 阶段报 "unknown error"。
-  set(_node_port_sdk_bin_arch "x64")
-  if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
-    set(_node_port_sdk_bin_arch "arm64")
-  elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(x86|i386|i686)$")
-    set(_node_port_sdk_bin_arch "x86")
+  # 的规矩该用**宿主**架构挑目录（x64 宿主 → x64；arm64 宿主 → arm64）。
+  #
+  # ★★ 2026-10-13 实测（run #25 的 arm64-windows，换原生 arm64 runner 后第一次跑）：
+  #    原来那句"宿主架构目录不存在就退回目标架构目录"会**两头落空** —— arm64 宿主上
+  #    目标架构也是 arm64，于是退回的还是同一个不存在的目录；而
+  #    `_node_port_env_prepend` 对不存在的路径是**静默跳过**的 ⇒ 整条 PATH 上没有 rc.exe
+  #    ⇒ CMake 的 vs_link_exe 连 try-compile 都过不了，报在 **abseil 的 configure** 里：
+  #        RC Pass 1: command "rc /fo .../manifest.res .../manifest.rc" failed ...
+  #            no such file or directory
+  #    离真因（PATH 没挂上 SDK 的宿主工具目录）非常远。
+  #    以前没暴露是因为交叉编译时宿主恒为 x64，`bin/<ver>/x64/rc.exe` 一直都在。
+  #
+  # 现在按"宿主架构 → x64 → x86 → 任意带 rc.exe 的子目录"挑，**一个都没有就当场红** ——
+  # 缺 rc.exe 是结构性问题，不该留到别的 port 里以看不懂的样子报出来。
+  # （挑到 x64 的 rc.exe 在 arm64 宿主上靠仿真也能跑，这是可接受的降级。）
+  set(_node_port_sdk_bin_arch "")
+  foreach(_node_port_sdk_bin_cand IN ITEMS "${_node_port_host_arch}" "x64" "x86")
+    if(EXISTS "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_cand}/rc.exe")
+      set(_node_port_sdk_bin_arch "${_node_port_sdk_bin_cand}")
+      break()
+    endif()
+  endforeach()
+  if(_node_port_sdk_bin_arch STREQUAL "")
+    file(GLOB _node_port_sdk_bin_cands
+      RELATIVE "${_node_port_kits_root}/bin/${_node_port_sdk_version}"
+      "${_node_port_kits_root}/bin/${_node_port_sdk_version}/*")
+    foreach(_node_port_sdk_bin_cand IN LISTS _node_port_sdk_bin_cands)
+      if(EXISTS "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_cand}/rc.exe")
+        set(_node_port_sdk_bin_arch "${_node_port_sdk_bin_cand}")
+        break()
+      endif()
+    endforeach()
+    unset(_node_port_sdk_bin_cands)
   endif()
-  if(NOT EXISTS "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}/rc.exe")
-    set(_node_port_sdk_bin_arch "${_node_port_msvc_arch}")
+  unset(_node_port_sdk_bin_cand)
+  if(_node_port_sdk_bin_arch STREQUAL "")
+    message(FATAL_ERROR
+      "在 Windows SDK ${_node_port_sdk_version} 下找不到任何带 rc.exe 的宿主工具目录：\n"
+      "  ${_node_port_kits_root}/bin/${_node_port_sdk_version}/*\n"
+      "缺 rc.exe 时 CMake 的 vs_link_exe 连 try-compile 都过不了（报在别的 port 的 configure 里，\n"
+      "读起来完全看不出是这里的问题）。请把 SDK 的桌面工具装全。")
   endif()
+  message(VERBOSE "node-port: SDK 宿主工具目录用 ${_node_port_sdk_bin_arch}（宿主架构 ${_node_port_host_arch}）")
   _node_port_env_prepend(PATH "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}")
 endif()
 
