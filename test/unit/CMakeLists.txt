@@ -2,7 +2,7 @@
 #
 # 两个可执行是有意分开的：
 #   unit_vcpkg_baseline 只链 vcpkg 库 —— 出问题说明"库自己有毛病"；
-#   unit_node_coexist   同时链 node::node 与同一批库 —— 出问题说明"共存有毛病"。
+#   unit_node_coexist   同时链 unofficial::node::node 与同一批库 —— 出问题说明"共存有毛病"。
 # 这样失败时不用猜是库的问题还是共存的问题。
 
 find_package(GTest CONFIG REQUIRED)
@@ -68,7 +68,7 @@ endif()
 # hdr_histogram 用 __builtin_cpu_supports ⇒ 引用 __cpu_model，而这个符号在 clang 的
 # compiler-rt 内建库里。MSVC 前端下 CMake 直接调 lld-link、**绕过了 clang 驱动**，
 # 内建库不会自动带上（node 的消费配置里也是手工补的，同一处原因）。
-# 链 node 的那个可执行经由 node::node 已经拿到了，这里（不链 node）得自己补。
+# 链 node 的那个可执行经由 unofficial::node::node 已经拿到了，这里（不链 node）得自己补。
 if(WIN32)
   if(DEFINED NODE_PORT_CLANG_RT_BUILTINS AND EXISTS "${NODE_PORT_CLANG_RT_BUILTINS}")
     target_link_libraries(unit_vcpkg_baseline PRIVATE "${NODE_PORT_CLANG_RT_BUILTINS}")
@@ -92,7 +92,7 @@ set_tests_properties(unit-vcpkg-baseline PROPERTIES LABELS "unit" TIMEOUT 600)
 
 # ---- 共存 --------------------------------------------------------------------
 add_executable(unit_node_coexist test_node_coexist.cpp)
-# ★ 只链 node::node 本身、以及它**没有**覆盖到的东西 —— 绝不再重复列 node 已经提供的库。
+# ★ 只链 unofficial::node::node 本身、以及它**没有**覆盖到的东西 —— 绝不再重复列 node 已经提供的库。
 #
 # 为什么（这是 run #23 把 x64-linux 硬门弄红的原因，写下来防复发）：
 #   node 的静态库与它依赖的 vcpkg 库由 node-config.cmake 组装成一条链接接口；
@@ -106,16 +106,16 @@ add_executable(unit_node_coexist test_node_coexist.cpp)
 #
 # 所以这里只留三样：
 #   * GTest::gtest_main —— 测试框架；
-#   * node::node         —— node 的整棵静态库（含 v8 与 uvwasi/merve/nbytes/…）
+#   * unofficial::node::node         —— node 的整棵静态库（含 v8 与 uvwasi/merve/nbytes/…）
 #                           **以及它自己的依赖**（nghttp2 / ICU / OpenSSL / zlib / brotli /
 #                           sqlite3 / libuv / simdjson / simdutf / zstd / c-ares / ada / llhttp）；
 #   * fmt::fmt           —— node 不用 fmt，所以它不在 node 的链接接口里（本测试要单独验它）。
-# nghttp2 的**头文件**不在 node::node 的 INTERFACE 里（node::nghttp2 是手工建的 imported
+# nghttp2 的**头文件**不在 unofficial::node::node 的 INTERFACE 里（node::nghttp2 是手工建的 imported
 # target，只给了库、没给 INTERFACE_INCLUDE_DIRECTORIES），所以头单独给；
-# **符号**（源码里要调 nghttp2_version()）照样由 node::node 的链接接口提供。
+# **符号**（源码里要调 nghttp2_version()）照样由 unofficial::node::node 的链接接口提供。
 target_link_libraries(unit_node_coexist PRIVATE
     GTest::gtest_main
-    node::node          # 把 node 的整棵静态库（含 v8 与 uvwasi/merve/nbytes/...）链进来
+    unofficial::node::node          # 把 node 的整棵静态库（含 v8 与 uvwasi/merve/nbytes/...）链进来
     fmt::fmt)
 target_include_directories(unit_node_coexist PRIVATE "${NGHTTP2_INCLUDE_DIR}")
 target_compile_features(unit_node_coexist PRIVATE cxx_std_20)

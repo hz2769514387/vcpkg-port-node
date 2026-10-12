@@ -1,4 +1,4 @@
-// 共存单元测试：把 node::node（整棵静态库，含 V8、uvwasi/merve/nbytes/ncrypto/crdtp、
+// 共存单元测试：把 unofficial::node::node（整棵静态库，含 V8、uvwasi/merve/nbytes/ncrypto/crdtp、
 // 以及 v8 内嵌的 abseil / highway / v8_zlib）与一批 vcpkg 库**同时**链进同一个可执行，
 // 然后验证两件事：
 //

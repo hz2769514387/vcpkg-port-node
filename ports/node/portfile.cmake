@@ -345,7 +345,18 @@ vcpkg_execute_required_process(
 # ---------------------------------------------------------------------------
 file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${CURRENT_PACKAGES_DIR}/include/node"
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
-file(INSTALL "${SOURCE_PATH}/deps/v8/include/" DESTINATION "${CURRENT_PACKAGES_DIR}/include")
+# ★ V8 头装到 include/node-v8/，**不再**平铺到 include/ 根目录。
+#
+# 为什么（1013 评审 B1，我接受）：vcpkg 的 Unique File Mapping Rule —— 端口之间不能
+#   装同名/同位的文件。vcpkg 官方有 `v8` 端口（9.1.269.39，`supports: !(arm|arm64|uwp|
+#   osx|linux)` ⇒ Windows x86/x64 可装），它装的就是 `include/v8.h`；我们平铺的话，
+#   用户同时装 `node` 与 `v8` 会直接 FILE_CONFLICTS，而且 V8 头文件铺在全局 include
+#   根下也会污染别的项目。
+#
+# 消费端不受影响：include 路径由我们的 CMake 配置给（`INTERFACE_INCLUDE_DIRECTORIES`
+#   里加 `<prefix>/include/node-v8`），所以 node.h 里的 `#include <v8.h>` 照样找得到。
+#   —— 这也是**不需要给 node 源码打补丁**就能挪的原因（当初差点以为要改上游）。
+file(INSTALL "${SOURCE_PATH}/deps/v8/include/" DESTINATION "${CURRENT_PACKAGES_DIR}/include/node-v8")
 
 # src/api 和 src/res 只有 .cc 没有 .h，file(INSTALL) 会留空目录，vcpkg 校验会警告。
 file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/include/node/api" "${CURRENT_PACKAGES_DIR}/include/node/res")
@@ -362,9 +373,26 @@ file(GLOB_RECURSE _node_archives "${SOURCE_PATH}/out/Release/obj/*${_node_lib_su
 # 消费端 ninja 报 "libnode.a ... missing and no known rule to make it"。
 file(GLOB _node_archives_root "${SOURCE_PATH}/out/Release/*${_node_lib_suffix}")
 list(APPEND _node_archives ${_node_archives_root})
+# ★ 与 vcpkg 其他端口**同名符号**的库，必须装进 lib/manual-link/，由消费配置用
+#   绝对路径引用 —— 不能让链接器在全局 lib 目录里自己搜到它们（评审 B1 的要求）。
+#   只这四个：abseil / highway（vcpkg 有独立端口，V8 用的还是它们的**内部符号**，
+#   见 §5g：换成 vcpkg 那份会在链接期挂）；v8_zlib（定义 zlib 相关符号，与 vcpkg
+#   zlib 撞）；crdtp（DevTools 协议，名字太泛）。其余（libnode / node_base / v8_* /
+#   uvwasi / merve / nbytes / ncrypto / node_mksnapshot）是本端口独有名字，留在 lib/。
+set(_node_manual_link_archives abseil highway v8_zlib crdtp)
 foreach(_a IN LISTS _node_archives)
-    file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
+    get_filename_component(_node_archive_stem "${_a}" NAME_WE)
+    if(NOT VCPKG_TARGET_IS_WINDOWS)
+        # POSIX 上是 libabseil.a 这种，去掉前缀才能对上 gyp 的目标名。
+        string(REGEX REPLACE "^lib" "" _node_archive_stem "${_node_archive_stem}")
+    endif()
+    if(_node_archive_stem IN_LIST _node_manual_link_archives)
+        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib/manual-link")
+    else()
+        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
+    endif()
 endforeach()
+unset(_node_archive_stem)
 
 # 记下"本 port 到底装了哪些库"（只要文件名），写进消费配置给符号审计用。
 #
@@ -581,26 +609,42 @@ set(_node_all_archives
 set(_node_archive_links "")
 foreach(_a IN LISTS _node_all_archives)
     _node_archive_filename("${_a}" _node_file)
+    # ★ 与 vcpkg 同端口名冲突的那几个装在 lib/manual-link/ 下（见安装阶段那段），
+    #   所以这里要用**绝对路径**指过去，不能让链接器在 <prefix>/lib 里搜。
+    set(_node_archive_subdir "")
+    if(_a IN_LIST _node_manual_link_archives)
+        set(_node_archive_subdir "manual-link/")
+    endif()
     string(APPEND _cfg
-        "if(NOT TARGET node::${_a})\n"
-        "  add_library(node::${_a} STATIC IMPORTED)\n"
-        "  set_target_properties(node::${_a} PROPERTIES IMPORTED_LOCATION"
-        " \"\${_node_lib}/${_node_file}\")\n"
+        "if(NOT TARGET unofficial::node::${_a})\n"
+        "  add_library(unofficial::node::${_a} STATIC IMPORTED)\n"
+        "  set_target_properties(unofficial::node::${_a} PROPERTIES IMPORTED_LOCATION"
+        " \"\${_node_lib}/${_node_archive_subdir}${_node_file}\")\n"
         "endif()\n")
-    string(APPEND _node_archive_links " node::${_a}")
+    string(APPEND _node_archive_links " unofficial::node::${_a}")
 endforeach()
 unset(_node_file)
+unset(_node_archive_subdir)
 
+# ★ 命名空间改成 unofficial::node:: —— 评审 B5（用户已拍板"现在改"）。
+#   vcpkg 的规则：上游**不提供**的 CMake config，一律加 `unofficial-` 前缀、
+#   目标进 `unofficial::<port>::` 命名空间。Node 上游用 gyp、没有官方 CMake config，
+#   所以我们导出的全部属于这一类 —— 这样将来若出现官方 `node` 端口不会撞名。
+#   消费端写法随之变成：find_package(unofficial-node CONFIG REQUIRED) +
+#   target_link_libraries(<目标> PRIVATE unofficial::node::node)
 string(APPEND _cfg
-    "add_library(node::node INTERFACE IMPORTED)\n"
-    "set_target_properties(node::node PROPERTIES"
-    " INTERFACE_INCLUDE_DIRECTORIES \"\${_node_prefix}/include;\${_node_prefix}/include/node\")\n")
+    "add_library(unofficial::node::node INTERFACE IMPORTED)\n"
+    "set_target_properties(unofficial::node::node PROPERTIES"
+    # include/node-v8：V8 的头文件挪到了这个子目录（见安装阶段），这里把路径给消费端，
+    # 于是 node.h 里的 `#include <v8.h>` 照样成立。
+    " INTERFACE_INCLUDE_DIRECTORIES"
+    " \"\${_node_prefix}/include;\${_node_prefix}/include/node;\${_node_prefix}/include/node-v8\")\n")
 # nghttp2 没有 CMake config 文件，手动建 imported target。
 string(APPEND _cfg
     "find_library(_nghttp2_lib nghttp2 HINTS \${_node_lib} REQUIRED)\n"
-    "if(NOT TARGET node::nghttp2)\n"
-    "  add_library(node::nghttp2 STATIC IMPORTED)\n"
-    "  set_target_properties(node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n"
+    "if(NOT TARGET unofficial::node::nghttp2)\n"
+    "  add_library(unofficial::node::nghttp2 STATIC IMPORTED)\n"
+    "  set_target_properties(unofficial::node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n"
     "endif()\n")
 # ---------------------------------------------------------------------------
 # ★ 静态库之间的"环"怎么表达 —— 三个平台三条路，每条都有实测或上游原文依据。
@@ -643,13 +687,13 @@ string(APPEND _cfg
     "    unofficial::brotli::brotlicommon ZLIB::ZLIB ada::ada simdjson::simdjson\n"
     "    simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static\n"
     "    ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3\n"
-    "    hdr_histogram::hdr_histogram_static node::nghttp2 llhttp::llhttp_static)\n")
+    "    hdr_histogram::hdr_histogram_static unofficial::node::nghttp2 llhttp::llhttp_static)\n")
 if(VCPKG_TARGET_IS_WINDOWS OR VCPKG_TARGET_IS_OSX)
     # 平铺。Windows：link.exe 反复扫描；Apple：ld64 无 rescan 构造（上游 MAC 命令亦然）。
     string(APPEND _cfg
         "# 平铺：Windows 的 link.exe 会反复扫描；Apple 的 ld64 没有 rescan 构造。\n"
         "# （理由与依据见 port 侧 portfile.cmake 里那段注释。）\n"
-        "target_link_libraries(node::node INTERFACE \${_node_archives_link} \${_node_deps_link})\n")
+        "target_link_libraries(unofficial::node::node INTERFACE \${_node_archives_link} \${_node_deps_link})\n")
 else()
     # GNU 系：用 CMake 官方的 RESCAN 链接组（落到链接器就是 --start-group/--end-group）。
     string(APPEND _cfg
@@ -664,7 +708,7 @@ else()
         "# LINK_GROUP 的参数是逗号分隔的，先把两张表 join 起来。\n"
         "set(_node_group_items \${_node_archives_link} \${_node_deps_link})\n"
         "string(REPLACE \";\" \",\" _node_group_items \"\${_node_group_items}\")\n"
-        "target_link_libraries(node::node INTERFACE \"\$<LINK_GROUP:RESCAN,\${_node_group_items}>\")\n")
+        "target_link_libraries(unofficial::node::node INTERFACE \"\$<LINK_GROUP:RESCAN,\${_node_group_items}>\")\n")
 endif()
 # macOS 系统 framework：node 自己的 node.gypi 就是这么链的
 # （node.gypi:258 `'libraries': [ '-framework CoreFoundation -framework Security' ]`），
@@ -673,7 +717,7 @@ endif()
 # 消费端链接时就是一堆 `_CFArrayCreateMutable … not found`（run #21 实测）。
 if(VCPKG_TARGET_IS_OSX)
     string(APPEND _cfg
-        "target_link_libraries(node::node INTERFACE"
+        "target_link_libraries(unofficial::node::node INTERFACE"
         " \"-framework CoreFoundation\" \"-framework Security\")\n")
 endif()
 # Windows 额外系统库：
@@ -690,7 +734,7 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "  set(_node_rt_builtins \"\${NODE_PORT_CLANG_RT_BUILTINS}\")\n"
         "endif()\n")
     string(APPEND _cfg
-        "target_link_libraries(node::node INTERFACE winmm \${_node_rt_builtins})\n")
+        "target_link_libraries(unofficial::node::node INTERFACE winmm \${_node_rt_builtins})\n")
 
     # ---------------------------------------------------------------------------
     # ★ 栈大小：**必须**导给消费端，否则使用者的可执行只有 1 MiB 栈。
@@ -738,14 +782,14 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "# 不导出的话链接器只给 1 MiB —— 实测 test-stack-size-limit 会以\n"
         "# 0xC00000FD(STATUS_STACK_OVERFLOW) 挂掉（V8 / inspector 有路径要用更大的栈）。\n"
         "# target_link_options 需要 CMake ≥ 3.13。\n"
-        "target_link_options(node::node INTERFACE \"/STACK:${_node_stack_reserve}\")\n")
+        "target_link_options(unofficial::node::node INTERFACE \"/STACK:${_node_stack_reserve}\")\n")
 endif()
 # 装了 test-suite feature 就导出官方套件的根目录（tools/test.py 以它的父目录为 workspace）。
 string(APPEND _cfg
     "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/test-suite/tools/test.py\")\n"
     "  set(node_TEST_SUITE_DIR \"\${CMAKE_CURRENT_LIST_DIR}/test-suite\")\n"
     "endif()\n")
-file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/node-config.cmake" "${_cfg}")
+file(WRITE "${CURRENT_PACKAGES_DIR}/share/node/unofficial-node-config.cmake" "${_cfg}")
 
 # ---------------------------------------------------------------------------
 # node-config-version.cmake —— 让 `find_package(node 24.21.0 CONFIG)` 能工作，
@@ -775,7 +819,7 @@ if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86" OR VCPKG_TARGET_ARCHITECTURE STREQUA
 endif()
 include(CMakePackageConfigHelpers)
 write_basic_package_version_file(
-    "${CURRENT_PACKAGES_DIR}/share/node/node-config-version.cmake"
+    "${CURRENT_PACKAGES_DIR}/share/node/unofficial-node-config-version.cmake"
     VERSION "${VERSION}"
     COMPATIBILITY SameMajorVersion)
 

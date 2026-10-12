@@ -3,7 +3,7 @@
 # 两个用例，强度不同：
 #   1) coexist-node-runtime（coexist.js）：只跑 node 那侧，把各库提供的 node 能力过一遍；
 #   2) coexist-mutual-in-process（mutual_roundtrip + mutual.js）：**最硬的一层** ——
-#      一个可执行里同时链 node::node 与这批"可能和 node 依赖重复/冲突"的 vcpkg 库，
+#      一个可执行里同时链 unofficial::node::node 与这批"可能和 node 依赖重复/冲突"的 vcpkg 库，
 #      然后让 C++ 侧与**同一个进程里的 node 运行时**互相消费对方的产物并各自复核。
 #      （只有"双方真的在同一个进程里、用同一份库、数据来回走"才谈得上共存。）
 
@@ -35,11 +35,11 @@ find_package(ada CONFIG REQUIRED)
 find_package(ICU COMPONENTS uc i18n data REQUIRED)
 
 add_executable(mutual_roundtrip mutual_roundtrip.cpp)
-# ★ 同 unit_node_coexist：不重复链 node::node 的依赖（CMake 去重会把 vcpkg 库挪到
-#   --start-group 外，导致 node 静态库在组内找不到符号）。node::node 的 INTERFACE
+# ★ 同 unit_node_coexist：不重复链 unofficial::node::node 的依赖（CMake 去重会把 vcpkg 库挪到
+#   --start-group 外，导致 node 静态库在组内找不到符号）。unofficial::node::node 的 INTERFACE
 #   传递已覆盖 ZLIB / OpenSSL / sqlite3 / simdjson / ada / ICU 的头文件与符号。
 target_link_libraries(mutual_roundtrip PRIVATE
-    node::node)            # 内含 v8、vcpkg 的 abseil/highway，以及下面这些依赖
+    unofficial::node::node)            # 内含 v8、vcpkg 的 abseil/highway，以及下面这些依赖
 target_compile_features(mutual_roundtrip PRIVATE cxx_std_20)
 if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
   # 与 app/ 同样的原因：Windows 上目标必须嵌 node 的平台兼容性清单，否则一启动就退出码 216

@@ -16,7 +16,7 @@ test/
 ├── vcpkg.json                 # 依赖：node[test-suite,tools] + 一批"共存候选"库（显式声明）
 ├── vcpkg-configuration.json   # overlay-ports -> ../ports；overlay-triplets -> cmake/triplets
 ├── CMakePresets.json          # 六个平台的构建入口
-├── CMakeLists.txt             # 主项目：find_package(node)、enable_testing()、编排子目录
+├── CMakeLists.txt             # 主项目：find_package(unofficial-node)、enable_testing()、编排子目录
 ├── app/                       # 子项目：node 嵌入可执行（产物名故意叫 node）
 ├── unit/                      # 子项目：gtest 单元测试（vcpkg 库自身 + 与 node 共存）
 ├── coexist/                   # 子项目：行为级共存（一段 JS 把各库提供的能力全跑一遍）
@@ -29,10 +29,10 @@ test/
 | label | 内容 | 说明 |
 |---|---|---|
 | `smoke` | `node -e "process.stdout.write(process.versions.node)"` == `24.21.0` | 最小"链接成功 + 跑得起来 + 版本对得上" |
-| `unit` | gtest：`unit_vcpkg_baseline`（只链 vcpkg 库）与 `unit_node_coexist`（同时链 node::node） | 两个可执行分开，失败时能立刻区分"库自己有毛病"还是"共存有毛病" |
+| `unit` | gtest：`unit_vcpkg_baseline`（只链 vcpkg 库）与 `unit_node_coexist`（同时链 unofficial::node::node） | 两个可执行分开，失败时能立刻区分"库自己有毛病"还是"共存有毛病" |
 | `coexist` | ① `coexist.js`（zlib/brotli/crypto/ICU/IDN/sqlite/http/http2/worker/wasm 全走一遍）② **`mutual_roundtrip`（一个进程里同时链 node 与那批可能重复的 vcpkg 库，C++ 侧与同进程的 node 运行时互相消费对方产物、双向复核）** ③ 符号审计 | 行为级证据，② 是最硬的一层 |
 | `node-suite` | **node 官方测试套件**，由官方 `tools/test.py --shell=<本工程的可执行>` 驱动 | 见下 |
-| `tools` | port 的 `tools` feature 产物：`node_EXECUTABLE` 跑版本断言 + `npm/npx/corepack --version` | 只从 `find_package(node)` 导出的变量拿路径 |
+| `tools` | port 的 `tools` feature 产物：`node_EXECUTABLE` 跑版本断言 + `npm/npx/corepack --version` | 只从 `find_package(unofficial-node)` 导出的变量拿路径 |
 
 ```sh
 ctest --test-dir build/<preset> --output-on-failure            # 全部
@@ -101,7 +101,7 @@ preset 里删掉的两条旧条目被 cache 带着继续生效，而且因为整
 
 分四层，互相独立：
 
-1. **能链接**：`unit_node_coexist` 同时链 `node::node`（内含 V8 与 v8 内嵌的 abseil /
+1. **能链接**：`unit_node_coexist` 同时链 `unofficial::node::node`（内含 V8 与 v8 内嵌的 abseil /
    highway / v8_zlib）与同一批 vcpkg 库。重复的**强**符号会让链接器直接报错 ——
    链接成功本身就是一条证据。
 2. **是同一份**：`node -p process.versions.X` 与我方进程里直接调用库得到的版本号比对。

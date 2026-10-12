@@ -1,7 +1,7 @@
 // mutual_roundtrip.cpp —— "同进程互相操作"共存测试的 **C++ 那一半**。
 //
 // 与已有的测试相比，它补的是最硬的那块：
-//   * `unit_node_coexist`：同一个可执行里同时链 node::node 与 vcpkg 的一批库，
+//   * `unit_node_coexist`：同一个可执行里同时链 unofficial::node::node 与 vcpkg 的一批库，
 //     调双方 API 做**版本交叉核对**（但 node 那侧是通过子进程问的）；
 //   * `coexist.js`：只跑 node 那侧，把各库提供的能力过一遍；
 //   * **本文件**：一个进程里，C++ 侧用 vcpkg 的库**产出数据**，

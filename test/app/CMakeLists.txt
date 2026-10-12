@@ -3,10 +3,10 @@
 # 目标名是 node_embed，产物名故意叫 `node`：
 #   * node 官方用例里有不少地方按 `process.execPath` 去 spawn 子进程、并按 node 的
 #     命令行语义传参，产物叫 node 最贴近官方环境；
-#   * CMake 里仍用 node_embed 这个名字，避免和 node::node 之类混在一起。
+#   * CMake 里仍用 node_embed 这个名字，避免和 unofficial::node::node 之类混在一起。
 add_executable(node_embed main.cpp)
 set_target_properties(node_embed PROPERTIES OUTPUT_NAME node)
-target_link_libraries(node_embed PRIVATE node::node)
+target_link_libraries(node_embed PRIVATE unofficial::node::node)
 target_compile_features(node_embed PRIVATE cxx_std_20)
 
 # Windows：目标必须嵌 node 的平台兼容性清单，否则进程一启动就退出码 216（实测）。

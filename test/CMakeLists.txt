@@ -51,9 +51,9 @@ set(NODE_PORT_TEST_FLAKY_MODE
     "dontcare"
     CACHE STRING "test.py --flaky-tests 的取值（run|skip|dontcare|keep_retrying）。我们不是上游 CI，默认 dontcare：被上游标成 flaky 的用例照跑，但不拿它的失败去点红灯。")
 
-# node 由 vcpkg 装出，提供 CONFIG 包（`find_package(node CONFIG)`）与 imported 目标
-# `node::node`（含传递依赖与平台链接选项）。
-find_package(node CONFIG REQUIRED)
+# node 由 vcpkg 装出，提供 CONFIG 包（`find_package(unofficial-node CONFIG)`）与 imported 目标
+# `unofficial::node::node`（含传递依赖与平台链接选项）。
+find_package(unofficial-node CONFIG REQUIRED)
 
 # 跑官方套件与符号审计都要 python（node 自带的 driver 就是 python）。
 find_package(Python3 COMPONENTS Interpreter)
@@ -72,8 +72,10 @@ include(${CMAKE_CURRENT_LIST_DIR}/tests/ctest_tools.cmake)
 # 一眼看清这次会跑什么（CI 日志里很有用）
 # ---------------------------------------------------------------------------
 message(STATUS "node port 测试工程：")
-message(STATUS "  node 版本        : ${node_VERSION}")
-message(STATUS "  node 头文件      : ${node_DIR}")
+# ★ 改名后这两个变量的前缀也跟着变（否则会**静默变空**：CMake 按 find_package 的名字设 `<pkg>_VERSION` / `<pkg>_DIR`）。
+#   这里索性两个都打出来，改一次命名空间就能立刻看出有没有漏改。
+message(STATUS "  node 版本        : ${unofficial-node_VERSION}（旧名变量 ${node_VERSION} 应为空）")
+message(STATUS "  node 头文件      : ${unofficial-node_DIR}")
 message(STATUS "  官方套件目录     : ${node_TEST_SUITE_DIR}")
 message(STATUS "  套件             : ${NODE_PORT_TEST_SUITES}")
 message(STATUS "  分片             : '${NODE_PORT_TEST_SHARDS}'")

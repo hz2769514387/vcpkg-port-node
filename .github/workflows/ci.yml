@@ -509,6 +509,41 @@ jobs:
             exit 1
           fi
 
+      # ---- 披露实际构建配置（评审 S5 / G8）------------------------------------
+      # 为什么：文档里写"与官方构建等价"是可疑的 —— 关键是**实际**用了什么。这里把两样
+      #   权威来源写进 job summary：
+      #     ① 编出来的 node 自己报的 `process.config`（开了哪些特性一目了然）；
+      #     ② node 的 config.gypi（gyp 的真正输入：host_arch / target_arch / node_shared_*
+      #        / snapshot / code-cache 等）。
+      #   比"把 configure 命令行抄进文档"更硬：命令行只说明"传了什么"，config.gypi 说明
+      #   "**最后生效的是什么**"。
+      - name: 披露实际构建配置（process.config / config.gypi）
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          exe="test/build/${{ matrix.preset }}/app/node.exe"
+          [ -f "$exe" ] || exe="test/build/${{ matrix.preset }}/app/node"
+          {
+            echo "## ${{ matrix.triplet }} 实际构建配置"
+            echo '```'
+            echo "--- process.config（编出来的 node 自己报的）---"
+            if [ -f "$exe" ]; then
+              "$exe" -p "process.config" 2>&1 | head -40 || echo "(读不到 process.config)"
+            else
+              echo "(没找到 node 可执行，跳过)"
+            fi
+            echo ""
+            echo "--- config.gypi 里的关键变量 ---"
+            gypi="$(ls "$VCPKG_ROOT"/buildtrees/node/src/*/config.gypi 2>/dev/null | head -1)"
+            if [ -n "$gypi" ]; then
+              grep -aE "'(host_arch|target_arch|node_shared_[a-z_]+|node_use_node_snapshot|node_code_cache|v8_enable_lite_mode|node_with_ltcg)'" "$gypi" | head -30 || true
+            else
+              echo "(没有 config.gypi)"
+            fi
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: 列出将要跑的 ctest 用例
         shell: bash
         run: |
@@ -532,9 +567,24 @@ jobs:
           {
             echo "## ${{ matrix.triplet }} ctest 摘要"
             echo ""
+            # ★ 先把**统计行**单独提到最前面：评审 B6 要的是"完整通过率"，而 tail -n 80
+            #   有可能把它截掉（套件输出很长），看的人反而看不到结论。
+            echo "**统计：**"
+            echo '```'
+            grep -aE "tests passed|Total Test time" "$RUNNER_TEMP/ctest.log" 2>/dev/null || echo "(没有 ctest.log / 没跑起来)"
+            echo '```'
+            echo ""
+            echo "**失败用例列表：**"
+            echo '```'
+            sed -n '/The following tests FAILED/,/Errors while running CTest/p' "$RUNNER_TEMP/ctest.log" 2>/dev/null || echo "(无)"
+            echo '```'
+            echo ""
+            echo "<details><summary>ctest 末尾 80 行</summary>"
+            echo ""
             echo '```'
             tail -n 80 "$RUNNER_TEMP/ctest.log" 2>/dev/null || echo "(没有 ctest.log)"
             echo '```'
+            echo "</details>"
           } >> "$GITHUB_STEP_SUMMARY"
 
       - name: 首错写进 job summary
