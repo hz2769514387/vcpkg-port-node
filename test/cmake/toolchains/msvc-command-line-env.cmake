@@ -208,11 +208,33 @@ unset(_node_port_pf_x86)
 set(_node_port_sdk_version "")
 if(EXISTS "${_node_port_kits_root}/Include")
   file(GLOB _node_port_sdk_versions RELATIVE "${_node_port_kits_root}/Include" "${_node_port_kits_root}/Include/*")
-  if(_node_port_sdk_versions)
-    list(SORT _node_port_sdk_versions)
-    list(REVERSE _node_port_sdk_versions)
-    list(GET _node_port_sdk_versions 0 _node_port_sdk_version)
+  # ★★ 只认"像版本号"的目录名（`^[0-9]+\.[0-9]+`）。
+  #
+  # 为什么：`<kits>/Include/` 下面**不只**有版本目录 —— 还躺着 `wdf` / `um` / `ucrt` /
+  # `shared` / `winrt` 这些**同级**目录。而原来的 `list(SORT)` 是**字典序**，
+  # `'w' > '1'`，于是"最新的 SDK 版本"会被算成 **wdf**。
+  #
+  # ★ 实测（run #26 的 arm64，windows-11-arm 镜像）：`_node_port_sdk_version` 变成 `wdf`
+  #   ⇒ INCLUDE / LIB / SDK bin 三处全部指向 `<kits>/.../wdf/...`（不存在）
+  #   ⇒ `_node_port_env_prepend` 对不存在的路径是静默跳过 ⇒ INCLUDE/LIB/rc.exe 全都没挂上。
+  #   表现出来是**别的 port** 报怪错（run #25 是 abseil 的
+  #   `RC Pass 1: command "rc ..." failed: no such file or directory`）——
+  #   这次是新加的"挑不到 rc.exe 就 FATAL"把它当场点破了。
+  #   （本机 SDK 的 Include/ 只有版本目录，所以本地看不出来；x64 镜像大概也没有 wdf，
+  #     于是 x64 一直"侥幸"能过 —— CMake 自己会去找 rc.exe，掩盖了这三处 prepend 失效。）
+  set(_node_port_sdk_versioned "")
+  foreach(_node_port_sdk_cand IN LISTS _node_port_sdk_versions)
+    if(_node_port_sdk_cand MATCHES "^[0-9]+\\.[0-9]+")
+      list(APPEND _node_port_sdk_versioned "${_node_port_sdk_cand}")
+    endif()
+  endforeach()
+  unset(_node_port_sdk_cand)
+  if(_node_port_sdk_versioned)
+    # COMPARE NATURAL：按数值段比，10.0.9.0 < 10.0.10.0 才对（字典序会反过来）。
+    list(SORT _node_port_sdk_versioned COMPARE NATURAL ORDER DESCENDING)
+    list(GET _node_port_sdk_versioned 0 _node_port_sdk_version)
   endif()
+  unset(_node_port_sdk_versioned)
   unset(_node_port_sdk_versions)
 endif()
 
