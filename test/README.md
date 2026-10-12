@@ -75,9 +75,27 @@ ctest --test-dir build/<preset> -N                              # 只列用例
 | `NODE_PORT_TEST_NODE_SUITE` | `ON` | 是否注册官方套件用例 |
 | `NODE_PORT_TEST_SUITES` | `parallel,sequential,message,abort,async-hooks,known_issues,module-hooks,es-module,report` | 要跑哪些套件（逗号分隔；留空 = test.py 默认集合） |
 | `NODE_PORT_TEST_SHARDS` | 空 | 每个套件切几片（空 = 一个进程跑完，见上） |
-| `NODE_PORT_TEST_SKIP` | 空 | 追加跳过表（只该放环境相关、非库问题的用例） |
+| `NODE_PORT_TEST_SKIP` | 空 | **额外**的跳过表（逗号分隔）；长期有效的跳过要放进 `cmake/node-suite-skips.txt` |
 | `NODE_PORT_TEST_JOBS` | `$env{VCPKG_MAX_CONCURRENCY}` | test.py 的 `-j` |
 | `NODE_PORT_TEST_FLAKY_MODE` | `dontcare` | `--flaky-tests` 取值 |
+
+### 跳过清单：`cmake/node-suite-skips.txt`
+
+长期有效的跳过集中在**一个文件**里，格式是 `用例名 | 平台 | 理由`（平台 `all`/`windows`/`linux`/`macos`）。
+这样做的原因有两条：
+
+* 之前同一份列表在三个 preset 里各抄了一遍，改一条要在三处同步；
+* 更要紧的是**理由**。跳过是最容易掩盖真 bug 的动作，可理由原本只写在提交信息里 ——
+  现在它必须跟条目同行，而且**理由为空会在配置期就 FATAL_ERROR**（规则见文件顶部的判据，
+  以及 `.workbuddy/个人工作流/docs/暂时还没做.md` §5b）。
+
+`NODE_PORT_TEST_SKIP` 只是往这个清单**追加**临时条目，不要在那儿堆长期条目 —— 那样会绕过
+"理由必须写清"的检查。
+
+★ 配置期会打印一行 `node 官方套件额外跳过（<平台>）：…` —— **以它为准**，别以文件内容为准。
+`NODE_PORT_TEST_SKIP` 是 cache 变量，改 preset **不会**清掉构建目录里的旧值（实测踩过：
+preset 里删掉的两条旧条目被 cache 带着继续生效，而且因为整串是"逗号拼接的一个元素"，
+去重也没去掉）。遇到这种情况用 `cmake --preset <名字> -DNODE_PORT_TEST_SKIP=` 显式清空。
 
 ## 共存是怎么被"证明"的
 

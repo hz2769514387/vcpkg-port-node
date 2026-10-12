@@ -92,19 +92,31 @@ set_tests_properties(unit-vcpkg-baseline PROPERTIES LABELS "unit" TIMEOUT 600)
 
 # ---- 共存 --------------------------------------------------------------------
 add_executable(unit_node_coexist test_node_coexist.cpp)
-# ★ 不重复链 node::node 的依赖：node-config.cmake 把 node 的静态库与依赖一起包在
-#   -Wl,--start-group ... -Wl,--end-group 里（GNU ld 单趟左到右，组内反复扫）。
-#   如果这里又显式链同一批 vcpkg 库（libuv / zlib / openssl / brotli / sqlite / icu …），
-#   CMake 去重后只保留组外那份 → node 的静态库在组内找不到这些符号 → undefined reference。
-#   所以这里只链 node::node 没有覆盖到的：fmt（node 不用）、nghttp2（手动 find_library
-#   的那份，node::nghttp2 是 imported target 但没设 INTERFACE_INCLUDE_DIRECTORIES）。
-#   其余 vcpkg 库的头文件与符号经 node::node 的 INTERFACE 传递自动可用。
+# ★ 只链 node::node 本身、以及它**没有**覆盖到的东西 —— 绝不再重复列 node 已经提供的库。
+#
+# 为什么（这是 run #23 把 x64-linux 硬门弄红的原因，写下来防复发）：
+#   node 的静态库与它依赖的 vcpkg 库由 node-config.cmake 组装成一条链接接口；
+#   GNU 平台上是 CMake 的 $<LINK_GROUP:RESCAN,…>（落到链接器就是 --start-group/--end-group，
+#   因为 GNU ld 单趟左到右、组内反复扫）。
+#   CMake 会对链接项**去重**：这里若又显式列了组里的某个库，那次会被判成"同一份"，
+#   于是**组内那份被删掉、只剩组外这份**；而组外的位置在 node 的静态库**之前**，
+#   单趟扫描时它早就扫过去了 ⇒ 组内那个库的符号全部解析不了。
+#   本文件原先正是这么写的 —— `node::nghttp2` 与 `"${NGHTTP2_LIBRARY}"` 是同一个
+#   libnghttp2.a，各列了一遍，结果是 174 条 undefined reference 里 173 条是 nghttp2。
+#
+# 所以这里只留三样：
+#   * GTest::gtest_main —— 测试框架；
+#   * node::node         —— node 的整棵静态库（含 v8 与 uvwasi/merve/nbytes/…）
+#                           **以及它自己的依赖**（nghttp2 / ICU / OpenSSL / zlib / brotli /
+#                           sqlite3 / libuv / simdjson / simdutf / zstd / c-ares / ada / llhttp）；
+#   * fmt::fmt           —— node 不用 fmt，所以它不在 node 的链接接口里（本测试要单独验它）。
+# nghttp2 的**头文件**不在 node::node 的 INTERFACE 里（node::nghttp2 是手工建的 imported
+# target，只给了库、没给 INTERFACE_INCLUDE_DIRECTORIES），所以头单独给；
+# **符号**（源码里要调 nghttp2_version()）照样由 node::node 的链接接口提供。
 target_link_libraries(unit_node_coexist PRIVATE
     GTest::gtest_main
     node::node          # 把 node 的整棵静态库（含 v8 与 uvwasi/merve/nbytes/...）链进来
-    node::nghttp2
-    fmt::fmt
-    "${NGHTTP2_LIBRARY}")
+    fmt::fmt)
 target_include_directories(unit_node_coexist PRIVATE "${NGHTTP2_INCLUDE_DIR}")
 target_compile_features(unit_node_coexist PRIVATE cxx_std_20)
 # 用它来起子进程问 node "你用的是哪一份依赖"（交叉核对，见测试源码里的说明）。

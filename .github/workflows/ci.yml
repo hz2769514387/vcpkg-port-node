@@ -141,6 +141,36 @@ jobs:
             exit 1
           fi
 
+      - name: portfile.cmake 必须能被 CMake 解析（语法闸门）
+        shell: bash
+        run: |
+          set -euo pipefail
+          # 为什么单独立一条：portfile 里大量用 `string(APPEND _cfg "…\n")` 往生成的
+          # node-config.cmake 里拼内容 —— 一个**没转义的双引号**就能把字符串提前截断。
+          # 这类错误 CMake 是"先整体解析、再执行"，所以 `cmake -P` 就是一把现成的语法闸门：
+          # 解析过了才会执行，而执行一定会在第一个 vcpkg_* 命令处停下（那不算错）。
+          #
+          # 2026-10-12 实测：给链接组写注释时就写出过一个未转义的引号，当时是 configure
+          # 阶段替我挡下的 —— 那是运气不是机制（同一类话在"补丁必须挂进 PATCHES"那条里
+          # 已经写过一次了，这里把它补成机制）。
+          if ! command -v cmake >/dev/null 2>&1; then
+            echo "::warning::本 job 没有 cmake，跳过 portfile 语法体检"
+            exit 0
+          fi
+          bad=0
+          while IFS= read -r f; do
+            out="$(cmake -P "$f" 2>&1 || true)"
+            if printf '%s\n' "$out" | grep -q "Parse error"; then
+              echo "$out"
+              echo "::error file=$f::$f 有 CMake 解析错误"
+              bad=1
+            fi
+          done < <(find ports/node -name '*.cmake' -type f | sort)
+          if [ "$bad" -ne 0 ]; then
+            exit 1
+          fi
+          echo "ports/node 下的 cmake 文件全部可被 CMake 解析"
+
       - name: port 必须自包含（不引用 port 目录外的任何东西）
         shell: bash
         run: |

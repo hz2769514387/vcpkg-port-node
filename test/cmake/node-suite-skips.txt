@@ -1,0 +1,53 @@
+# node 官方套件在本工程上的「应当跳过」清单 —— 单一来源。
+#
+# 为什么要有这个文件（而不是把列表写在 CMakePresets.json 里）：
+#   1) 之前在 base / windows-clang-cl / windows-clang-cl-arm64 三个 preset 里各抄了一份，
+#      同一条跳过要在三处同步，迟早会漂移；
+#   2) 更要紧的是**理由**。跳过是最容易掩盖真 bug 的动作（欠账 §5b 的原话：
+#      "只放环境相关的，绝不放'库真有问题'的；ENVIRONMENT 原因的要用注释写清楚"），
+#      可理由原本只写在提交信息与记忆文档里 —— 看清单的人看不到。所以这里把理由
+#      跟条目放在同一行，并且**理由为空就直接 FATAL_ERROR**（见 ctest_node_suite.cmake）。
+#
+# 格式（每行一条；`#` 开头是注释；空行忽略）：
+#     <用例名> | <平台> | <理由>
+#   平台：all / windows / linux / macos
+#   用例名按 test.py 的口径写：**不带 .js**，也不带 test/<suite>/ 前缀
+#   （例如 test/parallel/test-fs-rm.js 写作 test-fs-rm）。
+#
+# ★ 判据（加条目之前先过一遍，别凭"看起来像环境问题"就加）：
+#     - 上游自己的 test/*/*.status 里已经标 SKIP/FLAKY 的：**不要**往这里加
+#       （test.py 会读 status，加了是重复且会掩盖上游状态的变化）；
+#     - 因为"我们只装了源码树的一部分"而读不到兄弟文件/目录的：属于**环境**，
+#       可以进这里；但如果那个文件很便宜，更正确的做法是**把它装出去**
+#       （见 ports/node/portfile.cmake 里 test-suite feature 那段按需安装；
+#        例：deps/undici/src/package.json 就是补装而不是跳过）；
+#     - **崩在原生层的：先怀疑我们自己的构建，不要先写"环境问题"**。
+#       2026-10-12 的教训：这里曾有两条（test-stack-size-limit 记成"主线程栈口径不一致"、
+#       test-debugger-probe-late-resolution 记成"子进程 0xC0000409"）看着都像环境问题，
+#       实际根因是 **port 没把 node.gyp 的 StackReserveSize(8 MiB) 导给消费端**，
+#       于是所有使用者的可执行只有链接器默认的 1 MiB 栈 —— 是我们交付物的缺陷。
+#       判法：拿**官方 node** 跑同一条用例做对照（本机 `C:\work\git\fe\tmp\node\...\node.exe`），
+#       官方过、我们不过 ⇒ 先查自己，别写 skip。
+#     - 确实要 skip 又没查清的：必须写明崩溃码/退出码与复现方式，并**显式标注"原因未查清"**，
+#       写成"环境问题"糊过去是不允许的。
+#
+# 撤销记录（保留历史，避免同一件事被再次误判）：
+#   * 2026-10-12 撤销 test-stack-size-limit（原记：主线程栈上限口径不一致）
+#     —— 真因是上面那条栈大小缺陷，已由 node-config.cmake 导出 /STACK 修掉。
+#   * 2026-10-12 撤销 test-debugger-probe-late-resolution（原记：子进程 0xC0000409）
+#     —— 本地同一条用例在我们自己的 node 上是**通过**的；先让 CI 用修好的栈再测一轮，
+#     不要用 skip 把一个还可能存在的崩溃盖住。
+
+# -- 与平台无关 --------------------------------------------------------------
+# 需要构建期由 doc 工具链生成的 man page。我们的 gyp→ninja 路径不产出 doc/node.1。
+test-cli-node-cli-manpage-options | all | 需要构建期生成的 doc/node.1；gyp→ninja 路径不产出它
+
+# -- Windows -----------------------------------------------------------------
+# 读源码树里的 .ts fixture 并比对换行符，而 Git 的 autocrlf 会把工作区改成 CRLF。
+test-snapshot-typescript | windows | fixture 的换行符被 Git autocrlf 改写（CRLF），与期望不符
+
+# 子进程 fd 传递 / 换 shell 起进程：这是 Windows 宿主环境的限制，不是库的问题。
+test-child-process-pass-fd | windows | Windows 下 fd 不能传给子进程（宿主限制）
+test-child-process-exec-any-shells-windows | windows | 起 bash.exe 被拒（EACCES），宿主权限问题
+test-fs-mkdir-recursive-eaccess | windows | Windows 的 EACCES 口径与 POSIX 不同
+test-fs-rm | windows | Windows 的删除语义（只读/占用）与 POSIX 不同

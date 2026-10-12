@@ -22,6 +22,14 @@ node 提供 node v24.21.0 整棵树的静态库构建产物：
   * node 与 v8 用到的第三方（openssl / zlib / libuv / icu / sqlite3 / brotli / zstd /
     simdjson / simdutf / ada / ngtcp2 / nghttp2 / c-ares / llhttp / hdr-histogram /
     abseil / highway）全部由 vcpkg 提供，作为传递依赖自动带上；不需要你手工 find_package。
+  * `node::node` 的链接接口**已经包含上面这一整批库**，所以**不要**在你自己的
+    target 上再链一遍同一批（重复没有意义，只会让链接行变长）。nghttp2 也是其中之一
+    —— 它没有 CMake 包配置，本 port 在消费配置里手工建了 `node::nghttp2` 并挂进接口；
+    你只需要 `target_link_libraries(<目标> PRIVATE node::node)`。
+  * ★ GNU 平台（Linux/BSD）的链接接口用 CMake 的 `$<LINK_GROUP:RESCAN,…>` 表达
+    （node 的 gyp 静态库之间有环，单趟扫描的链接器必须重扫；等价于 --start-group/
+    --end-group），因此**消费端的 CMake 需要 ≥ 3.24**。Windows / macOS 上是平铺列表
+    （link.exe 自己会反复扫描；ld64 没有 rescan 构造），没有这个版本要求。
 
 可选 feature：
 

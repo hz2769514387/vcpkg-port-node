@@ -351,7 +351,10 @@ endif()
 #                                     → test-release-changelog
 #     deps/npm/{package.json,bin/npm-cli.js} → test-npm-version、test-npm-install、test-release-npm
 #     deps/corepack/package.json      → test-corepack-version
-#     deps/acorn/acorn/package.json   → test-process-versions
+#     deps/acorn/acorn/package.json   → test-process-versions（该用例第 6 行读它核对 acorn 版本）
+#     deps/undici/src/package.json    → test-process-versions（同一用例第 115 行还要读它核对
+#                                       undici 版本）★ 2026-10-12 补：只装了 acorn 没装 undici，
+#                                       于是这个用例先过第 6 行、再挂在第 115 行（run #23 实测）
 #     benchmark/_cli.js               → test-benchmark-cli
 #     lib/                            → test-process-load-env-file
 #     tools/icu/icu_versions.json     → test-icu-minimum-version
@@ -375,7 +378,10 @@ if("test-suite" IN_LIST FEATURES)
 
     # deps/ 只装用例真正引用的那几份：整棵 deps/ 有 400+ MB（openssl 230、v8 94），
     # 而用例只碰这几个包的 package.json / bin / 少量 js。
-    foreach(_node_dep IN ITEMS npm corepack acorn)
+    # 口径：目录便宜就整目录装，贵的话单文件装（v8 就是单文件，见下面）。
+    # 体积记在这里，免得以后有人以为"顺手多加一个"不要钱：
+    #   npm 19 MB、undici 3.7 MB、acorn 0.6 MB、corepack ~0.3 MB。
+    foreach(_node_dep IN ITEMS npm corepack acorn undici)
         if(EXISTS "${SOURCE_PATH}/deps/${_node_dep}")
             # file(INSTALL <dir> DEST) 把 <dir> 本体拷进 DEST → DEST/<dir>/...
             # 所以 DEST 给 .../deps 而不是 .../deps/<dir>（后者会出 deps/npm/npm/）。
@@ -543,27 +549,38 @@ string(APPEND _cfg
     "  set_target_properties(node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n"
     "endif()\n")
 # ---------------------------------------------------------------------------
-# ★ 非 Windows 必须把**整条输入列表**包进 link group —— 这不是优化，是正确性。
+# ★ 静态库之间的"环"怎么表达 —— 三个平台三条路，每条都有实测或上游原文依据。
 #
-# 这些 gyp 静态库之间有环：libnode ↔ node_base（node_base 的 embed_helpers.cc 调
+# node 的 gyp 静态库之间有**真实的环**：libnode ↔ node_base（node_base 的 embed_helpers.cc 调
 # node::SnapshotBuilder::GetEmbeddedSnapshotData()，而它由 libnode 的
 # src/node_snapshot_stub.cc 提供 —— node_use_node_snapshot!="true" 时 node.gyp 把它塞进
 # node_lib）；v8_compiler → v8_base_without_compiler（MachineReprToString / IsSubtype /
-# CodeFactory::CEntry 等）。
+# CodeFactory::CEntry 等）。单趟左到右扫描的链接器遇到这种环必须先扫过的 archive 再回头，
+# 于是 run #21 的 x64-linux / arm64-linux 在**消费端链接**时炸出几百条 `undefined reference`。
 #
-# MSVC 的 link.exe 会反复扫描整条列表，所以"顺序随便"在 Windows 上侥幸成立；
-# GNU ld / ld64 是**单趟左到右**：已经扫过的 archive 不会再回头 —— 于是
-# run #21 的 x64-linux / arm64-linux 在**消费端链接**时炸出几百条
-# `undefined reference`（arm64-osx 同样，只是先被 framework 缺失挡住）。
+# 上游 gyp 是**按平台分开**处理的（tools/gyp/pylib/gyp/generator/make.py）：
+#   * Linux/BSD 那条通用命令（159 行与 260 行）把 LD_INPUTS 与 LIBS 一起包进
+#     `-Wl,--start-group … -Wl,--end-group`，注释原文："Due to circular dependencies
+#     between libraries :(, we wrap the …flags around the entire input list during linking."
+#   * macOS 的 LINK_COMMANDS_MAC（209 行起）**不带**这组开关，就是
+#     `$(LINK) … -o "$@" $(LD_INPUTS) $(LIBS)`。
+#     ★ 这里原先写的是"make.py 的 LINK_COMMANDS_MAC 用的是同一条命令 ⇒ macOS 的 ld64 也认
+#       这组开关"——**已被实测证伪**（run #23）：arm64-osx 直接报
+#         ld: unknown options: --start-group --end-group
+#       抄错的原因：带 --start-group 的 cmd_link（260 行）属于通用（Linux/BSD）命令表，
+#       不在 LINK_COMMANDS_MAC 里。
+#   * Windows：node.gyp 用 `/WHOLEARCHIVE:node_base.lib` 整库强载（见欠账 §5i）。
 #
-# 上游自己就是这么处理的：gyp 的非 Windows 链接规则把 LD_INPUTS 与 LIBS 一起包住 ——
-#   tools/gyp/pylib/gyp/generator/make.py:159/260  cmd_link = … -Wl,--start-group $(LD_INPUTS) … -Wl,--end-group
-#   tools/gyp/pylib/gyp/generator/ninja.py:2577   link = $ld $ldflags -o $out -Wl,--start-group $in $solibs $libs -Wl,--end-group
-# 注释原文就写着 "Due to circular dependencies between libraries :(, …"。make.py 的
-# LINK_COMMANDS_MAC（209 行起）用的是同一条命令 ⇒ macOS 的 ld64 也认这组开关。
-#
-# 组装成"自己与自己双向消费"那种链接也没问题：消费端把 vcpkg 库列在 node 之前时，
-# 那些库同样在组内，会被重新扫描。
+# 本 port 跟着上游走，并把"手写链接标志"换成 CMake 官方机制：
+#   * Windows（MSVC 前端）与 Apple：**平铺**。前者 link.exe 自己会反复扫描整条列表
+#     （实测 x64-windows 全绿），后者 ld64 没有 rescan 构造、上游 MAC 命令也是平铺。
+#   * 其余（GNU 系：Linux/BSD/SunOS —— CMake 的 Platform/Linux.cmake 与 GNU.cmake 定义了
+#     RESCAN）：`$<LINK_GROUP:RESCAN,…>`，即 CMake 官方为"静态库之间有环"提供的构造。
+#     ★ 它比手写 "-Wl,--start-group" 强在**去重不会把它拆散**：CMake 知道这些库属于一个组，
+#       消费端若又显式列了组内某个库，那次出现会被替换回组内。手写标志没有这层语义 ——
+#       消费端只要重复列一个 nghttp2，CMake 去重就会删掉"组内那份"、只留组外那份，
+#       而组外那份的位置在 node 的静态库**之前**，单趟扫描早就扫过去了 ⇒ 组内照样解析不了
+#       （run #23 的 x64-linux 就是这么挂的：174 条 undefined reference 里 173 条是 nghttp2）。
 # ---------------------------------------------------------------------------
 string(APPEND _cfg
     "set(_node_archives_link ${_node_archive_links})\n"
@@ -572,14 +589,29 @@ string(APPEND _cfg
     "    unofficial::brotli::brotlicommon ZLIB::ZLIB ada::ada simdjson::simdjson\n"
     "    simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static\n"
     "    ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3\n"
-    "    hdr_histogram::hdr_histogram_static node::nghttp2 llhttp::llhttp_static)\n"
-    "if(WIN32)\n"
-    "  # link.exe 自己会反复扫描，不需要 group。\n"
-    "  target_link_libraries(node::node INTERFACE \${_node_archives_link} \${_node_deps_link})\n"
-    "else()\n"
-    "  target_link_libraries(node::node INTERFACE\n"
-    "    \"-Wl,--start-group\" \${_node_archives_link} \${_node_deps_link} \"-Wl,--end-group\")\n"
-    "endif()\n")
+    "    hdr_histogram::hdr_histogram_static node::nghttp2 llhttp::llhttp_static)\n")
+if(VCPKG_TARGET_IS_WINDOWS OR VCPKG_TARGET_IS_OSX)
+    # 平铺。Windows：link.exe 反复扫描；Apple：ld64 无 rescan 构造（上游 MAC 命令亦然）。
+    string(APPEND _cfg
+        "# 平铺：Windows 的 link.exe 会反复扫描；Apple 的 ld64 没有 rescan 构造。\n"
+        "# （理由与依据见 port 侧 portfile.cmake 里那段注释。）\n"
+        "target_link_libraries(node::node INTERFACE \${_node_archives_link} \${_node_deps_link})\n")
+else()
+    # GNU 系：用 CMake 官方的 RESCAN 链接组（落到链接器就是 --start-group/--end-group）。
+    string(APPEND _cfg
+        "# GNU 系链接器是单趟左到右，而 node 的 gyp 静态库之间有环 ⇒ 需要链接组重扫。\n"
+        "# 用 CMake 官方的 $<LINK_GROUP:RESCAN,…>（等价于 --start-group/--end-group），\n"
+        "# 而不是手写标志：手写的会被 CMake 的「链接项去重」拆散（详见 portfile.cmake）。\n"
+        "if(CMAKE_VERSION VERSION_LESS 3.24)\n"
+        "  message(FATAL_ERROR\n"
+        "    \"本 port 在 GNU 平台的链接接口用了 \$<LINK_GROUP:RESCAN>（CMake 3.24 引入）。 \"\n"
+        "    \"请把 CMake 升到 3.24 以上，或改用 Windows / macOS 口径的 triplet。\")\n"
+        "endif()\n"
+        "# LINK_GROUP 的参数是逗号分隔的，先把两张表 join 起来。\n"
+        "set(_node_group_items \${_node_archives_link} \${_node_deps_link})\n"
+        "string(REPLACE \";\" \",\" _node_group_items \"\${_node_group_items}\")\n"
+        "target_link_libraries(node::node INTERFACE \"\$<LINK_GROUP:RESCAN,\${_node_group_items}>\")\n")
+endif()
 # macOS 系统 framework：node 自己的 node.gypi 就是这么链的
 # （node.gypi:258 `'libraries': [ '-framework CoreFoundation -framework Security' ]`），
 # 用来提供 CFArray*/CFDictionary*/CFTimeZone*（abseil 的 cctz 本地时区）与
@@ -605,6 +637,54 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "endif()\n")
     string(APPEND _cfg
         "target_link_libraries(node::node INTERFACE winmm \${_node_rt_builtins})\n")
+
+    # ---------------------------------------------------------------------------
+    # ★ 栈大小：**必须**导给消费端，否则使用者的可执行只有 1 MiB 栈。
+    #
+    # 上游 node.gyp 在 msvs_settings.VCLinkerTool 里设了
+    #     'StackReserveSize': 0x800000
+    # 并写着理由（原文）："By default, the MSVC linker only reserves 1 MiB of stack memory
+    # for each thread, whereas other platforms typically allow much larger stack memory
+    # sections. We raise the limit to make it more consistent across platforms and to
+    # support the few use cases that require large amounts of stack memory, without having
+    # to modify the node binary."
+    #
+    # 问题在于：那条设置只作用于 **gyp 自己生成的 node 可执行**。我们交付的是**静态库**，
+    # 可执行是消费端（本仓库的 test/app 也一样）用自己的 CMake 链出来的 —— 它拿不到这条
+    # 设置，于是栈就是链接器默认的 1 MiB。而 V8 / inspector 有一批路径真的要用更大的栈。
+    #
+    # ★ 实测（2026-10-12，本机）：`test-stack-size-limit` 在 1 MiB 栈下以
+    #   `0xC00000FD (STATUS_STACK_OVERFLOW)` 挂掉（该用例的原话：默认 --stack-size=984 只比
+    #   1 MiB 略小，稍微调大就会撞上；上游把它放到 8 MiB 就是为了这个）。
+    #   实测对照：我们的 exe `0x100000`（1 MiB）vs 官方 node.exe `0x800000`（8 MiB）。
+    #   ⇒ 这条欠账之前被两条 skip（test-stack-size-limit / test-debugger-probe-late-resolution）
+    #     盖住了 —— 那正是 §5b 禁止的做法。现在把它变成导出的使用要求，那两条 skip 已撤销。
+    #
+    # 数值**从 node.gyp 里读**，不写死：上游若改了，这里跟着变；若那条设置被挪走/改名，
+    # 我们宁可当场 configure 失败，也不要在这里留一个会悄悄过期的魔数。
+    # ---------------------------------------------------------------------------
+    file(READ "${SOURCE_PATH}/node.gyp" _node_gyp_text)
+    string(REGEX MATCHALL "'StackReserveSize'[^0-9]*0x[0-9A-Fa-f]+"
+        _node_stack_hits "${_node_gyp_text}")
+    list(LENGTH _node_stack_hits _node_stack_hit_count)
+    if(NOT _node_stack_hit_count EQUAL 1)
+        message(FATAL_ERROR
+            "在 node.gyp 里找到 ${_node_stack_hit_count} 处 'StackReserveSize'（期望恰好 1 处）。\n"
+            "上游重构了这条 msvs 设置 —— 消费端的栈大小使用要求要跟着改，"
+            "不要在这里猜一个数字（见 portfile.cmake 里那段注释）。")
+    endif()
+    string(REGEX MATCH "0x[0-9A-Fa-f]+" _node_stack_reserve "${_node_stack_hits}")
+    unset(_node_gyp_text)
+    unset(_node_stack_hits)
+    unset(_node_stack_hit_count)
+
+    string(APPEND _cfg
+        "# 消费端可执行必须拿到 node 同款的 ${_node_stack_reserve} 栈"
+        "（取自 node.gyp 的 msvs_settings.VCLinkerTool.StackReserveSize）。\n"
+        "# 不导出的话链接器只给 1 MiB —— 实测 test-stack-size-limit 会以\n"
+        "# 0xC00000FD(STATUS_STACK_OVERFLOW) 挂掉（V8 / inspector 有路径要用更大的栈）。\n"
+        "# target_link_options 需要 CMake ≥ 3.13。\n"
+        "target_link_options(node::node INTERFACE \"/STACK:${_node_stack_reserve}\")\n")
 endif()
 # 装了 test-suite feature 就导出官方套件的根目录（tools/test.py 以它的父目录为 workspace）。
 string(APPEND _cfg

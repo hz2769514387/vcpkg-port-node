@@ -34,7 +34,10 @@ set(NODE_PORT_TEST_SHARDS
 
 set(NODE_PORT_TEST_SKIP
     ""
-    CACHE STRING "传给 test.py --skip-tests 的逗号分隔跳过表（只该放环境相关、非库问题的用例）")
+    CACHE STRING
+    "**额外**的跳过表（逗号分隔），追加到本工程自己的跳过清单之后。
+本工程长期有效的跳过清单在 cmake/node-suite-skips.txt —— 单一来源、按平台生效、每条必须写理由。
+这个变量只放临时/一次性的额外跳过：长期条目要挪进那个文件，否则绕过了“理由必须写清”的检查。")
 
 set(NODE_PORT_TEST_JOBS
     ""

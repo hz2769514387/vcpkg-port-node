@@ -16,8 +16,7 @@
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
         "NODE_PORT_TEST_SHARDS": "",
-        "NODE_PORT_TEST_JOBS": "$env{VCPKG_MAX_CONCURRENCY}",
-        "NODE_PORT_TEST_SKIP": "test-cli-node-cli-manpage-options"
+        "NODE_PORT_TEST_JOBS": "$env{VCPKG_MAX_CONCURRENCY}"
       }
     },
     {
@@ -34,8 +33,7 @@
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang",
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
         "VCPKG_CRT_LINKAGE": "static",
-        "VCPKG_LIBRARY_LINKAGE": "static",
-        "NODE_PORT_TEST_SKIP": "test-cli-node-cli-manpage-options,test-snapshot-typescript,test-debugger-probe-late-resolution,test-stack-size-limit,test-child-process-pass-fd,test-child-process-exec-any-shells-windows,test-fs-mkdir-recursive-eaccess,test-fs-rm"
+        "VCPKG_LIBRARY_LINKAGE": "static"
       }
     },
     {
@@ -52,8 +50,7 @@
         "VCPKG_TARGET_TRIPLET": "arm64-windows-static-clang",
         "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
         "VCPKG_CRT_LINKAGE": "static",
-        "VCPKG_LIBRARY_LINKAGE": "static",
-        "NODE_PORT_TEST_SKIP": "test-cli-node-cli-manpage-options,test-snapshot-typescript,test-debugger-probe-late-resolution,test-stack-size-limit,test-child-process-pass-fd,test-child-process-exec-any-shells-windows,test-fs-mkdir-recursive-eaccess,test-fs-rm"
+        "VCPKG_LIBRARY_LINKAGE": "static"
       }
     },
     {

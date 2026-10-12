@@ -58,8 +58,84 @@ set(_node_suite_args
 if(NODE_PORT_TEST_JOBS)
   list(APPEND _node_suite_args "-j" "${NODE_PORT_TEST_JOBS}")
 endif()
+# ---------------------------------------------------------------------------
+# 「应当跳过」清单 = 文件（单一来源 + 平台过滤 + 强制写理由） + 使用者额外给的
+#
+# 见 test/cmake/node-suite-skips.txt 顶部：为什么要有这个文件、以及加条目之前要过的判据。
+# 这里做三件事：
+#   1) 按当前平台筛选（all / windows / linux / macos）；
+#   2) **理由为空就 FATAL_ERROR** —— 空的跳过等于把 bug 藏起来，宁可在配置期红；
+#   3) 跟 NODE_PORT_TEST_SKIP（使用者用 -D 或 preset 额外加的）合并去重。
+# ---------------------------------------------------------------------------
+string(TOLOWER "${CMAKE_SYSTEM_NAME}" _node_suite_os)
+if(_node_suite_os STREQUAL "darwin")
+  set(_node_suite_os "macos")
+endif()
+
+set(_node_suite_skips "")
+set(_node_suite_skip_file "${CMAKE_SOURCE_DIR}/cmake/node-suite-skips.txt")
+if(EXISTS "${_node_suite_skip_file}")
+  # ★ 用 file(READ) 再按行切，**不要**用 file(STRINGS)：后者是按**空白符**取词、
+  #   不是按行 —— 实测会把 "# node 官方套件…" 切成 "# node "、"" 之类的碎片，
+  #   理由里的空格也会把一行拆开，于是"三段式"检查全线误报。
+  file(READ "${_node_suite_skip_file}" _node_suite_skip_text)
+  string(REPLACE "\r\n" "\n" _node_suite_skip_text "${_node_suite_skip_text}")
+  string(REPLACE "\n" ";" _node_suite_skip_lines "${_node_suite_skip_text}")
+  unset(_node_suite_skip_text)
+  foreach(_node_suite_line IN LISTS _node_suite_skip_lines)
+    string(STRIP "${_node_suite_line}" _node_suite_line)
+    if(_node_suite_line STREQUAL "" OR _node_suite_line MATCHES "^#")
+      continue()
+    endif()
+    # 分隔符用 `|` 而不是逗号/分号：分号是 CMake 的列表分隔符、逗号是生成器表达式的，
+    # 理由里出现它们会立刻把解析搞坏。
+    string(REPLACE "|" ";" _node_suite_fields "${_node_suite_line}")
+    list(LENGTH _node_suite_fields _node_suite_field_count)
+    if(NOT _node_suite_field_count EQUAL 3)
+      message(FATAL_ERROR
+        "node-suite-skips.txt 这一行不是「用例名 | 平台 | 理由」三段：\n  ${_node_suite_line}")
+    endif()
+    list(GET _node_suite_fields 0 _node_suite_name)
+    list(GET _node_suite_fields 1 _node_suite_plat)
+    list(GET _node_suite_fields 2 _node_suite_why)
+    string(STRIP "${_node_suite_name}" _node_suite_name)
+    string(STRIP "${_node_suite_plat}" _node_suite_plat)
+    string(STRIP "${_node_suite_why}" _node_suite_why)
+    if(_node_suite_why STREQUAL "")
+      message(FATAL_ERROR
+        "node-suite-skips.txt 里这条跳过没写理由：${_node_suite_name}"
+        "（欠账 §5b 的规矩：只放环境相关的，且理由必须写清楚）")
+    endif()
+    if(_node_suite_plat STREQUAL "all" OR _node_suite_plat STREQUAL "${_node_suite_os}")
+      list(APPEND _node_suite_skips "${_node_suite_name}")
+    endif()
+  endforeach()
+  unset(_node_suite_line)
+  unset(_node_suite_fields)
+  unset(_node_suite_field_count)
+else()
+  message(WARNING
+    "找不到跳过清单 ${_node_suite_skip_file}：本轮不做任何额外跳过"
+    "（上游 *.status 的 SKIP 仍然生效）")
+endif()
+
 if(NODE_PORT_TEST_SKIP)
-  list(APPEND _node_suite_args "--skip-tests=${NODE_PORT_TEST_SKIP}")
+  # ★ 先按逗号拆开再合并。这个变量是**逗号分隔的列表**（test.py --skip-tests 的口径，
+  #   也是 preset / -D 传进来的形态）。整串塞进 list 会变成**一个**元素：
+  #   既和清单文件里的同名条目重复，又去不掉 —— 实测日志里同名条目出现过两遍，
+  #   而且构建目录里 cache 残留的旧值会把已经撤销的跳过悄悄带回来。
+  string(REPLACE "," ";" _node_suite_extra_skips "${NODE_PORT_TEST_SKIP}")
+  list(APPEND _node_suite_skips ${_node_suite_extra_skips})
+  unset(_node_suite_extra_skips)
+endif()
+
+if(_node_suite_skips)
+  list(REMOVE_DUPLICATES _node_suite_skips)
+  list(JOIN _node_suite_skips "," _node_suite_skips_joined)
+  list(APPEND _node_suite_args "--skip-tests=${_node_suite_skips_joined}")
+  message(STATUS "node 官方套件额外跳过（${_node_suite_os}）：${_node_suite_skips_joined}")
+else()
+  message(STATUS "node 官方套件没有额外跳过（${_node_suite_os}）")
 endif()
 
 string(REPLACE "," ";" _node_suite_list "${NODE_PORT_TEST_SUITES}")
