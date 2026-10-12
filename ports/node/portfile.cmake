@@ -261,6 +261,38 @@ if(VCPKG_TARGET_IS_WINDOWS)
 endif()
 
 # ---------------------------------------------------------------------------
+# ★ arm64：把 common.gypi 的 msvs_configuration_platform 从小写 'arm64' 改成 'ARM64'。
+#
+# 为什么（run #27 的 arm64 实测，第一版把 v8 编起来才暴露）：
+#   gyp 的 msvs_emulation.GetArch() 是**大小写敏感的字典查找**：
+#       return {"Win32":"x86", "x64":"x64", "ARM64":"arm64"}.get(platform, "x86")
+#   而 node 的 common.gypi 在 target_arch=="arm64" 时写的是 **'arm64'（小写）**
+#   ⇒ .get('arm64', 'x86') 落到默认值 'x86' ✗
+#   ⇒ gyp 的 ninja 生成器认为目标是 x86：
+#        ninja.py:2358   command += " -m32" if arch == "x86" else " -m64"
+#        ninja.py:405    self.ninja.variable("arch", self.win_env[arch])  → environment.x86
+#   ⇒ 编译命令变成 `ninja -t msvc -e environment.x86 -- clang-cl.exe -m32 …`
+#     ⇒ v8 的**第一个**编译单元就挂（[1/1922]），报错却只是 `FAILED: ... abort-mode.obj`。
+#
+#   * x64 不受影响：'x64' 恰好就在那张映射表里。
+#   * 上游也从未暴露：官方 Windows 构建走 MSBuild 生成器，不经过 GetArch 这条取 flag 的路径
+#     （MSBuild 的 Platform 名大小写不敏感）。
+#   * 只用 ninja 生成器 + arm64 才踩得到 —— 正是本 port 的组合。
+#
+# 为什么用 vcpkg_replace_string 而不是补丁 gyp：
+#   ① 这里要修的是 **node 自己的 gyp 输入**（common.gypi），不是 gyp 工具本身；
+#   ② 锚点字符串唯一（本文件里只有 x64 与 arm64 两条，值不同），不怕上游挪行号；
+#   ③ 少一个需要 rebase 的补丁（评审 G1 也提过这件事）；
+#   ④ 字符串找不到时 vcpkg_replace_string 会**报错**，所以上游若自己改成 'ARM64'
+#      我们会立刻知道（而不是静默地替换成空）。
+# ★ 必须在 configure.py 之前改：改的是 gyp 的**输入**，ninja 文件是 configure.py 内部生成的。
+if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
+    vcpkg_replace_string("${SOURCE_PATH}/common.gypi"
+        "'msvs_configuration_platform': 'arm64'"
+        "'msvs_configuration_platform': 'ARM64'")
+endif()
+
+# ---------------------------------------------------------------------------
 # 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
 #    --ninja → configure.py 传 `-f ninja-<flavor>`（Windows 上是 ninja-win）。这是合法
 #    写法：gyp 的 Load() 里有 `if "-" in format: format, flavor = format.split("-", 1)`，
