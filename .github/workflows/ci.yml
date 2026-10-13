@@ -550,6 +550,21 @@ jobs:
           set -euo pipefail
           ctest --test-dir "test/build/${{ matrix.preset }}" -N | tee "$RUNNER_TEMP/ctest-list.txt"
 
+      - name: 开始记录提交量水位（Windows；判读 0xC0000409 用）
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # run #32 的 0xC0000409 是**提交量耗尽**（V8 自带 abseil 的
+          # VirtualAlloc(MEM_RESERVE|MEM_COMMIT) 失败，见 tools/commit-watch.ps1 顶部），
+          # 所以把 \Memory\Committed Bytes / Commit Limit 全程采下来。
+          # 有这条，下一轮不管绿不绿都能回答"当时的余量到底有多少"。
+          Start-Process -FilePath pwsh -WindowStyle Hidden -ArgumentList @(
+            '-NoProfile', '-File', (Join-Path $env:GITHUB_WORKSPACE 'tools/commit-watch.ps1'),
+            '-Output', (Join-Path $env:RUNNER_TEMP 'commit-samples.txt'),
+            '-StopFile', (Join-Path $env:RUNNER_TEMP 'commit-watch.on'))
+          Start-Sleep -Seconds 2
+          Write-Host "提交量采样已启动"
+
       - name: 跑 ctest（smoke + unit + coexist + node 官方套件 + 符号审计）
         shell: bash
         run: |
@@ -660,6 +675,17 @@ jobs:
           for f in ctest.log ctest-list.txt; do
             [ -f "$RUNNER_TEMP/$f" ] && cp "$RUNNER_TEMP/$f" "$RUNNER_TEMP/ci-logs/$f"
           done
+          # 停掉提交量采样并汇总（Windows）。最低剩余 = 最危险的时刻，判 0xC0000409 就看它。
+          if [ -f "$RUNNER_TEMP/commit-watch.on" ]; then
+            rm -f "$RUNNER_TEMP/commit-watch.on"
+            sleep 6
+            if [ -f "$RUNNER_TEMP/commit-samples.txt" ]; then
+              cp "$RUNNER_TEMP/commit-samples.txt" "$RUNNER_TEMP/ci-logs/"
+              echo "=== 提交量水位（列：时间 已提交GB 上限GB 剩余GB）==="
+              echo "样本数 $(wc -l < "$RUNNER_TEMP/commit-samples.txt")，最低剩余 $(awk 'NF==4 {print $4}' "$RUNNER_TEMP/commit-samples.txt" | sort -n | head -1) GB"
+              tail -n 20 "$RUNNER_TEMP/commit-samples.txt"
+            fi
+          fi
           echo "收集了 $(ls -1 "$RUNNER_TEMP/ci-logs" | wc -l) 个文件"
 
       - name: 上传本 job 的日志（中间产物）
