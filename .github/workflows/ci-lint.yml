@@ -156,6 +156,22 @@ jobs:
           fi
           cmake -P tools/check_test_glue.cmake
 
+      - name: workflows 自身必须能被 GitHub 加载（含"重复键"这一条硬红线）
+        shell: bash
+        run: |
+          set -u
+          # 为什么单独立一条（2026-10-14 实测代价：整个 push 白跑一轮）：
+          # 把 CI 拆成 platform（workflow_call）+ 两个调用方之后，`platform.yml` 里
+          # 出现了**两份** `continue-on-error` ⇒ GitHub 直接判
+          #   Invalid workflow file ... 'continue-on-error' is already defined
+          # 于是 ci debug / platform 两个 run 都是 **0 秒失败、一个 job 都没起来**。
+          # 而 PyYAML 之类的解析器遇到重复键只保留最后一份、不报错 ⇒ 光做
+          # `yaml.safe_load()` 是抓不到的。这个闸门专门抓它，顺带校验：
+          # inputs 声明 vs 引用、调用方 with: 键、矩阵字段、uses: 指向的文件是否存在。
+          python3 -m pip install --quiet --disable-pip-version-check pyyaml
+          python3 tools/check_workflows.py --self-test
+          python3 tools/check_workflows.py
+
       - name: port 必须自包含（不引用 port 目录外的任何东西）
         shell: bash
         run: |

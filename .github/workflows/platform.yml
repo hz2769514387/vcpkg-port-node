@@ -72,7 +72,6 @@ jobs:
     env:
       NODE_PORT_BUILD_TYPE: ${{ inputs.debug == '1' && 'debug' || 'release' }}
     runs-on: ${{ inputs.os }}
-    continue-on-error: ${{ inputs.allow_failure }}
     # GitHub 单个 job 的硬上限是 6 小时。给一个留余量的值：超时被取消时，
     # `if: always()` 的收集步骤仍会跑，日志能带走 —— 否则白等一场。
     timeout-minutes: 350
