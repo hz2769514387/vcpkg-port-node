@@ -5,7 +5,14 @@ set(VCPKG_TARGET_ARCHITECTURE arm64)
 set(VCPKG_CRT_LINKAGE static)
 set(VCPKG_LIBRARY_LINKAGE static)
 
-set(VCPKG_BUILD_TYPE release)
+# 默认 release-only（CI 的常态）。要编 debug：设 NODE_PORT_BUILD_TYPE=debug
+# （ci-debug.yml 就是这么做的；本机也可以 export 后再 cmake --preset ...）。
+# ★ debug 口径**从未实测**，见 ports/node/portfile.cmake 顶部那段 WARNING。
+if("$ENV{NODE_PORT_BUILD_TYPE}" STREQUAL "debug")
+  set(VCPKG_BUILD_TYPE debug)
+else()
+  set(VCPKG_BUILD_TYPE release)
+endif()
 
 include("${CMAKE_CURRENT_LIST_DIR}/../toolchains/msvc-command-line-env.cmake")
 

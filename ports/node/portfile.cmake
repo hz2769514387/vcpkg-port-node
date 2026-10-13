@@ -43,6 +43,26 @@ if(NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
         "  的 triplet（本仓库的消费端示例工程里，cmake/triplets/ 下有一份可抄的参考）。")
 endif()
 
+# ---------------------------------------------------------------------------
+# 构建口径（Release / Debug）—— 一处定义，构建、安装、导出的配置都跟着走。
+# VCPKG_BUILD_TYPE 由**三元组**给出：本仓库的三元组默认 release，只有设了
+# NODE_PORT_BUILD_TYPE=debug 时才给 debug（见消费端 cmake/triplets/ 下的参考与 ci-debug.yml）。
+# 三处必须同时切，否则会出现"库编到 debug/、配置却指向 lib/"这种半截状态：
+#   ① gyp 的输出目录：out/Release → out/Debug（configure.py 的 --debug 决定）
+#   ② 安装目录：vcpkg 约定 debug-only 的包把库/可执行放 debug/ 下
+#   ③ 导出的 node-config.cmake 里那些相对路径
+if(VCPKG_BUILD_TYPE STREQUAL "debug")
+    set(_node_cfg "Debug")
+    set(_node_cfg_arg "--debug")
+    set(_node_lib_subdir "debug/lib")
+    set(_node_tools_subdir "debug/tools/node")
+else()
+    set(_node_cfg "Release")
+    set(_node_cfg_arg "")
+    set(_node_lib_subdir "lib")
+    set(_node_tools_subdir "tools/node")
+endif()
+
 vcpkg_download_distfile(NODE_ARCHIVE
     URLS "https://nodejs.org/dist/v24.21.0/node-v24.21.0.tar.gz"
     SHA512 8bb098aa786298ceaf25797adb5551ff4edcafcdc19a669e530a42c60ca71c1b12da2f93253ded2dd7e9ac5a5d0a922e81789542912905e1c16b1754dcf628b8
@@ -308,6 +328,7 @@ endif()
 vcpkg_execute_required_process(
     COMMAND "${PYTHON3}" configure.py
         --ninja
+        ${_node_cfg_arg}
         ${_node_clang_cl_arg}
         --with-intl=system-icu
         ${_node_shared_args}
@@ -341,7 +362,7 @@ if("tools" IN_LIST FEATURES)
 endif()
 
 vcpkg_execute_required_process(
-    COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/Release" ${_node_ninja_jobs} ${_node_ninja_targets}
+    COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/${_node_cfg}" ${_node_ninja_jobs} ${_node_ninja_targets}
     WORKING_DIRECTORY "${SOURCE_PATH}"
     LOGNAME build
 )
@@ -373,11 +394,11 @@ if(VCPKG_TARGET_IS_WINDOWS)
 else()
     set(_node_lib_suffix ".a")
 endif()
-file(GLOB_RECURSE _node_archives "${SOURCE_PATH}/out/Release/obj/*${_node_lib_suffix}")
+file(GLOB_RECURSE _node_archives "${SOURCE_PATH}/out/${_node_cfg}/obj/*${_node_lib_suffix}")
 # macOS：gyp 把 static_library 直接放在 out/Release 根下（ninja.py 的 type_in_output_root
 # 含 static_library），不在 obj/ 里。不补这一条，装出来的包没有 libnode.a，
 # 消费端 ninja 报 "libnode.a ... missing and no known rule to make it"。
-file(GLOB _node_archives_root "${SOURCE_PATH}/out/Release/*${_node_lib_suffix}")
+file(GLOB _node_archives_root "${SOURCE_PATH}/out/${_node_cfg}/*${_node_lib_suffix}")
 list(APPEND _node_archives ${_node_archives_root})
 # ★ 与 vcpkg 其他端口**同名符号**的库，必须装进 lib/manual-link/，由消费配置用
 #   绝对路径引用 —— 不能让链接器在全局 lib 目录里自己搜到它们（评审 B1 的要求）。
@@ -393,9 +414,9 @@ foreach(_a IN LISTS _node_archives)
         string(REGEX REPLACE "^lib" "" _node_archive_stem "${_node_archive_stem}")
     endif()
     if(_node_archive_stem IN_LIST _node_manual_link_archives)
-        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib/manual-link")
+        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/${_node_lib_subdir}/manual-link")
     else()
-        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
+        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/${_node_lib_subdir}")
     endif()
 endforeach()
 unset(_node_archive_stem)
@@ -523,12 +544,12 @@ endif()
 # 垫片两套都装（POSIX sh 与 Windows .cmd）—— 这样 cmd / PowerShell / Git-Bash / 跨平台
 # 脚本都能用；它们只用相对路径定位（%~dp0 / $0），不依赖 PATH 上的 node/npm。
 if("tools" IN_LIST FEATURES)
-    set(_node_tools "${CURRENT_PACKAGES_DIR}/tools/${PORT}")
+    set(_node_tools "${CURRENT_PACKAGES_DIR}/${_node_tools_subdir}")
 
     if(VCPKG_TARGET_IS_WINDOWS)
-        file(INSTALL "${SOURCE_PATH}/out/Release/node.exe" DESTINATION "${_node_tools}")
+        file(INSTALL "${SOURCE_PATH}/out/${_node_cfg}/node.exe" DESTINATION "${_node_tools}")
     else()
-        file(INSTALL "${SOURCE_PATH}/out/Release/node" DESTINATION "${_node_tools}"
+        file(INSTALL "${SOURCE_PATH}/out/${_node_cfg}/node" DESTINATION "${_node_tools}"
             FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                             GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     endif()
@@ -602,7 +623,7 @@ foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
 endforeach()
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
-    "set(_node_lib \"\${_node_prefix}/lib\")\n"
+    "set(_node_lib \"\${_node_prefix}/${_node_lib_subdir}\")\n"
     # 本 port 装进 <prefix>/lib 的库文件名清单。符号审计靠它把"node 的库"和
     # "使用者自己装的库"分开（<prefix>/lib 是共用的，见上面那段说明）。
     "set(node_INSTALLED_LIBRARIES \"${_node_installed_libs}\")\n")
@@ -626,11 +647,11 @@ if("tools" IN_LIST FEATURES)
     # 需要反斜杠的消费端（`cmd /c` 不认正斜杠的程序名）自己在 find_package 之后转，
     # 见 test/tests/ctest_tools.cmake。
     string(APPEND _cfg
-        "set(node_TOOLS_DIR \"\${_node_prefix}/tools/node\")\n"
-        "set(node_EXECUTABLE \"\${_node_prefix}/tools/node/${_node_exe_name}\")\n"
-        "set(node_NPM \"\${_node_prefix}/tools/node/npm${_node_shim_ext}\")\n"
-        "set(node_NPX \"\${_node_prefix}/tools/node/npx${_node_shim_ext}\")\n"
-        "set(node_COREPACK \"\${_node_prefix}/tools/node/corepack${_node_shim_ext}\")\n")
+        "set(node_TOOLS_DIR \"\${_node_prefix}/${_node_tools_subdir}\")\n"
+        "set(node_EXECUTABLE \"\${_node_prefix}/${_node_tools_subdir}/${_node_exe_name}\")\n"
+        "set(node_NPM \"\${_node_prefix}/${_node_tools_subdir}/npm${_node_shim_ext}\")\n"
+        "set(node_NPX \"\${_node_prefix}/${_node_tools_subdir}/npx${_node_shim_ext}\")\n"
+        "set(node_COREPACK \"\${_node_prefix}/${_node_tools_subdir}/corepack${_node_shim_ext}\")\n")
 endif()
 
 # node 自身口径下需要串起来的静态库全集（gyp 目标）。

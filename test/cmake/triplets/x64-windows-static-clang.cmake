@@ -12,7 +12,14 @@ set(VCPKG_CRT_LINKAGE static)
 set(VCPKG_LIBRARY_LINKAGE static)
 
 # 只出发布构建（少一半产物，CI/本地都省磁盘）。
-set(VCPKG_BUILD_TYPE release)
+# 默认 release-only（CI 的常态）。要编 debug：设 NODE_PORT_BUILD_TYPE=debug
+# （ci-debug.yml 就是这么做的；本机也可以 export 后再 cmake --preset ...）。
+# ★ debug 口径**从未实测**，见 ports/node/portfile.cmake 顶部那段 WARNING。
+if("$ENV{NODE_PORT_BUILD_TYPE}" STREQUAL "debug")
+  set(VCPKG_BUILD_TYPE debug)
+else()
+  set(VCPKG_BUILD_TYPE release)
+endif()
 
 # nmake 与 INCLUDE/LIB 必须在任何 port 构建之前就位 —— 包括那些不走 CMake、
 # 因而不会加载 chainload toolchain 的 port（openssl 用 nmake 构建）。
