@@ -209,6 +209,18 @@ else()
   set(_node_suite_tmpbase "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 file(TO_CMAKE_PATH "${_node_suite_tmpbase}" _node_suite_tmpbase)
+# ★ Windows 上**不能**用带 8.3 短名的目录（典型就是 %TEMP% = C:\Users\RUNNER~1\AppData\Local\Temp）。
+#   run #30 实测：临时根落到短名目录后，一批做路径比对 / 看目录的用例整片红
+#   （test-fs-realpath 报 RUNNER~1 vs runneradmin、test-fs-watch 报 `h2\bar` vs `bar`、
+#    加 test-fs-promises / test-fs-promises-watch* … 两档 Windows 各 30~40 条）。
+#   判据用 `~` 是因为 8.3 短名长这样；正常情况下路径里不会有它。
+if(WIN32 AND _node_suite_tmpbase MATCHES "~")
+  message(FATAL_ERROR
+    "套件临时根的基目录里出现了 8.3 短名（`~`）：\n"
+    "  ${_node_suite_tmpbase}\n"
+    "Windows 上这会带坏一批做路径比对的官方用例（run #30 实测 30~40 条，见本文件上面那段）。\n"
+    "处置：不要用 %TEMP%（CI 上它是 C:\\Users\\RUNNER~1\\…），改用 -DNODE_PORT_TEST_TMPBASE=<不含 ~ 的短目录>。")
+endif()
 set(_node_suite_tmproot "${_node_suite_tmpbase}/ns")
 file(MAKE_DIRECTORY "${_node_suite_tmproot}")
 
