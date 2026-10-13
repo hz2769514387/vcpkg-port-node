@@ -34,7 +34,7 @@ vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 #
 # ★ 来源：1013 评审报告 G6。这条我接受一半 —— 接受"必须显式声明"，
 #   不接受"直接报错"（依据不足）。
-if(NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
+if("$ENV{NODE_PORT_BUILD_TYPE}" STREQUAL "debug")
     message(WARNING
         "node port 的 **debug 口径从未实测**（CI 只跑 release，见欠账清单 §1）。\n"
         "  V8 的 debug 构建体积/时长约翻倍、内存占用显著上升，且路线 B 的几个补丁\n"
@@ -44,23 +44,25 @@ if(NOT VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "debug")
 endif()
 
 # ---------------------------------------------------------------------------
-# 构建口径（Release / Debug）—— 一处定义，构建、安装、导出的配置都跟着走。
-# VCPKG_BUILD_TYPE 由**三元组**给出：本仓库的三元组默认 release，只有设了
-# NODE_PORT_BUILD_TYPE=debug 时才给 debug（见消费端 cmake/triplets/ 下的参考与 ci-debug.yml）。
-# 三处必须同时切，否则会出现"库编到 debug/、配置却指向 lib/"这种半截状态：
-#   ① gyp 的输出目录：out/Release → out/Debug（configure.py 的 --debug 决定）
-#   ② 安装目录：vcpkg 约定 debug-only 的包把库/可执行放 debug/ 下
-#   ③ 导出的 node-config.cmake 里那些相对路径
-if(VCPKG_BUILD_TYPE STREQUAL "debug")
+# ---------------------------------------------------------------------------
+# node 自己的构建口径（Release / Debug）。
+#
+# ★ 只看 **NODE_PORT_BUILD_TYPE**（环境变量），不看 VCPKG_BUILD_TYPE：
+#   VCPKG_BUILD_TYPE 管的是**依赖**的口径，而依赖必须一直是 release ——
+#   试过让依赖跟一起进 debug（`VCPKG_BUILD_TYPE=debug`），brotli 直接 BUILD_FAILED：
+#   它的 portfile 用 vcpkg_copy_tools，而 debug-only 时 vcpkg 把可执行放进 debug/tools/，
+#   于是 "SEARCH_DIR .../tools/brotli must be a directory"（2026-10-14 实测，arm64-linux）。
+#   这类上游 port 不只一个。所以：**依赖 release + node 自己 debug**，
+#   两边用不同的开关，node 的库仍装进 `lib/`（单口径端口的常规布局），
+#   Windows 上都是 `/MT`，不会撞运行时库。
+#   要编 debug：ci-debug.yml 与本机的 `NODE_PORT_BUILD_TYPE=debug` 就是这个开关。
+# ---------------------------------------------------------------------------
+if("$ENV{NODE_PORT_BUILD_TYPE}" STREQUAL "debug")
     set(_node_cfg "Debug")
     set(_node_cfg_arg "--debug")
-    set(_node_lib_subdir "debug/lib")
-    set(_node_tools_subdir "debug/tools/node")
 else()
     set(_node_cfg "Release")
     set(_node_cfg_arg "")
-    set(_node_lib_subdir "lib")
-    set(_node_tools_subdir "tools/node")
 endif()
 
 vcpkg_download_distfile(NODE_ARCHIVE
@@ -414,9 +416,9 @@ foreach(_a IN LISTS _node_archives)
         string(REGEX REPLACE "^lib" "" _node_archive_stem "${_node_archive_stem}")
     endif()
     if(_node_archive_stem IN_LIST _node_manual_link_archives)
-        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/${_node_lib_subdir}/manual-link")
+        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib/manual-link")
     else()
-        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/${_node_lib_subdir}")
+        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
     endif()
 endforeach()
 unset(_node_archive_stem)
@@ -544,7 +546,7 @@ endif()
 # 垫片两套都装（POSIX sh 与 Windows .cmd）—— 这样 cmd / PowerShell / Git-Bash / 跨平台
 # 脚本都能用；它们只用相对路径定位（%~dp0 / $0），不依赖 PATH 上的 node/npm。
 if("tools" IN_LIST FEATURES)
-    set(_node_tools "${CURRENT_PACKAGES_DIR}/${_node_tools_subdir}")
+    set(_node_tools "${CURRENT_PACKAGES_DIR}/tools/${PORT}")
 
     if(VCPKG_TARGET_IS_WINDOWS)
         file(INSTALL "${SOURCE_PATH}/out/${_node_cfg}/node.exe" DESTINATION "${_node_tools}")
@@ -623,7 +625,7 @@ foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
 endforeach()
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
-    "set(_node_lib \"\${_node_prefix}/${_node_lib_subdir}\")\n"
+    "set(_node_lib \"\${_node_prefix}/lib\")\n"
     # 本 port 装进 <prefix>/lib 的库文件名清单。符号审计靠它把"node 的库"和
     # "使用者自己装的库"分开（<prefix>/lib 是共用的，见上面那段说明）。
     "set(node_INSTALLED_LIBRARIES \"${_node_installed_libs}\")\n")
@@ -647,11 +649,11 @@ if("tools" IN_LIST FEATURES)
     # 需要反斜杠的消费端（`cmd /c` 不认正斜杠的程序名）自己在 find_package 之后转，
     # 见 test/tests/ctest_tools.cmake。
     string(APPEND _cfg
-        "set(node_TOOLS_DIR \"\${_node_prefix}/${_node_tools_subdir}\")\n"
-        "set(node_EXECUTABLE \"\${_node_prefix}/${_node_tools_subdir}/${_node_exe_name}\")\n"
-        "set(node_NPM \"\${_node_prefix}/${_node_tools_subdir}/npm${_node_shim_ext}\")\n"
-        "set(node_NPX \"\${_node_prefix}/${_node_tools_subdir}/npx${_node_shim_ext}\")\n"
-        "set(node_COREPACK \"\${_node_prefix}/${_node_tools_subdir}/corepack${_node_shim_ext}\")\n")
+        "set(node_TOOLS_DIR \"\${_node_prefix}/tools/node\")\n"
+        "set(node_EXECUTABLE \"\${_node_prefix}/tools/node/${_node_exe_name}\")\n"
+        "set(node_NPM \"\${_node_prefix}/tools/node/npm${_node_shim_ext}\")\n"
+        "set(node_NPX \"\${_node_prefix}/tools/node/npx${_node_shim_ext}\")\n"
+        "set(node_COREPACK \"\${_node_prefix}/tools/node/corepack${_node_shim_ext}\")\n")
 endif()
 
 # node 自身口径下需要串起来的静态库全集（gyp 目标）。
