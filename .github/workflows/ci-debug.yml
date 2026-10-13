@@ -91,6 +91,10 @@ jobs:
           set -euo pipefail
           # head 会提前关管道 → 上游 tar/ls 收到 SIGPIPE 而非零退出；配合 pipefail 会让这一步
           # 整步失败（run #14 就是这么把 logs job 弄红的）。这里统一给 `|| true`。
+          # ★ 六条腿**全部**在 0 秒处失败时（例如 workflow 文件本身被 GH 判非法），
+          #   download-artifact 不会建出 all-logs ⇒ 下面的 tar 会失败、这一步整步红
+          #   （2026-10-14 实测：logs job exit 2）。先建目录，让"没有平台日志"是**警告**而不是失败。
+          mkdir -p all-logs
           ls -R all-logs | head -n 60 || true
           tar -czf ci-logs.tar.gz -C all-logs .
           ls -lh ci-logs.tar.gz

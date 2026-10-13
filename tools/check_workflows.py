@@ -62,6 +62,37 @@ def referenced_inputs(text):
     return {m.group(1) for m in re.finditer(r'inputs\.([A-Za-z0-9_-]+)', text)}
 
 
+def _check_bool_typed_keys(path, doc, declared_inputs, problems):
+    """`continue-on-error` / `if` 这类键要的是**布尔**。
+
+    2026-10-14 实测：调用方矩阵里给 `allow_failure: "true"`（字符串），
+    被调 workflow 写成 `continue-on-error: ${{ inputs.allow_failure }}`
+    ⇒ GH 报 `Unexpected value 'true'`，六个腿全部 0 秒失败。
+    所以：凡是"直接引用一个 string 型 input"的布尔键，都判错（要写成 `== 'true'` 这种比较）。
+    """
+    import re
+    for job_id, job in (doc.get('jobs') or {}).items():
+        if not isinstance(job, dict):
+            continue
+        for key in ('continue-on-error',):
+            if key not in job:
+                continue
+            value = job[key]
+            if isinstance(value, bool):
+                continue
+            if not isinstance(value, str):
+                problems.append('%s: 作业 %s 的 %s 不是布尔：%r' % (path.name, job_id, key, value))
+                continue
+            m = re.fullmatch(r'\$\{\{\s*inputs\.([A-Za-z0-9_-]+)\s*\}\}', value.strip())
+            if m:
+                name = m.group(1)
+                kind = (declared_inputs.get(name) or {}).get('type')
+                if kind == 'string':
+                    problems.append(
+                        '%s: 作业 %s 的 %s 直接引用了 string 型 input `%s` ⇒ GH 会判 "Unexpected value"，'
+                        '要写成 `${{ inputs.%s == \'true\' }}`' % (path.name, job_id, key, name, name))
+
+
 def check_file(path, problems, all_docs):
     text = path.read_text(encoding='utf-8')
     try:
@@ -80,7 +111,9 @@ def check_file(path, problems, all_docs):
 
     is_reusable = isinstance(trg, dict) and 'workflow_call' in trg
     if is_reusable:
-        declared = set((trg.get('workflow_call') or {}).get('inputs') or {})
+        declared = (trg.get('workflow_call') or {}).get('inputs') or {}
+        _check_bool_typed_keys(path, doc, declared, problems)
+        declared = set(declared)
         used = referenced_inputs(text)
         missing = sorted(used - declared)
         if missing:

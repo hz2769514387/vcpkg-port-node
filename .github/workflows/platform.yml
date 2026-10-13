@@ -68,7 +68,10 @@ env:
 jobs:
   build:
     name: ${{ inputs.label }}
-    continue-on-error: ${{ inputs.allow_failure }}
+    # ★ 必须是**布尔**：`continue-on-error` 不接受字符串。2026-10-14 实测：调用方矩阵里给的是
+    #   `allow_failure: "true"`（带引号 ⇒ 字符串），直接写成 `${{ inputs.allow_failure }}` 会被
+    #   GH 判 `Unexpected value 'true'`，六个腿全在 0 秒处报错。所以这里显式比一次得到布尔。
+    continue-on-error: ${{ inputs.allow_failure == 'true' }}
     env:
       NODE_PORT_BUILD_TYPE: ${{ inputs.debug == '1' && 'debug' || 'release' }}
     runs-on: ${{ inputs.os }}
