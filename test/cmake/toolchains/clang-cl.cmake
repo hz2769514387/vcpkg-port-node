@@ -94,14 +94,30 @@ endif()
 
 # ---------------------------------------------------------------------------
 # 目标架构（arm64 也留好代码路径，只是没有机器实测）
+#
+# ★ 架构口径统一在 msvc-command-line-env.cmake 里解析（NODE_PORT_TARGET_ARCH）——
+#   那里解释了"为什么不能只看 VCPKG_TARGET_ARCHITECTURE"：消费端工程里它是空的，
+#   空值落到 x64 会让 arm64 那一档**静默编成 x64**（run #29 实测：消费端的对象/链接
+#   都是 x64，而 node 的库是真 arm64 ⇒ lld-link machine type 冲突）。
+#   本文件第 12 行已经 include 了那个文件，所以这里只需要做术语翻译。
 # ---------------------------------------------------------------------------
-set(_node_port_target_arch "x86_64")
-if(DEFINED VCPKG_TARGET_ARCHITECTURE)
-  if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
-    set(_node_port_target_arch "aarch64")
-  elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
-    set(_node_port_target_arch "i686")
-  endif()
+if(NOT DEFINED NODE_PORT_TARGET_ARCH)
+  message(FATAL_ERROR
+    "NODE_PORT_TARGET_ARCH 未定义 —— msvc-command-line-env.cmake 必须先被 include"
+    "（本文件第 12 行做这件事）。")
+endif()
+if(NODE_PORT_TARGET_ARCH STREQUAL "x64")
+  set(_node_port_target_arch "x86_64")
+elseif(NODE_PORT_TARGET_ARCH STREQUAL "arm64")
+  set(_node_port_target_arch "aarch64")
+elseif(NODE_PORT_TARGET_ARCH STREQUAL "x86")
+  set(_node_port_target_arch "i686")
+else()
+  # arm32：node 24 的 Windows 目标只有 x64 / arm64（vcbuild.bat 与 configure.py 口径），
+  # 结构性不支持，不要试图"凑一个 --target"。
+  message(FATAL_ERROR
+    "不支持的 Windows 目标架构：NODE_PORT_TARGET_ARCH=${NODE_PORT_TARGET_ARCH}。"
+    "node 24 只提供 x64 与 arm64。")
 endif()
 set(_node_port_compiler_target "${_node_port_target_arch}-pc-windows-msvc")
 

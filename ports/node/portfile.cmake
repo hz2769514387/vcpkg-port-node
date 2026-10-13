@@ -444,18 +444,41 @@ endif()
 #   doc/ 是这里最贵的一块（约 54 MB），但少了它那几个文档一致性用例永远跑不了。
 if("test-suite" IN_LIST FEATURES)
     set(_node_suite "${CURRENT_PACKAGES_DIR}/share/node/test-suite")
-    file(INSTALL "${SOURCE_PATH}/test/" DESTINATION "${_node_suite}/test")
+
+    # ★★ 这一整段的 file(INSTALL) 都必须带 USE_SOURCE_PERMISSIONS。
+    #
+    # 为什么：CMake 的文档在 `file(COPY|INSTALL)` 一节里写"默认就是 USE_SOURCE_PERMISSIONS"，
+    # **但对 file(INSTALL) 不成立** —— 它的默认是 0644/0755（install() 那一套），
+    # 源码树里的执行位会**悄悄**丢掉。（实测 2026-10-13：源里的 `x` 是 755，
+    # `cmake -E tar xzf` 解出来还是 755，`file(INSTALL <dir>/ DESTINATION)` 之后变成 644；
+    # 补上 USE_SOURCE_PERMISSIONS 才是 755。）
+    #
+    # 后果有多大（run #29 实测，Linux + macOS 稳定复现）：node 官方套件里
+    # `test/fixtures/run-script/node_modules/.bin/{ada,positional-args,path-env,
+    # special-env-variables,custom-env}` 被 `node --run <script>` 当命令执行，
+    # 掉位之后 `sh -c <script>` 直接失败 ⇒ **子进程 stdout 为空、stderr 进 child.stderr
+    # （用例不打印它）**，于是 test-node-run 里 6 个子用例全红、而报错信息里
+    # 完全看不出是权限问题（Windows 不受影响：那边走 `.bat`，cmd.exe 不看执行位）。
+    # 这类"红线变脚本"的检查见 test/tests/ctest_node_suite.cmake 里的
+    # `node-suite-fixtures-executable` 用例。
+    file(INSTALL "${SOURCE_PATH}/test/" DESTINATION "${_node_suite}/test"
+        USE_SOURCE_PERMISSIONS)
     # 整棵 tools/（约 6 MB）：test.py / utils.py 是驱动，tools/icu/icu_versions.json
     # 等是上游用例会读的数据。
-    file(INSTALL "${SOURCE_PATH}/tools/" DESTINATION "${_node_suite}/tools")
+    file(INSTALL "${SOURCE_PATH}/tools/" DESTINATION "${_node_suite}/tools"
+        USE_SOURCE_PERMISSIONS)
 
     # 用例会按相对路径读的兄弟目录（漏一个就多一片假失败）。
-    file(INSTALL "${SOURCE_PATH}/benchmark/" DESTINATION "${_node_suite}/benchmark")
-    file(INSTALL "${SOURCE_PATH}/doc/" DESTINATION "${_node_suite}/doc")
-    file(INSTALL "${SOURCE_PATH}/lib/" DESTINATION "${_node_suite}/lib")
+    file(INSTALL "${SOURCE_PATH}/benchmark/" DESTINATION "${_node_suite}/benchmark"
+        USE_SOURCE_PERMISSIONS)
+    file(INSTALL "${SOURCE_PATH}/doc/" DESTINATION "${_node_suite}/doc"
+        USE_SOURCE_PERMISSIONS)
+    file(INSTALL "${SOURCE_PATH}/lib/" DESTINATION "${_node_suite}/lib"
+        USE_SOURCE_PERMISSIONS)
     # .cc 也要装：test-cli-node-options-docs 读 src/node_options.cc 去核对
     # CLI 选项与文档的一致性。只装 .h/.hpp 会让它 ENOENT。
     file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${_node_suite}/src"
+        USE_SOURCE_PERMISSIONS
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.cc")
     file(INSTALL "${SOURCE_PATH}/CHANGELOG.md" DESTINATION "${_node_suite}")
 
@@ -469,7 +492,8 @@ if("test-suite" IN_LIST FEATURES)
             # file(INSTALL <dir> DEST) 把 <dir> 本体拷进 DEST → DEST/<dir>/...
             # 所以 DEST 给 .../deps 而不是 .../deps/<dir>（后者会出 deps/npm/npm/）。
             file(INSTALL "${SOURCE_PATH}/deps/${_node_dep}"
-                DESTINATION "${_node_suite}/deps")
+                DESTINATION "${_node_suite}/deps"
+                USE_SOURCE_PERMISSIONS)
         endif()
     endforeach()
     unset(_node_dep)
@@ -504,9 +528,13 @@ if("tools" IN_LIST FEATURES)
                             GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     endif()
 
-    # npm 与 corepack 就是 node 源码树里 vendor 的那两份（发行版同源）
-    file(INSTALL "${SOURCE_PATH}/deps/npm/" DESTINATION "${_node_tools}/node_modules/npm")
-    file(INSTALL "${SOURCE_PATH}/deps/corepack/" DESTINATION "${_node_tools}/node_modules/corepack")
+    # npm 与 corepack 就是 node 源码树里 vendor 的那两份（发行版同源）。
+    # USE_SOURCE_PERMISSIONS：它们自带的 POSIX 可执行文件（deps/npm/bin/npm 等）
+    # 在源码树里是 755，别被 file(INSTALL) 的默认 0644 抹掉（理由见 test-suite 那段）。
+    file(INSTALL "${SOURCE_PATH}/deps/npm/" DESTINATION "${_node_tools}/node_modules/npm"
+        USE_SOURCE_PERMISSIONS)
+    file(INSTALL "${SOURCE_PATH}/deps/corepack/" DESTINATION "${_node_tools}/node_modules/corepack"
+        USE_SOURCE_PERMISSIONS)
 
     foreach(_node_shim IN ITEMS npm npx corepack)
         file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/scripts/${_node_shim}"

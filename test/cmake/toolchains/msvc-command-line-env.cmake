@@ -155,17 +155,66 @@ if(NOT _node_port_vs_root STREQUAL "")
   unset(_node_port_msvc_versions)
 endif()
 
-# 目标架构决定 lib 目录（arm64 也要能走通 —— 无机器实测不等于不支持）。
-set(_node_port_msvc_arch "x64")
+# ---------------------------------------------------------------------------
+# 目标架构（x64 / arm64 / x86 / arm）—— 决定 LIB 目录，也被 clang-cl.cmake 用来
+# 算 `--target=`。
+#
+# ★ 判据的顺序是有讲究的：**不能只看 VCPKG_TARGET_ARCHITECTURE**。
+#   vcpkg **编 port** 时会把 `-DVCPKG_TARGET_ARCHITECTURE=<arch>` 显式传给那个子进程
+#   （实测：abseil 的 configure 命令行里有它），但**消费端工程**（本仓库 test/）
+#   走的是 vcpkg.cmake —— 那个文件在第 209 行就 include 本文件，而它**从不设置**
+#   这个变量（只在 971 行把它列进 try_compile 的传播名单，值本身由 vcpkg 工具进程
+#   自己持有）⇒ 在消费端它**永远是空的**。原来空值落到 "x64" 默认，后果：
+#     * 消费端的 LIB 一直指向 `<MSVC>/lib/x64`，而 --target 也按 x64 给（前者见下、
+#       后者见 clang-cl.cmake）；
+#     * run #28 之前 node 自己的库也被 gyp 的 -m64 编成 x64 —— 两半错得一致，
+#       所以只是"CRT 符号找不到"，看不出根因；
+#     * run #29（patch 0017 让 node 的库真 arm64 之后）消费端还是 x64，于是
+#       lld-link: error: node_base.lib(node_base.callback.obj): machine type arm64 conflicts with x64
+#   退路按可靠性排序：
+#     ① VCPKG_TARGET_ARCHITECTURE（port 侧唯一权威）；
+#     ② VCPKG_TARGET_TRIPLET 的首段（vcpkg 的 triplet 命名约定是 `<arch>-<os>[-变体]`，
+#        本仓库 test/cmake/triplets/ 的六个也都照此命名）；
+#     ③ 宿主架构（本仓库 Windows 两档都是 host==target 的原生构建）。
+#   三条都拿不到就**直接红**：宁可配置期报错，也不再"静默编成宿主的 x64"。
+# ---------------------------------------------------------------------------
+set(_node_port_target_arch_src "")
 if(DEFINED VCPKG_TARGET_ARCHITECTURE AND NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "")
-  if(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
-    set(_node_port_msvc_arch "arm64")
-  elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
-    set(_node_port_msvc_arch "x86")
-  elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
-    set(_node_port_msvc_arch "arm")
-  endif()
+  set(NODE_PORT_TARGET_ARCH_RAW "${VCPKG_TARGET_ARCHITECTURE}")
+  set(_node_port_target_arch_src "VCPKG_TARGET_ARCHITECTURE")
+elseif(DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
+  string(REGEX MATCH "^[^-]+" NODE_PORT_TARGET_ARCH_RAW "${VCPKG_TARGET_TRIPLET}")
+  set(_node_port_target_arch_src "VCPKG_TARGET_TRIPLET=${VCPKG_TARGET_TRIPLET} 的首段")
+else()
+  set(NODE_PORT_TARGET_ARCH_RAW "${_node_port_host_arch}")
+  set(_node_port_target_arch_src
+      "宿主架构（CMAKE_HOST_SYSTEM_PROCESSOR=${CMAKE_HOST_SYSTEM_PROCESSOR}）")
 endif()
+
+if(NODE_PORT_TARGET_ARCH_RAW STREQUAL "x64")
+  set(_node_port_target_arch_value "x64")
+elseif(NODE_PORT_TARGET_ARCH_RAW STREQUAL "arm64")
+  set(_node_port_target_arch_value "arm64")
+elseif(NODE_PORT_TARGET_ARCH_RAW STREQUAL "x86")
+  set(_node_port_target_arch_value "x86")
+elseif(NODE_PORT_TARGET_ARCH_RAW STREQUAL "arm")
+  set(_node_port_target_arch_value "arm")
+else()
+  message(FATAL_ERROR
+    "认不出的目标架构 '${NODE_PORT_TARGET_ARCH_RAW}'（来自 ${_node_port_target_arch_src}）。\n"
+    "只认 x64 / arm64 / x86 / arm。这通常意味着 triplet 名不按 `<arch>-<os>...` 的约定，"
+    "或者有人在命令行上把 VCPKG_TARGET_ARCHITECTURE 设成了别的东西。")
+endif()
+unset(_node_port_target_arch_src)
+unset(NODE_PORT_TARGET_ARCH_RAW)
+
+# 存进 cache：本文件可能有 include 守卫（二次 include 直接 return），而 clang-cl.cmake
+# 与 triplet 都依赖这个值 —— cache 变量不受"谁先 include、在哪个作用域"的影响。
+set(NODE_PORT_TARGET_ARCH "${_node_port_target_arch_value}" CACHE INTERNAL
+    "本工程的目标架构（MSVC 写法：x64/arm64/x86/arm）；由 msvc-command-line-env.cmake 解析")
+
+# MSVC 的 lib 目录名就是这套写法，直接沿用。
+set(_node_port_msvc_arch "${NODE_PORT_TARGET_ARCH}")
 
 # 宿主工具目录（nmake / cl.exe / dumpbin 所在）——**按宿主架构挑，不要写死 Hostx64**。
 # ★ 原来这里写的是"宿主工具目录恒为 Hostx64（我们只在 x64 宿主上构建）"。
