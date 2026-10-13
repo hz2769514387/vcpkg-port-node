@@ -110,7 +110,7 @@ endif()
 #
 # 这不是"把失败藏起来"：crash 码、根因与缓解依据都记在这里，且 -j 只影响**并行度**，
 # 用例一条都不少跑、一条都不跳过。
-if(NODE_PORT_TEST_NODE_ARGS)
+# 崩溃诊断用的透传参数（见 test/CMakeLists.txt 里 NODE_PORT_TEST_NODE_ARGS 的说明）。
 # 典型用法（CI 的 Windows 档）：--report-on-fatalerror,--report-directory=$RUNNER_TEMP/crash-reports
 # —— 上游 test.py 只在 crash/timeout 时才打印退出码，而"零输出 + 非零退出"的静默 fast-fail
 # 既没有输出也没有崩溃点；带上它至少能落一份 <report.*.json>（含 message 与 nativeStack）。
