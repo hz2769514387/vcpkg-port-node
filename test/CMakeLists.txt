@@ -51,6 +51,14 @@ set(NODE_PORT_TEST_FLAKY_MODE
     "dontcare"
     CACHE STRING "test.py --flaky-tests 的取值（run|skip|dontcare|keep_retrying）。我们不是上游 CI，默认 dontcare：被上游标成 flaky 的用例照跑，但不拿它的失败去点红灯。")
 
+set(NODE_PORT_TEST_NODE_ARGS
+    ""
+    CACHE STRING
+    "透传给**每个**官方套件用例的 node 参数（逗号分隔，即 test.py 的 --node-args 口径）。
+用途：崩溃诊断。CI 上设成 `--report-on-fatalerror,--report-directory=<目录>`，
+让"零输出 + 非零退出"那种静默 fast-fail 能留下一份带 nativeStack 的报告
+（run #32 实测：Windows 上 http/https 一族 7 条以 0xC0000409 静默死掉，日志里只有退出码）。")
+
 # node 由 vcpkg 装出，提供 CONFIG 包（`find_package(unofficial-node CONFIG)`）与 imported 目标
 # `unofficial::node::node`（含传递依赖与平台链接选项）。
 find_package(unofficial-node CONFIG REQUIRED)

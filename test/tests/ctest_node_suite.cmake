@@ -89,6 +89,34 @@ set(_node_suite_args
 if(NODE_PORT_TEST_JOBS)
   list(APPEND _node_suite_args "-j" "${NODE_PORT_TEST_JOBS}")
 endif()
+
+# ★ Windows 上 `-j` 默认压到 2（写在 test/CMakePresets.json 的两个 windows preset 里）。
+#
+# 为什么：run #32 判读时发现 Windows 两档各有 2~5 条用例以 **0xC0000409** 静默退出
+# （零输出、非 crash 非 timeout），本机复现后拿到 V8 自己打印的那一行：
+#     [low_level_alloc.cc : 554] RAW: Check new_pages != nullptr failed: VirtualAlloc failed
+# 那个文件是 **V8 自带的 abseil**，失败点是
+#     VirtualAlloc(nullptr, new_pages_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE)
+# 即 **提交量（commit charge）耗尽**，不是内存踩踏。
+#
+# 于是"为什么只有 Windows、为什么每轮换一批用例"全都对上了：
+#   * Linux/macOS 默认 overcommit ⇒ 提交失败几乎不会发生；
+#   * Windows 的提交量是**硬限制**（RAM + 页面对换文件），4 个并发 node 进程
+#     （V8 每个进程的老生代上限按机器内存自动放大到 GB 级）叠起来就可能摸到上限，
+#     于是"谁是那一刻最倒霉的那个进程"就崩 —— 所以失败集合逐轮变化；
+#   * macOS 那一档本来就跑 -j 2，从来没出过这个码。
+# 压到 2 之后峰值提交量大约减半（约 5~9 GB，16 GB 的 runner 有足够余量）。
+# 代价：套件墙钟时间约翻倍（x64-windows 实测 8:42 → 15 分钟量级），远小于 job 超时。
+#
+# 这不是"把失败藏起来"：crash 码、根因与缓解依据都记在这里，且 -j 只影响**并行度**，
+# 用例一条都不少跑、一条都不跳过。
+if(NODE_PORT_TEST_NODE_ARGS)
+# 典型用法（CI 的 Windows 档）：--report-on-fatalerror,--report-directory=$RUNNER_TEMP/crash-reports
+# —— 上游 test.py 只在 crash/timeout 时才打印退出码，而"零输出 + 非零退出"的静默 fast-fail
+# 既没有输出也没有崩溃点；带上它至少能落一份 <report.*.json>（含 message 与 nativeStack）。
+if(NODE_PORT_TEST_NODE_ARGS)
+  list(APPEND _node_suite_args "--node-args=${NODE_PORT_TEST_NODE_ARGS}")
+endif()
 # ---------------------------------------------------------------------------
 # 「应当跳过」清单 = 文件（单一来源 + 平台过滤 + 强制写理由） + 使用者额外给的
 #
