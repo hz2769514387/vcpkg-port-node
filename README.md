@@ -80,6 +80,18 @@ target_link_libraries(<你的目标> PRIVATE unofficial::node::node)
 - **Tier 2** —— CI 会跑但允许失败：结果不承诺，只用来观察趋势与提前暴露问题。
 - 动态库 / 32 位 / mingw / android / ios —— 结构性不支持。
 
+### CI 结构（四个 workflow）
+
+| workflow | 触发 | 跑什么 |
+|---|---|---|
+| `ci lint` | push + 手工 | 静态红线与语法闸门（与构建口径无关，两边都要跑） |
+| `ci debug` | **push**（默认）+ 手工 | 六平台的 **debug** 口径（`NODE_PORT_BUILD_TYPE=debug` + `CMAKE_BUILD_TYPE=Debug`）。debug 从未实测 ⇒ 这几档先 `allow_failure`，修到全绿再升硬门 |
+| `ci release` | **只手工** | 六平台的 release 口径（交付口径，由人决定何时测） |
+| `platform` | 被上面两个 `workflow_call` | 共享的"单平台 构建 + ctest"作业体，避免两处复制漂移 |
+
+六平台 = x64/arm64 × linux/windows/macos（`x64-osx` 走 `macos-15`，Intel 镜像）。
+本机想编 debug：`NODE_PORT_BUILD_TYPE=debug cmake --preset <平台> -DCMAKE_BUILD_TYPE=Debug ...`。
+
 ## 构建成本与资源需求
 
 | 项 | 量级 |

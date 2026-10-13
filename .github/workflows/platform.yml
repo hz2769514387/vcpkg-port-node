@@ -32,15 +32,32 @@
 #   （3 核 / 7 GB，5 个并发 V8 编译单元容易 OOM）。这个值会经 VCPKG_CONCURRENCY
 #   传给 port 内部的 ninja -j —— 给 2 会让 node 的全量构建更容易撞 job 超时。
 
-name: ci
+name: platform
 
+# 共享的"单平台 构建 + ctest"作业。ci-debug.yml / ci-release.yml 用 workflow_call 调用它。
+#
+# 为什么拆：debug 与 release 是两套**触发策略**（push 默认跑 debug；release 手工触发），
+# 但作业体完全一样 —— 复制几百行只会在下次改动时漂移。平台差异全部走 inputs：
+#   os / preset / triplet / label / vcpkg_conc / allow_failure / expect_arch / debug
+#
+# debug="" 表示 release 口径；debug="1" 时：
+#   * 作业环境里带 NODE_PORT_BUILD_TYPE=debug ⇒ 三元组把 VCPKG_BUILD_TYPE 设成 debug
+#     （依赖也按 debug 编、Windows 上是 /MTd 那套）；
+#   * 配置时额外传 -DCMAKE_BUILD_TYPE=Debug（消费端测试工程也按 debug 编）。
 on:
-  push:
-  pull_request:
-  workflow_dispatch:
+  workflow_call:
+    inputs:
+      os:            { required: true,  type: string }
+      preset:        { required: true,  type: string }
+      triplet:       { required: true,  type: string }
+      label:         { required: true,  type: string }
+      vcpkg_conc:    { required: true,  type: string }
+      allow_failure: { required: true,  type: string }
+      expect_arch:   { required: false, type: string, default: "" }
+      debug:         { required: false, type: string, default: "" }
 
 concurrency:
-  group: ${{ github.workflow }}-${{ github.ref }}
+  group: ${{ github.workflow }}-${{ github.ref }}-${{ inputs.label }}
   cancel-in-progress: true
 
 env:
@@ -49,263 +66,13 @@ env:
   VCPKG_MAX_CONCURRENCY: "2"
 
 jobs:
-  # ---------------------------------------------------------------------------
-  # L1：静态校验。这一层要能在**不编译**的情况下抓住所有"改 port 忘了同步"的错误，
-  #     所以每条规则都落成脚本红灯，而不是文档里的"请遵守"。
-  # ---------------------------------------------------------------------------
-  lint:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: 校验 port 清单与必备文件
-        shell: bash
-        run: |
-          set -euo pipefail
-          for f in ports/node/vcpkg.json ports/node/portfile.cmake ports/node/usage versions/n-/node.json; do
-            test -f "$f" || { echo "::error::缺文件：$f"; exit 1; }
-          done
-          echo "必备文件齐备"
-
-      - name: 所有 JSON 必须合法
-        shell: bash
-        run: |
-          set -euo pipefail
-          python3 - <<'PY'
-          import json
-          import pathlib
-          import sys
-
-          files = [p for p in sorted(pathlib.Path(".").rglob("*.json")) if ".git" not in p.parts]
-          bad = []
-          for p in files:
-              try:
-                  json.loads(p.read_text(encoding="utf-8"))
-              except Exception as exc:
-                  bad.append((p, exc))
-          for p, exc in bad:
-              print("::error file=%s::JSON 不合法：%s" % (p, exc))
-          print("检查了 %d 个 JSON 文件，%d 个不合法" % (len(files), len(bad)))
-          sys.exit(1 if bad else 0)
-          PY
-
-      - name: 换行符统一（策略见 .gitattributes）
-        shell: bash
-        run: |
-          set -euo pipefail
-          test -f .gitattributes || { echo "::error::缺 .gitattributes"; exit 1; }
-          # 逐字节判定：被跟踪文件里不该有任何 CR。.gitattributes 声明 * text=auto eol=lf，
-          # 谁用 CRLF 编辑过一个文件并提交，这里就红。
-          # 用 Python 读字节而不是 shell 里的 $'\r' —— 后者在不同 shell/环境里行为不一致
-          # （本机 Git Bash 上会展开成空串，导致"全部文件都命中"的假阳性）。
-          python3 - <<'PY'
-          import pathlib
-          import subprocess
-          import sys
-
-          ls = subprocess.run(["git", "ls-files", "-z"], capture_output=True, check=True).stdout
-          files = [p.decode("utf-8") for p in ls.split(b"\x00") if p]
-          bad = []
-          for f in files:
-              if f.endswith('.cmd'):
-                  # 声明过的例外：Windows 批处理用 CRLF（见 .gitattributes 的 *.cmd 行）
-                  continue
-              try:
-                  if b"\r" in pathlib.Path(f).read_bytes():
-                      bad.append(f)
-              except OSError as exc:
-                  print("::warning file=%s::读不到文件：%s" % (f, exc))
-          for f in bad:
-              print("::error file=%s::含 CR，应为 LF（见 .gitattributes）" % f)
-          print("检查了 %d 个被跟踪文件，%d 个含 CR" % (len(files), len(bad)))
-          sys.exit(1 if bad else 0)
-          PY
-
-      - name: versions 的 git-tree 与 ports/node 实际内容一致
-        shell: bash
-        run: |
-          set -euo pipefail
-          # 两条**互相独立**的路径必须给出同一个数字，两者都过才算过：
-          #  (a) 脚本按 vcpkg x-add-version 的方式算（临时索引 + write-tree + 取子树），
-          #      不依赖"先提交"，本地也能用；
-          #  (b) 直接读 HEAD 里 ports/node 的 tree。
-          # 只留 (a) 会漏掉"脚本本身算错"这种故障（开发这个脚本时就真的漏过一次），
-          # 所以 (b) 是必须的对照。
-          python3 tools/version_tree.py --check
-          recorded="$(python3 -c "import json;print(json.load(open('versions/n-/node.json'))['versions'][0]['git-tree'])")"
-          head_tree="$(git rev-parse HEAD:ports/node)"
-          echo "版本表记录：$recorded"
-          echo "HEAD 里的 ：$head_tree"
-          if [ "$recorded" != "$head_tree" ]; then
-            echo "::error::版本表与 HEAD 里的 ports/node 不一致"
-            exit 1
-          fi
-
-      - name: portfile.cmake 必须能被 CMake 解析（语法闸门）
-        shell: bash
-        run: |
-          set -euo pipefail
-          # 为什么单独立一条：portfile 里大量用 `string(APPEND _cfg "…\n")` 往生成的
-          # node-config.cmake 里拼内容 —— 一个**没转义的双引号**就能把字符串提前截断。
-          # 这类错误 CMake 是"先整体解析、再执行"，所以 `cmake -P` 就是一把现成的语法闸门：
-          # 解析过了才会执行，而执行一定会在第一个 vcpkg_* 命令处停下（那不算错）。
-          #
-          # 2026-10-12 实测：给链接组写注释时就写出过一个未转义的引号，当时是 configure
-          # 阶段替我挡下的 —— 那是运气不是机制（同一类话在"补丁必须挂进 PATCHES"那条里
-          # 已经写过一次了，这里把它补成机制）。
-          if ! command -v cmake >/dev/null 2>&1; then
-            echo "::warning::本 job 没有 cmake，跳过 portfile 语法体检"
-            exit 0
-          fi
-          bad=0
-          while IFS= read -r f; do
-            out="$(cmake -P "$f" 2>&1 || true)"
-            if printf '%s\n' "$out" | grep -q "Parse error"; then
-              echo "$out"
-              echo "::error file=$f::$f 有 CMake 解析错误"
-              bad=1
-            fi
-          done < <(find ports/node -name '*.cmake' -type f | sort)
-          if [ "$bad" -ne 0 ]; then
-            exit 1
-          fi
-          echo "ports/node 下的 cmake 文件全部可被 CMake 解析"
-
-          # ★ 上一条挡不住的盲区（2026-10-13 实测付出 2h37m 的代价）：
-          #   `cmake -P` 只在**执行到某一行**时才报"引号内变量引用没闭合"，
-          #   而 portfile 执行到第一个 `vcpkg_*` 命令就停下了（那是预期的）——
-          #   于是 `"${_cfg"`（少一个 `}`）这种错它**永远报不出来**。
-          #   这里补一个纯文本检查器（带自测），专治这一类。
-          echo "=== 引号内变量引用是否闭合 ==="
-          python3 tools/check_cmake_strings.py --self-test
-          python3 tools/check_cmake_strings.py ports/node
-
-      - name: test 工程的胶水必须能完整加载（反"早退遮蔽"闸门）
-        shell: bash
-        run: |
-          set -u
-          # 为什么单独立一条：test/tests/*.cmake 开头是一串 `if(NOT …) return()`，
-          # 而 `cmake -P <file>`（上一条闸门）在脚本模式下**必然**停在这些早退处
-          # ⇒ 早退之后的语法/流控错误它永远看不到。
-          # 2026-10-13 实测代价：一行多余的 `if()` 让 Windows 的配置期报
-          #   CMake Error at tests/ctest_node_suite.cmake:113 (if):
-          #     Flow control statements are not properly nested.
-          # 于是那一轮 6 个 job 全废。本步骤造 fixture 满足全部早退条件 + 顶掉
-          # add_test/set_tests_properties，把胶水真加载到末尾，并断言注册到了用例。
-          if ! command -v cmake >/dev/null 2>&1; then
-            echo "::warning::本 job 没有 cmake，跳过胶水加载闸门"
-            exit 0
-          fi
-          cmake -P tools/check_test_glue.cmake
-
-      - name: port 必须自包含（不引用 port 目录外的任何东西）
-        shell: bash
-        run: |
-          set -euo pipefail
-          # 1) port 目录只允许这几种条目：多出 cmake/ 之类的，就是 triplet/toolchain
-          #    （属于消费端）混进 port 了。
-          for p in ports/node/* ports/node/.[!.]*; do
-            [ -e "$p" ] || continue
-            case "$(basename "$p")" in
-              portfile.cmake|vcpkg.json|usage|patches|scripts) ;;
-              *) echo "::error::ports/node 出现了不该有的条目：$p"; exit 1 ;;
-            esac
-          done
-          # 2) 脚本/清单里不能引用 port 目录外的路径。
-          #    注意排除被转义的形式（\${CMAKE_CURRENT_LIST_DIR}/../.. 是**生成**给消费端
-          #    的相对路径字符串，不是 port 自己去读外面的文件）。
-          if grep -rnE '(^|[^\\])\$\{CMAKE_CURRENT_LIST_DIR\}/\.\./|test/cmake|ports/node/cmake' \
-               --include='*.cmake' --include='*.json' ports/node; then
-            echo "::error::ports/node 引用了 port 目录外的路径（见上面列出的行）"
-            exit 1
-          fi
-          echo "port 自包含检查通过"
-
-      - name: patches/ 里的补丁必须都挂进 portfile 的 PATCHES
-        shell: bash
-        run: |
-          set -euo pipefail
-          # 为什么单独立一条红线：2026-10-12 我把 0015 落盘后**忘了加进 PATCHES 列表**，
-          # 补丁从头到尾没被应用。那一枪是 configure 阶段的红线替我挡的 —— 那是运气，
-          # 不是机制。漏挂的补丁是**静默失效**：源码照旧、症状要到很后面才出现，
-          # 而且外表看不出"补丁没打"和"补丁没生效"的区别。
-          python3 - <<'PY'
-          import pathlib, re, sys
-
-          portfile = pathlib.Path("ports/node/portfile.cmake").read_text(encoding="utf-8")
-          m = re.search(r"\bPATCHES\b(.*?)\n\)", portfile, re.S)
-          if not m:
-              print("::error::portfile.cmake 里找不到 PATCHES 块")
-              sys.exit(1)
-          block = m.group(1)
-          pdir = pathlib.Path("ports/node/patches")
-
-          bad = [p.name for p in sorted(pdir.glob("*.patch")) if p.name not in block]
-          for name in bad:
-              print("::error file=ports/node/patches/%s::补丁存在但没挂进 PATCHES（会静默失效）" % name)
-
-          # 反向：PATCHES 里写的每个文件都得真的存在（防止改名后留下死引用）
-          missing = [r for r in re.findall(r"patches/([0-9A-Za-z._-]+\.patch)", block)
-                     if not (pdir / r).is_file()]
-          for name in missing:
-              print("::error::PATCHES 引用了不存在的补丁 %s" % name)
-
-          total = len(list(pdir.glob("*.patch")))
-          print("patches/ 共 %d 个；未挂载 %d 个；死引用 %d 个" % (total, len(bad), len(missing)))
-          sys.exit(1 if (bad or missing) else 0)
-          PY
-
-  # ---------------------------------------------------------------------------
-  # L2 + L3：编译 test（清单模式自动装 node + 依赖）+ 消费端冒烟。
-  # ---------------------------------------------------------------------------
   build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # vcpkg_conc：这个平台的 vcpkg/ninja 并发度。x64 的 runner 是 4 核起步，
-          # 给 2 会让 node 的全量构建更容易撞 job 超时；macOS 只有 3 核 / 7 GB，
-          # 必须压到 2（否则 5 个并发 V8 编译单元容易 OOM）。
-          - os: ubuntu-latest
-            preset: linux
-            triplet: x64-linux
-            vcpkg_conc: 4
-            allow_failure: false
-          - os: ubuntu-24.04-arm
-            preset: linux-arm64
-            triplet: arm64-linux
-            vcpkg_conc: 4
-            allow_failure: true
-          # expect_arch：产物的 PE Machine 断言用（见"断言产物架构"那一步）。
-          - os: windows-latest
-            preset: windows-clang-cl
-            triplet: x64-windows-static-clang
-            vcpkg_conc: 4
-            allow_failure: false
-            expect_arch: x64
-          # ★ arm64 走 **原生 arm64 runner（windows-11-arm）**，不做 x64 宿主交叉编译。
-          #   原因（run #23 / #24 实测）：交叉编译会打开 gyp 的 host toolset
-          #   —— configure.py 里 `want_separate_host_toolset = int(cross_compiling)` ——
-          #   而 `--with-intl=system-icu` 让 ICU 变成"只有目标架构一份"的**外部**库；
-          #   gyp 的 host toolset 机制能给树内依赖编一份宿主的，但变不出宿主架构的外部 ICU。
-          #   于是宿主工具（gen-regexp-special-case → 之后还有 mksnapshot）用 x64 链接器
-          #   去链 ARM64 的 icu*.lib，报一堆 LNK2019 + 21 条 LNK4272。
-          #   宿主==目标时这个开关是 0 ⇒ 整类问题消失（这也是上游自己对 win-arm64 的做法）。
-          #   ⚠️ 该镜像带 **x64 仿真**：配置不当会"静默产出 x64 二进制"（它在 arm64 上照样跑），
-          #   所以下一步的产物架构断言是必须的，不是装饰。
-          - os: windows-11-arm
-            preset: windows-clang-cl-arm64
-            triplet: arm64-windows-static-clang
-            vcpkg_conc: 4
-            allow_failure: true
-            expect_arch: ARM64
-          - os: macos-latest
-            preset: macos
-            triplet: arm64-osx
-            vcpkg_conc: 2
-            allow_failure: true
-    runs-on: ${{ matrix.os }}
-    continue-on-error: ${{ matrix.allow_failure }}
+    name: ${{ inputs.label }}
+    continue-on-error: ${{ inputs.allow_failure }}
+    env:
+      NODE_PORT_BUILD_TYPE: ${{ inputs.debug == '1' && 'debug' || 'release' }}
+    runs-on: ${{ inputs.os }}
+    continue-on-error: ${{ inputs.allow_failure }}
     # GitHub 单个 job 的硬上限是 6 小时。给一个留余量的值：超时被取消时，
     # `if: always()` 的收集步骤仍会跑，日志能带走 —— 否则白等一场。
     timeout-minutes: 350
@@ -317,8 +84,8 @@ jobs:
         run: |
           # 覆盖 workflow 级的 VCPKG_MAX_CONCURRENCY。它会经 VCPKG_CONCURRENCY 传进
           # port 内部的 ninja -j（x64 给 4，macOS 压到 2）。
-          echo "VCPKG_MAX_CONCURRENCY=${{ matrix.vcpkg_conc }}" >> "$GITHUB_ENV"
-          echo "VCPKG_MAX_CONCURRENCY=${{ matrix.vcpkg_conc }}"
+          echo "VCPKG_MAX_CONCURRENCY=${{ inputs.vcpkg_conc }}" >> "$GITHUB_ENV"
+          echo "VCPKG_MAX_CONCURRENCY=${{ inputs.vcpkg_conc }}"
 
       - name: 记录可用磁盘
         if: always()
@@ -461,7 +228,7 @@ jobs:
           log="$RUNNER_TEMP/configure.log"
           delays=(10 60 120)
           for attempt in 0 1 2 3; do
-            if cmake --preset ${{ matrix.preset }} 2>&1 | tee "$log"; then
+            if cmake --preset ${{ inputs.preset }}${{ inputs.debug == '1' && ' -DCMAKE_BUILD_TYPE=Debug' || '' }} 2>&1 | tee "$log"; then
               echo "配置成功（第 $((attempt+1)) 次尝试）"
               exit 0
             fi
@@ -487,7 +254,7 @@ jobs:
           #   "没有匹配到错误行（若本 job 成功属正常）"—— 误导。
           set -o pipefail
           cd test
-          cmake --build --preset ${{ matrix.preset }} 2>&1 | tee "$RUNNER_TEMP/test-build.log"
+          cmake --build --preset ${{ inputs.preset }} 2>&1 | tee "$RUNNER_TEMP/test-build.log"
 
       # ---- 断言产物架构 --------------------------------------------------------
       # 为什么需要（不是装饰）：arm64 Windows runner 带 **x64 仿真** —— 工具链配置不当
@@ -500,8 +267,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          exe="test/build/${{ matrix.preset }}/app/node.exe"
-          want="${{ matrix.expect_arch }}"
+          exe="test/build/${{ inputs.preset }}/app/node.exe"
+          want="${{ inputs.expect_arch }}"
           if [ ! -f "$exe" ]; then
             echo "::error::$exe 不存在，无法断言架构"
             exit 1
@@ -540,10 +307,10 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          exe="test/build/${{ matrix.preset }}/app/node.exe"
-          [ -f "$exe" ] || exe="test/build/${{ matrix.preset }}/app/node"
+          exe="test/build/${{ inputs.preset }}/app/node.exe"
+          [ -f "$exe" ] || exe="test/build/${{ inputs.preset }}/app/node"
           {
-            echo "## ${{ matrix.triplet }} 实际构建配置"
+            echo "## ${{ inputs.triplet }} 实际构建配置"
             echo '```'
             echo "--- process.config（编出来的 node 自己报的）---"
             if [ -f "$exe" ]; then
@@ -566,7 +333,9 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          ctest --test-dir "test/build/${{ matrix.preset }}" -N | tee "$RUNNER_TEMP/ctest-list.txt"
+          # -V：把**完整命令行**也写进 ctest-list.txt —— run #34 里套件在"列用例"阶段就
+          # 抛 re.PatternError 而死，而日志里看不到 test.py 的真实 argv，判读卡了很久。
+          ctest --test-dir "test/build/${{ inputs.preset }}" -N -V | tee "$RUNNER_TEMP/ctest-list.txt"
 
       - name: 开始记录提交量水位（Windows；判读 0xC0000409 用）
         if: runner.os == 'Windows'
@@ -588,7 +357,7 @@ jobs:
         run: |
           # pipefail：让失败通过 tee 传出来（否则管道最后一段的退出码会把它吃掉）
           set -o pipefail
-          ctest --test-dir "test/build/${{ matrix.preset }}" \
+          ctest --test-dir "test/build/${{ inputs.preset }}" \
                 --output-on-failure \
                 -j "${VCPKG_MAX_CONCURRENCY}" \
                 2>&1 | tee "$RUNNER_TEMP/ctest.log"
@@ -598,7 +367,7 @@ jobs:
         shell: bash
         run: |
           {
-            echo "## ${{ matrix.triplet }} ctest 摘要"
+            echo "## ${{ inputs.triplet }} ctest 摘要"
             echo ""
             # ★ 先把**统计行**单独提到最前面：评审 B6 要的是"完整通过率"，而 tail -n 80
             #   有可能把它截掉（套件输出很长），看的人反而看不到结论。
@@ -649,7 +418,7 @@ jobs:
           if [ -s "$summary" ]; then
             cat "$summary"
             {
-              echo "## ${{ matrix.triplet }} 首错"
+              echo "## ${{ inputs.triplet }} 首错"
               echo '```'
               head -n 120 "$summary"
               echo '```'
@@ -675,17 +444,17 @@ jobs:
             echo "=== vcpkg version ==="
             vcpkg version 2>&1 || true
             echo "=== triplet ==="
-            echo "${{ matrix.triplet }}"
+            echo "${{ inputs.triplet }}"
             echo "=== preset ==="
-            echo "${{ matrix.preset }}"
+            echo "${{ inputs.preset }}"
             echo "=== compiler ==="
             cc --version 2>&1 || true
             c++ --version 2>&1 || true
             clang-cl --version 2>&1 || true
             echo "=== installed libs ==="
-            ls -la "$VCPKG_ROOT/installed/${{ matrix.triplet }}/lib/" 2>&1 || true
+            ls -la "$VCPKG_ROOT/installed/${{ inputs.triplet }}/lib/" 2>&1 || true
             echo "=== installed node-config ==="
-            sed -n '1,80p' "$VCPKG_ROOT/installed/${{ matrix.triplet }}/share/node/node-config.cmake" 2>&1 || true
+            sed -n '1,80p' "$VCPKG_ROOT/installed/${{ inputs.triplet }}/share/node/node-config.cmake" 2>&1 || true
             echo "=== disk space ==="
             df -h 2>&1 || true
           } > "$RUNNER_TEMP/ci-logs/env_info.txt"
@@ -710,7 +479,7 @@ jobs:
         if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-part-${{ matrix.triplet }}
+          name: logs-part-${{ inputs.triplet }}
           path: ${{ runner.temp }}/ci-logs
           if-no-files-found: error
           retention-days: 2
@@ -718,40 +487,3 @@ jobs:
   # ---------------------------------------------------------------------------
   # 汇总日志：把各平台的日志合成**一个**归档 —— 下载一次就够。
   # ---------------------------------------------------------------------------
-  logs:
-    needs: [build]
-    if: always()
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/download-artifact@v4
-        with:
-          pattern: logs-part-*
-          path: all-logs
-          merge-multiple: false
-
-      - name: 合成单个归档
-        shell: bash
-        run: |
-          set -euo pipefail
-          # head 会提前关管道 → 上游 tar/ls 收到 SIGPIPE 而非零退出；配合 pipefail 会让这一步
-          # 整步失败（run #14 就是这么把 logs job 弄红的）。这里统一给 `|| true`。
-          ls -R all-logs | head -n 60 || true
-          tar -czf ci-logs.tar.gz -C all-logs .
-          ls -lh ci-logs.tar.gz
-          {
-            echo "## 日志归档"
-            echo ""
-            echo "下载 ci-logs artifact 即可拿到**全部平台**的日志（一个文件，目录名区分平台）。"
-            echo ""
-            echo '```'
-            tar -tzf ci-logs.tar.gz | head -n 60 || true
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: 上传汇总归档
-        uses: actions/upload-artifact@v4
-        with:
-          name: ci-logs
-          path: ci-logs.tar.gz
-          if-no-files-found: error
-          retention-days: 7

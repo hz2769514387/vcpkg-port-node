@@ -1,0 +1,113 @@
+name: ci debug
+
+# push 默认跑 debug。**debug 口径从未实测**（欠账 §1），所以这几档先 continue-on-error
+# （allow_failure: true）——先把它跑起来、拿到失败清单，再逐条修；修到全绿时再升硬门。
+# 想跑 release：Actions 页面手工触发 ci release。
+on:
+  push:
+  workflow_dispatch:
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  VCPKG_REF: "2026.07.29"
+  VCPKG_DISABLE_METRICS: "1"
+
+jobs:
+  build:
+    name: ${{ matrix.label }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            preset: linux
+            triplet: x64-linux
+            label: x64-linux (debug)
+            vcpkg_conc: "4"
+            allow_failure: "true"
+            expect_arch: ""
+          - os: ubuntu-24.04-arm
+            preset: linux-arm64
+            triplet: arm64-linux
+            label: arm64-linux (debug)
+            vcpkg_conc: "4"
+            allow_failure: "true"
+            expect_arch: ""
+          - os: windows-latest
+            preset: windows-clang-cl
+            triplet: x64-windows-static-clang
+            label: x64-windows (debug)
+            vcpkg_conc: "4"
+            allow_failure: "true"
+            expect_arch: x64
+          - os: windows-11-arm
+            preset: windows-clang-cl-arm64
+            triplet: arm64-windows-static-clang
+            label: arm64-windows (debug)
+            vcpkg_conc: "4"
+            allow_failure: "true"
+            expect_arch: ARM64
+          - os: macos-latest
+            preset: macos
+            triplet: arm64-osx
+            label: arm64-osx (debug)
+            vcpkg_conc: "2"
+            allow_failure: "true"
+            expect_arch: ""
+          - os: macos-15
+            preset: macos-x64
+            triplet: x64-osx
+            label: x64-osx (debug)
+            vcpkg_conc: "2"
+            allow_failure: "true"
+            expect_arch: ""
+    uses: ./.github/workflows/platform.yml
+    with:
+      os: ${{ matrix.os }}
+      preset: ${{ matrix.preset }}
+      triplet: ${{ matrix.triplet }}
+      label: ${{ matrix.label }}
+      vcpkg_conc: ${{ matrix.vcpkg_conc }}
+      allow_failure: ${{ matrix.allow_failure }}
+      expect_arch: ${{ matrix.expect_arch }}
+      debug: "1"
+  logs:
+    needs: [build]
+    if: always()
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: logs-part-*
+          path: all-logs
+          merge-multiple: false
+
+      - name: 合成单个归档
+        shell: bash
+        run: |
+          set -euo pipefail
+          # head 会提前关管道 → 上游 tar/ls 收到 SIGPIPE 而非零退出；配合 pipefail 会让这一步
+          # 整步失败（run #14 就是这么把 logs job 弄红的）。这里统一给 `|| true`。
+          ls -R all-logs | head -n 60 || true
+          tar -czf ci-logs.tar.gz -C all-logs .
+          ls -lh ci-logs.tar.gz
+          {
+            echo "## 日志归档"
+            echo ""
+            echo "下载 ci-logs artifact 即可拿到**全部平台**的日志（一个文件，目录名区分平台）。"
+            echo ""
+            echo '```'
+            tar -tzf ci-logs.tar.gz | head -n 60 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: 上传汇总归档
+        uses: actions/upload-artifact@v4
+        with:
+          name: ci-logs
+          path: ci-logs.tar.gz
+          if-no-files-found: error
+          retention-days: 7
