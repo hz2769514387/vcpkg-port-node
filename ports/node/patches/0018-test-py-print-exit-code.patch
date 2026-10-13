@@ -1,0 +1,41 @@
+--- a/tools/test.py
++++ b/tools/test.py
+@@ -127,6 +127,14 @@
+       output += ["--- stdout ---"]
+       output += [failure.output.stdout.strip()]
+     output += ["Command: %s" % EscapeCommand(failure.command)]
++    # P18: print the exit code unconditionally. Upstream only reports it for
++    # crashes and timeouts, so a case that dies quietly (empty stdout/stderr,
++    # plain non-zero exit) leaves nothing at all to diagnose with -- which is
++    # exactly what we hit in CI on Windows (vcpkg-port-node run #29..#31).
++    # For Windows the code is an NTSTATUS (0xC0000005 access violation,
++    # 0xC00000FD stack overflow, 0xC000013A killed, ...); on POSIX a negative
++    # value is the signal number. Hence the hex form.
++    output += ["--- exit code: %s ---" % FormatExitCode(failure.output.exit_code)]
+     if failure.HasCrashed():
+       output += ["--- %s ---" % PrintCrashed(failure.output.exit_code)]
+     if failure.HasTimedOut():
+@@ -474,6 +482,8 @@
+       if len(stderr):
+         print(self.templates['stderr'] % stderr)
+       print("Command: %s" % EscapeCommand(output.command))
++      # P18: see GetFailureOutput.
++      print("--- exit code: %s ---" % FormatExitCode(output.output.exit_code))
+       if output.HasCrashed():
+         print("--- %s ---" % PrintCrashed(output.output.exit_code))
+       if output.HasTimedOut():
+@@ -1588,6 +1598,14 @@
+     return "CRASHED (Signal: %d)" % -code
+ 
+ 
++def FormatExitCode(code):
++  # P18: see GetFailureOutput. `code` can be None when the process never
++  # started at all, hence the isinstance() guard.
++  if isinstance(code, int):
++    return "%d (0x%08X)" % (code, code & 0xFFFFFFFF)
++  return "%s" % code
++
++
+ # these suites represent special cases that should not be run as part of the
+ # default JavaScript test-run, e.g., internet/ requires a network connection,
+ # addons/ requires compilation.

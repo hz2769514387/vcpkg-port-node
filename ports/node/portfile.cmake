@@ -74,6 +74,11 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0015-configure-prepend-v8-bundled-includes.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0016-gyp-ninja-no-thin-archives.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0017-gyp-ninja-clang-cl-arm64-target.patch"
+        # 给**测试驱动** tools/test.py 加一行诊断：失败用例一律打印退出码（含十六进制）。
+        # 起因：CI 上 Windows 出现"零输出 + 非零退出"的静默失败，上游只在 crash/timeout
+        # 时才打印退出码 ⇒ 日志里没有任何可判读的线索（run #29~#31 实测）。
+        # 它只影响 test-suite feature 里那份测试驱动，与库本体无关。
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0018-test-py-print-exit-code.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。
