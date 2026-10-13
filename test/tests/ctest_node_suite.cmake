@@ -175,57 +175,103 @@ if(NOT _node_suite_list)
   set(_node_suite_list "default")
 endif()
 
-# 每个用例一个独立的临时根目录（NODE_TEST_DIR / test/common/tmpdir.js 都认它）。
-# 只有一个 test.py 进程时其实撞不上，但这是给"分片/多进程"留的安全带，成本一个目录。
+# 临时根（NODE_TEST_DIR）：**必须又短、又"离家近"** —— 两个方向同时受限。
 #
-# ★★ 这个目录**必须短**：官方用例里有几条要 `listen()` 一个 UNIX domain socket
-#   （test-fs-cp-async-socket / test-fs-cp-sync-copy-socket-error …），而 sun_path 的
-#   上限是 108 字节（含结尾 NUL）。判读时看到的路径形状是
-#     <临时根>/.tmp.<线程号>/copy_%<n>/<pid>.sock
-#   （tmpdir.js 见 test/common/tmpdir.js，copy_%N 来自 test/common/fs.js 的 nextdir()）。
-#   原来临时根写在 ${CMAKE_CURRENT_BINARY_DIR}/node-suite-tmp 下，CI 上就是
-#     /home/runner/work/vcpkg-port-node/vcpkg-port-node/test/build/linux/…  （67 字符）
-#   叠完 121 字符 ⇒ run #29 实测
-#     test-fs-cp-async-socket.mjs  Error: listen EINVAL（socket 路径过长）
-#     test-fs-cp-sync-copy-socket-error.mjs  ENOENT（socket 根本没建出来 ⇒ 连带失败）
-#   上游 test.py 默认就用系统临时目录（它自己 mkdtemp），所以这里也以**系统临时目录**
-#   为基，只保留"每个用例一个子目录"这层隔离。
-#   想换地方：-DNODE_PORT_TEST_TMPBASE=<目录>。
+# 套件里有一批用例要 `listen()`/`bind()` 一个 UNIX domain socket，而 sun_path 的可用
+# 字节数只有 108（Linux，含结尾 NUL）/ 104（macOS）⇒ 可用 107 / 103。两种算法各受一侧限制：
+#
+#   ① **绝对侧**：`tmpdir.resolve()` 给的是绝对路径（tmpdir.js 先 realpathSync(NODE_TEST_DIR)）
+#      ⇒ `<临时根>/.tmp.<id>/copy_%<n>/<pid>.sock`
+#      （copy_%N 来自 test/common/fs.js 的 nextdir()，尾部实测 29 字符）
+#      用例：test-fs-cp-async-socket / test-fs-cp-sync-copy-socket-error
+#   ② **相对侧**：`common.PIPE = path.relative(process.cwd(), tmpdir.path) + '/node-test.<pid>.sock-…'`
+#      （test/common/index.js:257）cwd = **套件根**（我们的 WORKING_DIRECTORY）⇒ 相对路径前面
+#      会带上"从 cwd 上溯到公共祖先"的若干层 `../`，每层 3 字符；尾部 = 20 + 追加名（最长实测 33）
+#      用例：test-net-* 一族 5 条（listen-path / listen-handle / boundsocket / connect-options-*）
+#
+# ★ 两个方向是**互相拉扯**的，run #29/#30 各踩了一头：
+#   * 放构建目录下但名字长（`node-suite-tmp/node-suite`，CI 上 93 字符）：① 直接超（fs-cp 两条红）；
+#   * 改放系统临时目录（run #30 我改的）：① 舒服了，但两侧同时炸 ——
+#     - Linux/macOS：② 变成 **13 层 `../`（39 字符）** ⇒ test-net-* 一族 5 条挂 `listen EINVAL`
+#       （macOS 还多出一批 http-unix-socket / cluster / permission-fs）；
+#     - Windows：CI 的 %TEMP% 是 **8.3 短名** `C:\Users\RUNNER~1\AppData\Local\Temp`
+#       ⇒ 一堆做路径比对/看目录的用例整片红：test-fs-realpath、test-fs-promises、
+#       test-fs-watch*、test-fs-promises-watch*（RUNNER~1 vs runneradmin、`h2\bar` vs `bar`），
+#       x64-windows 与 arm64-windows 各 30~40 条。
+#   所以基目录取**构建目录**（它与 cwd 同在一棵树里，② 的 `../` 只有几层），名字取短名 `ns`，
+#   单用例时**连子目录都不套**（一个字符也要省）。按这套布局算出来的实际值：
+#     Linux CI 绝对侧 98 / 相对侧 80（上限 107）；macOS CI 99 / 80（上限 103，余量最薄）；
+#     本机 Windows 87 / 80（Windows 走命名管道，不查这一项）。
+#   要换地方：-DNODE_PORT_TEST_TMPBASE=<目录>（但换了要重算这两个数，红线会替你把关）。
 if(NODE_PORT_TEST_TMPBASE)
   set(_node_suite_tmpbase "${NODE_PORT_TEST_TMPBASE}")
-elseif(DEFINED ENV{TMPDIR} AND NOT "$ENV{TMPDIR}" STREQUAL "" AND IS_ABSOLUTE "$ENV{TMPDIR}")
-  set(_node_suite_tmpbase "$ENV{TMPDIR}")
-elseif(UNIX)
-  set(_node_suite_tmpbase "/tmp")
-elseif(DEFINED ENV{TEMP} AND NOT "$ENV{TEMP}" STREQUAL "" AND IS_ABSOLUTE "$ENV{TEMP}")
-  set(_node_suite_tmpbase "$ENV{TEMP}")
-elseif(DEFINED ENV{TMP} AND NOT "$ENV{TMP}" STREQUAL "" AND IS_ABSOLUTE "$ENV{TMP}")
-  set(_node_suite_tmpbase "$ENV{TMP}")
 else()
-  # 兜底：系统临时目录也拿不到（少见），退回构建目录 —— 但下面那条长度红线会拦住它。
   set(_node_suite_tmpbase "${CMAKE_CURRENT_BINARY_DIR}")
 endif()
 file(TO_CMAKE_PATH "${_node_suite_tmpbase}" _node_suite_tmpbase)
-set(_node_suite_tmproot "${_node_suite_tmpbase}/node-suite-tmp")
+set(_node_suite_tmproot "${_node_suite_tmpbase}/ns")
 file(MAKE_DIRECTORY "${_node_suite_tmproot}")
 
-# 红线（把上面那段注释里的数字变成构建期断言）：临时根太长就当场红。
-# 余量算得保守：`.tmp.<线程号>` 8 + `/copy_%<n>` 10 + `/<pid>.sock` 12 ≈ 30，
-# 留到 64 就够安全（socket 路径上限 108）。
-string(LENGTH "${_node_suite_tmproot}" _node_suite_tmproot_len)
-if(_node_suite_tmproot_len GREATER 64)
-  message(FATAL_ERROR
-    "node 官方套件的临时根太长了（${_node_suite_tmproot_len} 字符）：\n"
-    "  ${_node_suite_tmproot}\n"
-    "套件里有几条用例要 bind() UNIX domain socket，sun_path 上限只有 108 字节；"
-    "临时根一长就会挂在 `listen EINVAL`（run #29 实测）而看不出真因。\n"
-    "处置：设 NODE_PORT_TEST_TMPBASE 到一个短目录，或把 TMPDIR/TEMP 指到短目录。")
+if(CMAKE_SYSTEM_NAME STREQUAL "Darwin")
+  set(_node_suite_socket_max 103)   # sun_path[104]
+else()
+  set(_node_suite_socket_max 107)   # sun_path[108]
 endif()
+
+# 把上面那张"数字表"变成构建期断言：两侧都算出来，超了就当场红（附上算式与处置办法）。
+# 只在 UNIX 上查 —— Windows 走命名管道（`\\.\pipe\…`）且这族用例本来就 skip。
+function(_node_suite_assert_socket_budget _dir)
+  if(NOT UNIX)
+    return()
+  endif()
+  get_filename_component(_dir "${_dir}" ABSOLUTE)
+  string(LENGTH "${_dir}" _abs_len)
+  math(EXPR _abs "${_abs_len} + 10 + 8 + 11")      # /.tmp.<id> + /copy_%<n> + /<pid>.sock
+  # cwd 是内核给的规范路径（真跑时 process.cwd() 会把符号链接解掉），所以两边都 REALPATH 后再比。
+  get_filename_component(_node_suite_dir_real "${node_TEST_SUITE_DIR}" REALPATH)
+  file(RELATIVE_PATH _rel "${_node_suite_dir_real}" "${_dir}")
+  # ★ 别用 while + `string(REGEX REPLACE "^\\.\\./" …)` 去数层数：CMake 的 REGEX REPLACE
+  #   在一次调用里会把**所有**能匹配的 `../` 都吃掉（`^` 会跟着扫描位置往后走，实测
+  #   `../../../../../ns` 被一次性变成 `ns`，层数误算成 1）。用 MATCHALL 精确计数。
+  string(REGEX MATCHALL "\\.\\./" _node_suite_ups "${_rel}")
+  list(LENGTH _node_suite_ups _up)
+  string(REGEX REPLACE "^(\\.\\./)+" "" _rest "${_rel}")
+  unset(_node_suite_ups)
+  string(LENGTH "${_rest}" _rest_len)
+  # 相对侧 = `../`×层数 + 相对部分 + `/.tmp.<id>`(10) + `/node-test.<pid>.sock`(20) + 追加名(33)
+  math(EXPR _net "3 * ${_up} + ${_rest_len} + 10 + 20 + 33")
+  message(STATUS "  套件临时目录 ${_dir}")
+  message(STATUS "    socket 路径预算：绝对侧 ${_abs} / 相对侧 ${_net}（上限 ${_node_suite_socket_max}）")
+  if(_abs GREATER _node_suite_socket_max OR _net GREATER _node_suite_socket_max)
+    message(FATAL_ERROR
+      "套件的临时目录会让 socket 路径超长（上限 ${_node_suite_socket_max}）：\n"
+      "  ${_dir}\n"
+      "  绝对侧 ${_abs}（sun_path 只放得下 ${_node_suite_socket_max} 字节）；"
+      "相对侧 ${_net}（common.PIPE 会从 cwd 起算，cwd 之上 ${_up} 层 ../）。\n"
+      "后果：test-fs-cp-*-socket 一族挂 `listen EINVAL`、test-net-* 一族挂 `bind EINVAL`，"
+      "而且报错里看不出真因（run #29/#30 实测）。\n"
+      "处置：把构建目录挪浅一点，或用 -DNODE_PORT_TEST_TMPBASE=<短目录> 指一个既短、"
+      "又和套件根同一棵树（少几层 ..）的地方。")
+  endif()
+endfunction()
+
 # _node_suite_register(<用例名> <label 后缀> <test.py 的位置参数…>)
-function(_node_suite_register _name _label)
+function(_node_suite_register _name _label _tmpname)
+  # 临时子目录名**故意取短名**（见上面那段预算说明）：注册序号 `t0`/`t1`/…。
+  # 用序号而不用 "<套件>-shard<N>"：分片时两个套件的 shard0 会撞同一个目录。
+  # 目录名只进 NODE_TEST_DIR，判读时看下面那条 STATUS（用例名 → 临时目录）就够了。
+  # 单用例时**不套子目录**（每个字符都算进 socket 预算）：只有一个 test.py 进程、
+  # 而且 RUN_SERIAL，隔离没有意义；分片时才需要 t0/t1/… 各一份。
+  if(_tmpname STREQUAL "")
+    set(_node_suite_tmpdir "${_node_suite_tmproot}")
+  else()
+    set(_node_suite_tmpdir "${_node_suite_tmproot}/${_tmpname}")
+  endif()
+  _node_suite_assert_socket_budget("${_node_suite_tmpdir}")
+  message(STATUS "  用例 ${_name} → 临时目录 ${_tmpname}")
   add_test(NAME "${_name}"
            COMMAND ${Python3_EXECUTABLE} ${_node_suite_args}
-                   "--temp-dir=${_node_suite_tmproot}/${_name}"
+                   "--temp-dir=${_node_suite_tmpdir}"
                    ${ARGN})
   set_tests_properties("${_name}" PROPERTIES
     LABELS "node-suite;node-suite-${_label}"
@@ -246,7 +292,7 @@ if(NODE_PORT_TEST_SHARDS)
     math(EXPR _shard_last "${NODE_PORT_TEST_SHARDS} - 1")
     foreach(_shard RANGE 0 ${_shard_last})
       set(_node_suite_name "node-suite-${_suite}-shard${_shard}")
-      _node_suite_register("${_node_suite_name}" "${_suite}"
+      _node_suite_register("${_node_suite_name}" "${_suite}" "t${_node_suite_count}"
                            "--run=${_shard},${NODE_PORT_TEST_SHARDS}" "${_suite}")
       # sequential/ 是"独占机器"写的（固定端口）：分片并发会在同一台机上互相抢端口，
       # 所以这一组让 ctest 一次只跑一个（RUN_SERIAL：不与其他任何用例并发）。
@@ -258,7 +304,7 @@ if(NODE_PORT_TEST_SHARDS)
   endforeach()
 else()
   # 上游 make jstest 的口径：一个进程，套件按位置参数一次全给。
-  _node_suite_register("node-suite" "all" ${_node_suite_list})
+  _node_suite_register("node-suite" "all" "" ${_node_suite_list})
   # 这个用例内部已经 -j 起满并行，再和别的用例抢机器只会引入端口/临时目录噪音。
   set_tests_properties("node-suite" PROPERTIES RUN_SERIAL TRUE)
   set(_node_suite_count 1)
