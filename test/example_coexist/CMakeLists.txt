@@ -13,8 +13,25 @@
 # 与内部测试 test_node_coexist 的分工：那边是**核对端口有没有把依赖换对**（版本交叉核对），
 # 这边是**消费方怎么用**。两边互不依赖，删掉任何一边另一边照跑。
 
+# ---- 拿哪个 node 跑这两条 JS 用例 -------------------------------------------
+# 优先用示例 example_embed 编出来的 node_embed（顺带验证"消费方链出来的运行时"），
+# 没有则退回端口 tools feature 装出来的 node_EXECUTABLE。
+# ★ 两条路都留着，是为了**不硬依赖示例目录**：单独删掉 example_embed 时本示例照跑
+#   （与 test_official_suite 的 --shell 同一模式）。两条都不通才警告并跳过这两条用例 ——
+#   mutual_roundtrip 不受影响：它自己链 unofficial::node::node，不借助外部 node。
+if(TARGET node_embed)
+  set(_coexist_node "$<TARGET_FILE:node_embed>")
+elseif(DEFINED node_EXECUTABLE AND EXISTS "${node_EXECUTABLE}")
+  set(_coexist_node "${node_EXECUTABLE}")
+else()
+  message(WARNING
+    "既没有示例编出来的 node_embed，也没有端口的 node_EXECUTABLE（tools feature 未开）"
+    " ⇒ 跳过 coexist 的两条 JS 用例（mutual_roundtrip 不受影响，它自己链库）。")
+endif()
+
+if(_coexist_node)
 add_test(NAME coexist-node-runtime
-         COMMAND node_embed --experimental-sqlite "${CMAKE_CURRENT_SOURCE_DIR}/coexist.js")
+         COMMAND ${_coexist_node} --experimental-sqlite "${CMAKE_CURRENT_SOURCE_DIR}/coexist.js")
 set_tests_properties(coexist-node-runtime PROPERTIES
   LABELS "coexist"
   TIMEOUT 900
@@ -27,11 +44,12 @@ set_tests_properties(coexist-node-runtime PROPERTIES
 # 脚本里也写明了那条链路的保险 —— node 把 nodejs-openssl.cnf 编进二进制后用
 # NODE_OPENSSL_CONF_NAME 显式激活 provider，跟用哪份 openssl 无关。
 add_test(NAME coexist-openssl-surface
-         COMMAND node_embed "${CMAKE_CURRENT_SOURCE_DIR}/openssl_surface.js")
+         COMMAND ${_coexist_node} "${CMAKE_CURRENT_SOURCE_DIR}/openssl_surface.js")
 set_tests_properties(coexist-openssl-surface PROPERTIES
   LABELS "coexist;openssl"
   TIMEOUT 900
   PASS_REGULAR_EXPRESSION "OPENSSL-SURFACE-OK")
+endif()
 
 find_package(ZLIB CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
@@ -41,16 +59,19 @@ find_package(ada CONFIG REQUIRED)
 find_package(ICU COMPONENTS uc i18n data REQUIRED)
 
 add_executable(mutual_roundtrip mutual_roundtrip.cpp)
-# ★ 同 unit_node_coexist：不重复链 unofficial::node::node 的依赖（CMake 去重会把 vcpkg 库挪到
+# ★ 同 test_node_coexist：不重复链 unofficial::node::node 的依赖（CMake 去重会把 vcpkg 库挪到
 #   --start-group 外，导致 node 静态库在组内找不到符号）。unofficial::node::node 的 INTERFACE
 #   传递已覆盖 ZLIB / OpenSSL / sqlite3 / simdjson / ada / ICU 的头文件与符号。
 target_link_libraries(mutual_roundtrip PRIVATE
     unofficial::node::node)            # 内含 v8、vcpkg 的 abseil/highway，以及下面这些依赖
 target_compile_features(mutual_roundtrip PRIVATE cxx_std_20)
 if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-  # 与 app/ 同样的原因：Windows 上目标必须嵌 node 的平台兼容性清单，否则一启动就退出码 216
+  # 与 example_embed 同样的原因：Windows 上目标必须嵌 node 的平台兼容性清单，否则一启动就退出码 216。
+  # /INCREMENTAL:NO 的原因见 example_embed/CMakeLists.txt（Debug + vs_link_exe 增量路径会把
+  # 裸 /MANIFEST 追加到链接命令尾部，顶掉 /MANIFESTINPUT 的嵌入模式）。
   target_link_options(mutual_roundtrip PRIVATE
-    "/MANIFEST:EMBED" "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}")
+    "/MANIFEST:EMBED" "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
+    "/INCREMENTAL:NO")
 endif()
 if(MSVC)
   target_compile_options(mutual_roundtrip PRIVATE /utf-8)

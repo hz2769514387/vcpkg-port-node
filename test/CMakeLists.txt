@@ -10,8 +10,13 @@
 #
 #   example_*  = 给**消费方**看的示例。每个示例只演示一种使用场景，而且**自带测试**
 #                （示例必须能跑通；顺带也给消费方做个"项目该有测试"的样子）。
-#                example_embed    把 node 嵌进自己的可执行
-#                example_coexist  node 与 vcpkg 同名库共存（行为级）
+#                example_embed          把 node 嵌进自己的可执行（主线程直调）
+#                example_coexist        node 与 vcpkg 同名库共存（行为级）
+#                example_host_exit      宿主收场：node 的退出码语义（0/1/N）
+#                example_thread_loop    消息循环分离：node 在 worker 线程，宿主主循环照跳
+#                example_spawn_child    不链接，把 tools feature 的 node 当子进程
+#                example_worker_threads 嵌入运行时里 worker_threads 仍完整
+#                example_multitarget    分层工程：静态库 PRIVATE 藏 node + 多目标两种接法
 #
 #   test_*     = **本仓库自己**的内部测试（验证这个 port 有没有做对）：
 #                test_vcpkg_baseline  vcpkg 那批库自身正常（不链 node）
@@ -69,12 +74,58 @@ set(NODE_PORT_TEST_NODE_ARGS
     CACHE STRING
     "透传给**每个**官方套件用例的 node 参数（逗号分隔，即 test.py 的 --node-args 口径）。
 用途：崩溃诊断。CI 上设成 `--report-on-fatalerror,--report-directory=<目录>`，
-让"零输出 + 非零退出"那种静默 fast-fail 能留下一份带 nativeStack 的报告
+让“零输出 + 非零退出”那种静默 fast-fail 能留下一份带 nativeStack 的报告
 （run #32 实测：Windows 上 http/https 一族 7 条以 0xC0000409 静默死掉，日志里只有退出码）。")
+
+# ★ 防“docstring 里未转义的 ASCII 引号把 set() 参数冲散”这类静默损坏。
+#   2026-10-14 实测中招：NODE_PORT_TEST_NODE_ARGS 的 docstring 里写了
+#   让"零输出 + 非零退出"那种（ASCII 引号没转义）⇒ CMake 在那里截断字符串，
+#   cache 值变成 `CACHE;STRING;透传…;零输出;+;非零退出;…` 碎片 ⇒ test.py 把
+#   `+` 当成测试名模式，Python 3.13 直接 re.PatternError 炸在官方套件门口。
+#   这种错误**任何 CMake 解析都不报**（语法完全合法），只有值变了。
+#   所以在这里对全部开关变量做一次形状检查：正常取值不可能含 CACHE/STRING
+#   这两个词；含了就是被冲散了，配置期当场 FATAL，别等套件跑起来才红。
+foreach(_node_port_var
+    NODE_PORT_TEST_NODE_SUITE
+    NODE_PORT_TEST_SUITES
+    NODE_PORT_TEST_SHARDS
+    NODE_PORT_TEST_SKIP
+    NODE_PORT_TEST_JOBS
+    NODE_PORT_TEST_SUITE_TIMEOUT
+    NODE_PORT_TEST_FLAKY_MODE
+    NODE_PORT_TEST_NODE_ARGS)
+  if("${${_node_port_var}}" MATCHES "CACHE|STRING")
+    message(FATAL_ERROR
+      "${_node_port_var} 的值被 docstring 里的未转义引号冲碎了：\n"
+      "  ${${_node_port_var}}\n"
+      "两件事：\n"
+      "  1) 修 test/CMakeLists.txt 里对应的 set(... CACHE STRING \"...\") —— "
+      "docstring 内的 ASCII 双引号必须写成 \\\" 或改用中文引号“”；\n"
+      "  2) 清掉构建目录里被污染的 cache 值（cache 不会因为改了源码自己恢复）：\n"
+      "     cmake --preset <名字> -D${_node_port_var}=<正确值>")
+  endif()
+endforeach()
+unset(_node_port_var)
 
 # node 由 vcpkg 装出，提供 CONFIG 包（`find_package(unofficial-node CONFIG)`）与 imported 目标
 # `unofficial::node::node`（含传递依赖与平台链接选项）。
 find_package(unofficial-node CONFIG REQUIRED)
+
+# ★ Windows：消费方**任何**构建类型（Debug 也不例外）都用 release 静态 CRT（/MT）。
+#   本工程依赖的 vcpkg 库（node 及其全部依赖）被 triplet 钉死 release-only
+#   （VCPKG_BUILD_TYPE=release，见 cmake/triplets/*.cmake —— 那是 a92c781 的决策：
+#   一批上游 port 的 debug-only 构建是坏的）。而 CMake/vcpkg 的默认值带 CONFIG
+#   genex（MultiThreaded$<$<CONFIG:Debug>:Debug>…），Debug 配置下会把消费方切成
+#   /MTd，于是链接期直接红：
+#     lld-link: error: /failifmismatch: mismatch detected for '_ITERATOR_DEBUG_LEVEL':
+#     >>> libcpmtd.lib(xthrow.obj) has value 2
+#     >>> node_base.lib(...) has value 0
+#   （2026-10-14 ci debug 首跑 x64-windows 实测；就算绕过这关，一个进程里两份 CRT
+#    也是 heap / locale 各自一套的灾难。）这里用普通变量覆盖工具链的 cache 默认值：
+#   target 都在后面的 add_subdirectory 里创建，届时读到的就是覆盖后的值。
+if(MSVC)
+  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+endif()
 
 # 跑官方套件与符号审计都要 python（node 自带的 driver 就是 python）。
 find_package(Python3 COMPONENTS Interpreter)
@@ -84,6 +135,11 @@ enable_testing()
 # ---- 消费方示例（每个都自带测试）-------------------------------------------
 add_subdirectory(example_embed)
 add_subdirectory(example_coexist)
+add_subdirectory(example_host_exit)
+add_subdirectory(example_thread_loop)
+add_subdirectory(example_spawn_child)
+add_subdirectory(example_worker_threads)
+add_subdirectory(example_multitarget)
 
 # ---- 本仓库的内部测试（每组一个 ctest 目标/目标组）---------------------------
 add_subdirectory(test_vcpkg_baseline)

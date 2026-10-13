@@ -18,7 +18,10 @@
 
 // node 可执行文件的路径由 CMake 生成（见本目录 CMakeLists.txt 里为什么不用
 // target_compile_definitions —— 响应文件会吃掉转义引号）。
-#include "node_embed_path.h"
+// ★ 头文件名与 CMakeLists.txt 里 file(GENERATE) 的 OUTPUT 保持一致：
+//   重排目录时这边漏改过（cpp include 旧名 node_embed_path.h，CMake 生成的是
+//   node_bin_path.h）⇒ x64-windows 编译期 file not found（2026-10-14 实测）。
+#include "node_bin_path.h"
 
 #include <algorithm>
 #include <cctype>

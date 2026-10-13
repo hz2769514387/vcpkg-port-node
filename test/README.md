@@ -20,6 +20,11 @@ test/
 │
 ├── example_embed/             # 【示例】把 node 嵌进自己的可执行（自带 2 条测试）
 ├── example_coexist/           # 【示例】node 与 vcpkg 同名库共存（自带 3 条测试）
+├── example_host_exit/         # 【示例】宿主收场：node 的退出码语义 0 / 1 / N（自带 3 条）
+├── example_thread_loop/       # 【示例】消息循环分离：node 在 worker 线程跑，宿主主循环照跳（自带 1 条）
+├── example_spawn_child/       # 【示例】不链接：把 tools feature 的 node 当子进程用（自带 3 条）
+├── example_worker_threads/    # 【示例】嵌入运行时里 worker_threads 仍然完整（自带 1 条）
+├── example_multitarget/       # 【示例】分层工程：静态库 PRIVATE 藏 node，两个可执行两种接法（自带 2 条）
 │
 ├── test_vcpkg_baseline/       # 【内部测试】vcpkg 那批库自身正常（不链 node）
 ├── test_node_coexist/         # 【内部测试】node 报的依赖 == vcpkg 装的那份（交叉核对）
@@ -39,8 +44,23 @@ test/
 | `cmake/` | 共享 | triplet / toolchain / 跳过清单，不属于上面两组 |
 
 两条纪律：**不重复**（示例演示"怎么用"，内部测试核对"对不对"，同一件事只在一处做）；
-**不耦合**（任何 `example_*` / `test_*` 单独删掉，其它任何一个都照跑 —— 官方套件要 shell 时会优先用
-`example_embed` 编出来的可执行，没有则退回端口装出来的 `node_EXECUTABLE`，而不是硬依赖示例）。
+**不耦合**（任何 `example_*` / `test_*` 单独删掉，其它任何一个都照跑 —— 例如 coexist 的两条 JS
+用例与官方套件的 `--shell` 都是"优先用 `example_embed` 编出来的 node、没有则退回端口装出来的
+`node_EXECUTABLE`"，两条路都不通才跳过，而不是硬依赖示例目录）。
+
+### 按"消费方的疑问"找示例
+
+示例不是随便堆的，每个对应一类真实疑问（以消费方视角提的）：
+
+| 消费方的疑问 | 去看 | 一句话答案 |
+|---|---|---|
+| 怎么把 node 嵌进我的程序？ | `example_embed` | 链 `unofficial::node::node`，`node::Start(argc, argv)`，完事 |
+| node 会不会霸占我的主线程？我的消息循环还跑不跑？ | `example_thread_loop` | 看你想耦合还是分离：`node::Start` 放主线程就是耦合，放 worker 线程就是分离（本示例） |
+| 我把 node 嵌进去了，它崩了/退出了，我的进程拿到什么退出码？ | `example_host_exit` | 0 = 正常；1 = 未捕获异常；`process.exit(N)` = N，宿主原样透传 |
+| 不想链接 node，只想跑脚本/用 npm，行不行？ | `example_spawn_child` | 行。port 的 `tools` feature 装出 node 可执行（`node_EXECUTABLE`），当子进程 spawn + 捕获输出 + 如实拿退出码 |
+| 嵌进去之后 worker_threads 还能用吗？ | `example_worker_threads` | 能。worker 是 node 运行时内部能力，与谁调的 `node::Start` 无关 |
+| 我的工程有分层（静态库 + 多个可执行），node 怎么接？ | `example_multitarget` | node 只在最底层静态库里出现一次且 PRIVATE；Windows 兼容性清单每个最终可执行自己嵌 |
+| 我已经在用一批 vcpkg 库，再链 node 会不会打架？ | `example_coexist` | 不会（这是本 port 的核心承诺之一，行为级验证） |
 
 ## ctest 用例（用 `-L` 选择）
 
@@ -48,6 +68,11 @@ test/
 |---|---|---|
 | `example` | `example-embed-node-version`（版本断言）、`example-embed-run-js`（跑一段 JS 并断言输出） | example_embed 自带 |
 | `example` | `coexist-node-runtime`、`coexist-openssl-surface`、`coexist-mutual-in-process` | example_coexist 自带 |
+| `example` | `example-host-exit-ok` / `-uncaught` / `-code7`（退出码 0 / 1 / 7 逐条断言） | example_host_exit 自带 |
+| `example` | `example-thread-loop-separated`（宿主循环与 node 循环同时在跑、双向数据、退出码透传） | example_thread_loop 自带 |
+| `example` | `example-spawn-child-script` / `-version` / `-exit-code`（spawn + 捕获输出 + 退出码链） | example_spawn_child 自带 |
+| `example` | `example-worker-threads`（嵌入运行时里 3 个 worker 真干活） | example_worker_threads 自带 |
+| `example` | `example-multitarget-layered-app` / `-direct-cli`（分层工程两种接法都跑通） | example_multitarget 自带 |
 | `internal` | `test-vcpkg-baseline`（只链 vcpkg 库，不链 node） | 内部：库自身正常 |
 | `coexist` | `test-node-coexist`（node 报的依赖 == vcpkg 装的那份） | 内部：端口一致性核对 |
 | `node-suite` | `node-suite`（node 官方测试套件，`tools/test.py --shell=<可执行>`） | 内部 |
@@ -129,7 +154,7 @@ preset 里删掉的两条旧条目被 cache 带着继续生效，而且因为整
 
 分四层，互相独立：
 
-1. **能链接**：`unit_node_coexist` 同时链 `unofficial::node::node`（内含 V8 与 v8 内嵌的 abseil /
+1. **能链接**：`test_node_coexist` 同时链 `unofficial::node::node`（内含 V8 与 v8 内嵌的 abseil /
    highway / v8_zlib）与同一批 vcpkg 库。重复的**强**符号会让链接器直接报错 ——
    链接成功本身就是一条证据。
 2. **是同一份**：`node -p process.versions.X` 与我方进程里直接调用库得到的版本号比对。
@@ -140,7 +165,7 @@ preset 里删掉的两条旧条目被 cache 带着继续生效，而且因为整
    字节必须完全一致。
 3. **行为对**：`coexist.js` 把 zlib / brotli / openssl / ICU / ada / sqlite / llhttp /
    nghttp2 / libuv / V8 提供的 node 能力逐个真跑。
-4. **符号审计**：`tools/symbol_check.js` 扫 node 自带库与 vcpkg 库的**强符号**交集
+4. **符号审计**：`test_symbols/symbol_check.js` 扫 node 自带库与 vcpkg 库的**强符号**交集
    （COMDAT / 弱符号重复是允许的，单独评估）。有交集即红。
    Windows 走 `dumpbin /symbols`、其它平台走 `nm -g --defined-only`；
    由**本工程自己编出来的 node**（`node_embed`）执行 —— ctest 里跑的都是 C / JS，
@@ -148,7 +173,7 @@ preset 里删掉的两条旧条目被 cache 带着继续生效，而且因为整
    **只扫 node 自己装的那几个库**：`<prefix>/lib` 在 manifest 模式下是整个工程共用的，
    里面还混着本工程自己声明的 gtest / fmt；不区分就会"自己比自己"、满屏假阳性。
    清单来自 `node-config.cmake` 导出的 `node_INSTALLED_LIBRARIES`。
-5. **openssl 行为面**：`coexist/openssl_surface.js`（标签 `openssl`）——
+5. **openssl 行为面**：`example_coexist/openssl_surface.js`（标签 `openssl`）——
    node 自带 openssl 换成 vcpkg 那份后的能力核对，见根 `docs/暂时还没做.md` §5h。
 
 ## 依赖方向（只有一条）

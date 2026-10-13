@@ -120,7 +120,7 @@ target_link_libraries(<你的目标> PRIVATE unofficial::node::node)
    - 找不到 clang-cl → 用把 clang-cl 交接进来的 triplet（见 `test/cmake/triplets/`）。
    - CMake 主版本 < 4 → vcpkg 侧的要求，请升级 CMake。
    - 链接期一堆 `undefined reference`（GNU 系）→ 检查是不是重复链了 `unofficial::node::node`
-     已经覆盖的库：消费端重复列会让 CMake 去重把组内那份删掉（见 `test/unit/CMakeLists.txt` 里的注释）。
+     已经覆盖的库：消费端重复列会让 CMake 去重把组内那份删掉（见 `test/example_coexist/CMakeLists.txt` 里的注释）。
 
 ## 还没做的事
 

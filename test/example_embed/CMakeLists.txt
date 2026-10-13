@@ -20,10 +20,17 @@ target_compile_features(node_embed PRIVATE cxx_std_20)
 
 # Windows：目标必须嵌 node 的平台兼容性清单，否则进程一启动就退出码 216（实测）。
 # node 的消费配置导出了清单路径变量 `node_NODE_SOURCE_MANIFEST`。
+# ★ /INCREMENTAL:NO 不能省：Debug 构建默认带 /INCREMENTAL，cmake 的 vs_link_exe
+#   会改走"增量"两遍链接，并在链接命令尾部追加裸 /MANIFEST /MANIFESTFILE: ——
+#   它把我们这条 /MANIFESTINPUT: 的嵌入模式顶掉，lld-link 直接报
+#   `/manifestinput: requires /manifest:embed`（2026-10-14 ci debug 首跑实测；
+#   Release 不复现，因为非增量路径没有这段追加）。关掉增量 = 回到 Release
+#   同一条已经验证过的链接路径。
 if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
   target_link_options(node_embed PRIVATE
     "/MANIFEST:EMBED"
-    "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}")
+    "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
+    "/INCREMENTAL:NO")
 endif()
 
 # MSVC 前端请显式声明源码是 UTF-8（本文件注释是中文）。
