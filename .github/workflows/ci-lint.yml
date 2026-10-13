@@ -142,7 +142,7 @@ jobs:
         shell: bash
         run: |
           set -u
-          # 为什么单独立一条：test/tests/*.cmake 开头是一串 `if(NOT …) return()`，
+          # 为什么单独立一条：test/test_official_suite/*.cmake 开头是一串 `if(NOT …) return()`，
           # 而 `cmake -P <file>`（上一条闸门）在脚本模式下**必然**停在这些早退处
           # ⇒ 早退之后的语法/流控错误它永远看不到。
           # 2026-10-13 实测代价：一行多余的 `if()` 让 Windows 的配置期报

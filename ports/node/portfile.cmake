@@ -487,7 +487,7 @@ if("test-suite" IN_LIST FEATURES)
     # 掉位之后 `sh -c <script>` 直接失败 ⇒ **子进程 stdout 为空、stderr 进 child.stderr
     # （用例不打印它）**，于是 test-node-run 里 6 个子用例全红、而报错信息里
     # 完全看不出是权限问题（Windows 不受影响：那边走 `.bat`，cmd.exe 不看执行位）。
-    # 这类"红线变脚本"的检查见 test/tests/ctest_node_suite.cmake 里的
+    # 这类"红线变脚本"的检查见 test/test_official_suite/ctest_node_suite.cmake 里的
     # `node-suite-fixtures-executable` 用例。
     file(INSTALL "${SOURCE_PATH}/test/" DESTINATION "${_node_suite}/test"
         USE_SOURCE_PERMISSIONS)
@@ -647,7 +647,7 @@ if("tools" IN_LIST FEATURES)
     # 不要在这里做 TO_NATIVE_PATH —— 那会把 ${CURRENT_PACKAGES_DIR}（packages 目录）
     # 烤死进配置里，而 vcpkg 之后会把产物搬进真正的安装目录。
     # 需要反斜杠的消费端（`cmd /c` 不认正斜杠的程序名）自己在 find_package 之后转，
-    # 见 test/tests/ctest_tools.cmake。
+    # 见 test/test_tools/ctest_tools.cmake。
     string(APPEND _cfg
         "set(node_TOOLS_DIR \"\${_node_prefix}/tools/node\")\n"
         "set(node_EXECUTABLE \"\${_node_prefix}/tools/node/${_node_exe_name}\")\n"

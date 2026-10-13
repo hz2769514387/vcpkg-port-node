@@ -1,11 +1,17 @@
-# coexist 子项目：行为级共存验证。
+# 消费方示例 · 场景二：node 与 vcpkg 里**同名**的那批库共存
+# （abseil / highway / simdutf / zlib 等：v8 内嵌一份，使用者的 vcpkg 再一份）。
 #
-# 两个用例，强度不同：
+# 这是**示例**：演示"我已经在用 vcpkg 的这些库，现在还想链 node，会不会打架"。
+# 它自带三条测试（见下），强度不同：
 #   1) coexist-node-runtime（coexist.js）：只跑 node 那侧，把各库提供的 node 能力过一遍；
-#   2) coexist-mutual-in-process（mutual_roundtrip + mutual.js）：**最硬的一层** ——
+#   2) coexist-openssl-surface（openssl_surface.js）：openssl 换成 vcpkg 那份之后算法面还对不对；
+#   3) coexist-mutual-in-process（mutual_roundtrip + mutual.js）：**最硬的一层** ——
 #      一个可执行里同时链 unofficial::node::node 与这批"可能和 node 依赖重复/冲突"的 vcpkg 库，
 #      然后让 C++ 侧与**同一个进程里的 node 运行时**互相消费对方的产物并各自复核。
 #      （只有"双方真的在同一个进程里、用同一份库、数据来回走"才谈得上共存。）
+#
+# 与内部测试 test_node_coexist 的分工：那边是**核对端口有没有把依赖换对**（版本交叉核对），
+# 这边是**消费方怎么用**。两边互不依赖，删掉任何一边另一边照跑。
 
 add_test(NAME coexist-node-runtime
          COMMAND node_embed --experimental-sqlite "${CMAKE_CURRENT_SOURCE_DIR}/coexist.js")

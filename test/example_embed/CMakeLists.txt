@@ -1,4 +1,13 @@
-# 子项目：把 node 嵌进一个可执行 —— 它同时是"使用者最小验证"和 node 官方套件的 shell。
+# 消费方示例 · 场景一：把 node 嵌进自己的可执行
+#
+# 这是**示例**，不是本仓库的内部测试：它只演示"一个普通项目怎么用 node port"——
+# 把 unofficial::node::node 链进自己的可执行，让它变成 node 运行时。
+#
+# 但它**自带测试**（见文件末尾），因为：
+#   1) 示例必须真能跑通，否则它就只是一段"看起来对"的代码；
+#   2) 一个正经的消费方项目本来就该有测试 —— 这里顺手做个样子。
+# 测试用的是本目录编出来的 node_embed 自己，不依赖任何其它目录
+# （所以单独删掉这个示例也不会牵连别的示例或内部测试）。
 #
 # 目标名是 node_embed，产物名故意叫 `node`：
 #   * node 官方用例里有不少地方按 `process.execPath` 去 spawn 子进程、并按 node 的
@@ -22,13 +31,22 @@ if(MSVC)
   target_compile_options(node_embed PRIVATE /utf-8)
 endif()
 
-# ---- 冒烟：版本断言（T2）------------------------------------------------------
-# 一次断言就把"库真的链接成功 + 运行时真的跑起来 + 版本对得上"三件事一起验了。
-add_test(NAME smoke-node-version
+# ---- 示例自带的测试 ----------------------------------------------------------
+# 1) 版本断言：一次就把"库真的链接成功 + 运行时真的跑起来 + 版本对得上"三件事一起验了。
+add_test(NAME example-embed-node-version
          COMMAND node_embed -e "process.stdout.write(process.versions.node)")
-set_tests_properties(smoke-node-version PROPERTIES
-  LABELS "smoke"
+set_tests_properties(example-embed-node-version PROPERTIES
+  LABELS "example;example_embed"
   # 不加 `^...$` 锚：ctest 的正则不是多行模式，Windows 上输出以 CRLF 结尾，
   # `$` 卡在 `\r` 前面（实测 `^24\.21\.0[[:space:]]*$` 也红，输出确实是 24.21.0）。
   # 我们要断言的是"版本号等于 24.21.0"，直接匹配它本身。
   PASS_REGULAR_EXPRESSION "24\\.21\\.0")
+
+# 2) 跑一段 JS 并断言输出：演示"消费方怎么给自己嵌进去的运行时写测试"
+#    （脚本就在本目录 demo.js，用法和平时的 `node xxx.js` 一样）。
+add_test(NAME example-embed-run-js
+         COMMAND node_embed "${CMAKE_CURRENT_SOURCE_DIR}/demo.js")
+set_tests_properties(example-embed-run-js PROPERTIES
+  LABELS "example;example_embed"
+  TIMEOUT 300
+  PASS_REGULAR_EXPRESSION "EMBED-DEMO-OK")

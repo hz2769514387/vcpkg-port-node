@@ -1,4 +1,4 @@
-# Gate: make sure test/tests/*.cmake (the configure-time glue of the test project)
+# Gate: make sure test/test_official_suite/*.cmake (the configure-time glue of the test project)
 # can actually be *loaded to the end*, and that it really registers test cases.
 #
 # Why a separate gate (it cost a whole CI round on 2026-10-13):
@@ -46,6 +46,9 @@ set(NODE_PORT_TEST_NODE_SUITE ON)
 set(node_TEST_SUITE_DIR "${_work}/suite")
 set(Python3_Interpreter_FOUND TRUE)
 set(Python3_EXECUTABLE "python3")   # 只进 add_test 的参数列表（已被顶掉），值不重要
+# 官方套件要给 test.py 一个 shell：这里指向 fixture 里**确实存在**的那个文件
+# （真实构建里是示例编出来的 node_embed，或端口装出来的 node_EXECUTABLE）。
+set(node_EXECUTABLE "${_work}/suite/tools/test.py")
 set(NODE_PORT_TEST_FLAKY_MODE "dontcare")
 set(NODE_PORT_TEST_JOBS "")
 set(NODE_PORT_TEST_SUITES "parallel")
@@ -66,7 +69,7 @@ endmacro()
 macro(set_tests_properties)
 endmacro()
 
-include("${_repo_root}/test/tests/ctest_node_suite.cmake")
+include("${_repo_root}/test/test_official_suite/ctest_node_suite.cmake")
 
 file(SIZE "${_glue_count_file}" _glue_registered)
 
@@ -85,7 +88,7 @@ unset(NODE_PORT_TEST_TMPBASE)
 
 if(_glue_registered LESS 1)
   message(FATAL_ERROR
-    "test/tests/ctest_node_suite.cmake 被加载了，但**一个用例都没注册** ——\n"
+    "test/test_official_suite/ctest_node_suite.cmake 被加载了，但**一个用例都没注册** ——\n"
     "说明它在某处 early return 掉了（fixture 已经满足全部早退条件，所以这是胶水自己的问题）。\n"
     "这个闸门存在的意义就是不让早退把语法/流控错误藏起来（2026-10-13 为此废掉一整轮 CI）。")
 endif()

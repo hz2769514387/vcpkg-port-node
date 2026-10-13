@@ -17,22 +17,50 @@ test/
 ├── vcpkg-configuration.json   # overlay-ports -> ../ports；overlay-triplets -> cmake/triplets
 ├── CMakePresets.json          # 六个平台的构建入口
 ├── CMakeLists.txt             # 主项目：find_package(unofficial-node)、enable_testing()、编排子目录
-├── app/                       # 子项目：node 嵌入可执行（产物名故意叫 node）
-├── unit/                      # 子项目：gtest 单元测试（vcpkg 库自身 + 与 node 共存）
-├── coexist/                   # 子项目：行为级共存（一段 JS 把各库提供的能力全跑一遍）
-├── tests/                     # ctest 胶水：node 官方套件 + 符号审计
-└── cmake/                     # 本工程（消费端）自己拥有的 triplet / toolchain
+│
+├── example_embed/             # 【示例】把 node 嵌进自己的可执行（自带 2 条测试）
+├── example_coexist/           # 【示例】node 与 vcpkg 同名库共存（自带 3 条测试）
+│
+├── test_vcpkg_baseline/       # 【内部测试】vcpkg 那批库自身正常（不链 node）
+├── test_node_coexist/         # 【内部测试】node 报的依赖 == vcpkg 装的那份（交叉核对）
+├── test_official_suite/       # 【内部测试】node 官方测试套件
+├── test_symbols/              # 【内部测试】符号审计（重复强符号）+ 它的 symbol_check.js
+├── test_tools/                # 【内部测试】tools feature 的 npm/npx/corepack 冒烟
+│
+└── cmake/                     # 共享：本工程（消费端）自己拥有的 triplet / toolchain / 跳过清单
 ```
 
-## 四组 ctest 用例（用 `-L` 选择）
+### 两组目录的区分（按前缀）
 
-| label | 内容 | 说明 |
+| 前缀 | 谁看 | 规矩 |
 |---|---|---|
-| `smoke` | `node -e "process.stdout.write(process.versions.node)"` == `24.21.0` | 最小"链接成功 + 跑得起来 + 版本对得上" |
-| `unit` | gtest：`unit_vcpkg_baseline`（只链 vcpkg 库）与 `unit_node_coexist`（同时链 unofficial::node::node） | 两个可执行分开，失败时能立刻区分"库自己有毛病"还是"共存有毛病" |
-| `coexist` | ① `coexist.js`（zlib/brotli/crypto/ICU/IDN/sqlite/http/http2/worker/wasm 全走一遍）② **`mutual_roundtrip`（一个进程里同时链 node 与那批可能重复的 vcpkg 库，C++ 侧与同进程的 node 运行时互相消费对方产物、双向复核）** ③ 符号审计 | 行为级证据，② 是最硬的一层 |
-| `node-suite` | **node 官方测试套件**，由官方 `tools/test.py --shell=<本工程的可执行>` 驱动 | 见下 |
-| `tools` | port 的 `tools` feature 产物：`node_EXECUTABLE` 跑版本断言 + `npm/npx/corepack --version` | 只从 `find_package(unofficial-node)` 导出的变量拿路径 |
+| `example_*` | **消费方** | 每个示例只演示**一种**使用场景；**必须自带测试**（示例要真能跑通，也顺带给消费方做个"项目该有测试"的样子）。以后可以加更多示例，一个场景一个目录 |
+| `test_*` | **本仓库自己** | 验证这个 port 有没有做对；每个目录都有自己的 `CMakeLists.txt`（一眼看得出它是 ctest 目标），里面若要有脚本，脚本也放本目录 |
+| `cmake/` | 共享 | triplet / toolchain / 跳过清单，不属于上面两组 |
+
+两条纪律：**不重复**（示例演示"怎么用"，内部测试核对"对不对"，同一件事只在一处做）；
+**不耦合**（任何 `example_*` / `test_*` 单独删掉，其它任何一个都照跑 —— 官方套件要 shell 时会优先用
+`example_embed` 编出来的可执行，没有则退回端口装出来的 `node_EXECUTABLE`，而不是硬依赖示例）。
+
+## ctest 用例（用 `-L` 选择）
+
+| label | 用例 | 属于 |
+|---|---|---|
+| `example` | `example-embed-node-version`（版本断言）、`example-embed-run-js`（跑一段 JS 并断言输出） | example_embed 自带 |
+| `example` | `coexist-node-runtime`、`coexist-openssl-surface`、`coexist-mutual-in-process` | example_coexist 自带 |
+| `internal` | `test-vcpkg-baseline`（只链 vcpkg 库，不链 node） | 内部：库自身正常 |
+| `coexist` | `test-node-coexist`（node 报的依赖 == vcpkg 装的那份） | 内部：端口一致性核对 |
+| `node-suite` | `node-suite`（node 官方测试套件，`tools/test.py --shell=<可执行>`） | 内部 |
+| `symbols` | `symbols-no-duplicate-strong`（重复强符号审计，Windows） | 内部 |
+| `tools` | `tools-node-runs` / `tools-npm-version` / `tools-npx-version` / `tools-corepack-version` | 内部 |
+
+其中两项值得单独说：
+
+* `coexist-mutual-in-process`：**最硬的一层** —— 一个进程里同时链 `unofficial::node::node`
+  与那批"可能和 node 依赖重复/冲突"的 vcpkg 库，C++ 侧与同进程的 node 运行时互相消费
+  对方的产物并各自复核；
+* `test-vcpkg-baseline` 与 `test-node-coexist` 故意分成两个可执行：一个只链 vcpkg 库、
+  一个同时链 node ⇒ 失败时能立刻区分是"库自己有毛病"还是"共存有毛病"。
 
 ```sh
 ctest --test-dir build/<preset> --output-on-failure            # 全部
@@ -50,10 +78,10 @@ ctest --test-dir build/<preset> -N                              # 只列用例
   为什么要连那些兄弟目录一起装：官方用例是按"在源码树里跑"写的，有一批会读
   `doc/api/cli.md`、`deps/npm/package.json`、`benchmark/_cli.js` …，缺了就是
   ENOENT/MODULE_NOT_FOUND 的假失败（run #21 里 12 个失败属于这一类）。
-* 驱动用 node 官方的 `tools/test.py`，`--shell=` 指向本工程编译出来的 `app/node`。
+* 驱动用 node 官方的 `tools/test.py`，`--shell=` 指向 `example_embed` 编出来的 `node`（没有它则退回端口装出来的 `node_EXECUTABLE`）。
   为什么不用 `node --test`：各套件下的 `*.status` 记录着上游标记的 SKIP / FLAKY 用例，
   **只有 test.py 会读**；`node --test` 会把这些状态全丢掉，于是满屏假失败。
-* `app/main.cpp` 因此要**忠实**：argv 原样交给 `node::Start`，Windows 上按上游用
+* `example_embed/main.cpp` 因此要**忠实**：argv 原样交给 `node::Start`，Windows 上按上游用
   `wmain` 并把 argv 转成 UTF-8（官方 `src/node_main.cc` 就是这么写的）。
 * 默认口径 = 上游的 `make jstest`：**一个 test.py 进程**（套件全列在位置参数上），
   并行度交给 `-j`（CI 里由 `$VCPKG_MAX_CONCURRENCY` 决定），并在 ctest 里标 `RUN_SERIAL`

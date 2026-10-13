@@ -16,7 +16,7 @@
 // 也是同一份"，对共存同样是必要的（头不一致会导致 ABI 理解不一致）。
 #include <gtest/gtest.h>
 
-// node_embed 的路径由 CMake 生成（见 unit/CMakeLists.txt 里为什么不用
+// node 可执行文件的路径由 CMake 生成（见本目录 CMakeLists.txt 里为什么不用
 // target_compile_definitions —— 响应文件会吃掉转义引号）。
 #include "node_embed_path.h"
 
@@ -53,7 +53,7 @@ std::string Trim(std::string s) {
 // 把嵌入可执行当 CLI 用：node -p '<js>'。用它来问 node"你用的是哪个版本"。
 std::string RunNodeEval(const std::string& js) {
   const std::string inner =
-      std::string("\"") + NODE_EMBED_PATH + "\" -p \"" + js + "\"";
+      std::string("\"") + NODE_PORT_NODE_BIN + "\" -p \"" + js + "\"";
 #ifdef _WIN32
   // ★ _popen 底下是 `%COMSPEC% /c <字符串>`，而 cmd 对 /c 后面那串有著名的引号剥离
   //   规则：**引号数 > 2 时，把最外层的一对剥掉**。inner 首尾本来就是引号，一剥就变成

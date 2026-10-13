@@ -5,13 +5,26 @@
 #   2) 把 node port 和一堆 vcpkg 库（含与 v8 内嵌同名的 abseil / highway / simdutf / zlib）
 #      一起链进同一个使用者工程，会不会出问题？
 #
-# 它**不是**最小冒烟，而是真跑东西：
-#   app/     最小但忠实的 node 嵌入可执行（也是官方套件的 shell）
-#   unit/    gtest 单元测试：vcpkg 库自身可用 + 与 node 共存（版本交叉核对）
-#   coexist/ 行为级共存：一段 JS 把 zlib/brotli/crypto/ICU/ada/nghttp2/llhttp/sqlite/
-#            worker_threads/wasm 全走一遍，全部由链接进来的那份库提供
-#   tests/   把 node 官方测试套件（tools/test.py --shell=<本工程的可执行>）与
-#            符号审计注册成 ctest 用例
+# ---------------------------------------------------------------------------
+# 目录分成**两组**，看前缀就能分清：
+#
+#   example_*  = 给**消费方**看的示例。每个示例只演示一种使用场景，而且**自带测试**
+#                （示例必须能跑通；顺带也给消费方做个"项目该有测试"的样子）。
+#                example_embed    把 node 嵌进自己的可执行
+#                example_coexist  node 与 vcpkg 同名库共存（行为级）
+#
+#   test_*     = **本仓库自己**的内部测试（验证这个 port 有没有做对）：
+#                test_vcpkg_baseline  vcpkg 那批库自身正常（不链 node）
+#                test_node_coexist    node 报的依赖是不是 vcpkg 装的那份（交叉核对）
+#                test_official_suite  node 官方测试套件
+#                test_symbols         符号审计（重复强符号）
+#                test_tools           tools feature 的 npm/npx/corepack 冒烟
+#
+#   两条纪律：
+#     * 不重复：同一件事只在一个地方做（示例演示"怎么用"，内部测试核对"对不对"）；
+#     * 不耦合：任何 example_* / test_* 都可以单独删掉，不影响其它任何一个。
+#
+#   cmake/ 是共享的（triplets / toolchains / 跳过清单），不属于上面两组。
 #
 # 依赖方向只有一条：本工程 ──(overlay-ports)──> ports/node。
 cmake_minimum_required(VERSION 3.21)
@@ -68,13 +81,16 @@ find_package(Python3 COMPONENTS Interpreter)
 
 enable_testing()
 
-add_subdirectory(app)
-add_subdirectory(unit)
-add_subdirectory(coexist)
+# ---- 消费方示例（每个都自带测试）-------------------------------------------
+add_subdirectory(example_embed)
+add_subdirectory(example_coexist)
 
-include(${CMAKE_CURRENT_LIST_DIR}/tests/ctest_node_suite.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/tests/ctest_symbols.cmake)
-include(${CMAKE_CURRENT_LIST_DIR}/tests/ctest_tools.cmake)
+# ---- 本仓库的内部测试（每组一个 ctest 目标/目标组）---------------------------
+add_subdirectory(test_vcpkg_baseline)
+add_subdirectory(test_node_coexist)
+add_subdirectory(test_official_suite)
+add_subdirectory(test_symbols)
+add_subdirectory(test_tools)
 
 # ---------------------------------------------------------------------------
 # 一眼看清这次会跑什么（CI 日志里很有用）

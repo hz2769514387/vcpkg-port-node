@@ -77,10 +77,29 @@ if(UNIX)
   unset(_node_suite_fixture_bins)
 endif()
 
+# ---- 拿哪个 node 当 test.py 的 shell ----------------------------------------
+# 优先用示例 example_embed 编出来的 node_embed：顺带验证"消费方链出来的运行时"
+# 能跑官方套件（这才是最有价值的一层）。
+# 没有它就用端口 `tools` feature 装出来的 node_EXECUTABLE —— 官方套件照样能跑，
+# 只是验的是"端口装出来的可执行"而不是"消费方链出来的那个"。
+# ★ 两条路都留着，是为了**不硬依赖示例目录**：单独删掉 example_embed 时这里不会塌。
+if(TARGET node_embed)
+  set(_node_suite_shell "$<TARGET_FILE:node_embed>")
+elseif(DEFINED node_EXECUTABLE AND EXISTS "${node_EXECUTABLE}")
+  set(_node_suite_shell "${node_EXECUTABLE}")
+else()
+  message(WARNING
+    "既没有示例编出来的 node_embed，也没有端口的 node_EXECUTABLE（tools feature 未开）"
+    " ⇒ 无法给官方套件指定 shell，跳过注册。")
+  unset(_node_suite_runner)
+  unset(_node_suite_testroot)
+  return()
+endif()
+
 # test.py 的通用参数
 set(_node_suite_args
     "${_node_suite_runner}"
-    "--shell=$<TARGET_FILE:node_embed>"
+    "--shell=${_node_suite_shell}"
     "--test-root=${_node_suite_testroot}"
     "--time"
     # 被上游标成 flaky 的用例：跑，但失败不计入结果。我们不是上游 CI，
@@ -353,5 +372,5 @@ endif()
 message(STATUS "node 官方套件：注册了 ${_node_suite_count} 个 ctest 用例"
                "（套件：${NODE_PORT_TEST_SUITES}；分片：'${NODE_PORT_TEST_SHARDS}'）")
 message(STATUS "  driver : ${_node_suite_runner}")
-message(STATUS "  shell  : $<TARGET_FILE:node_embed>")
+message(STATUS "  shell  : ${_node_suite_shell}")
 message(STATUS "  临时根 : ${_node_suite_tmproot}")

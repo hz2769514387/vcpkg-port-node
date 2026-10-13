@@ -7,13 +7,13 @@
 #     运行时到底用哪一份由链接器决定。版本不同就是不稳定行为 —— 链接期不报错，
 #     只能靠扫符号发现。
 #
-# 实现在 test/tools/symbol_check.js，由**本工程自己编出来的 node** 执行：
+# 实现在同目录的 symbol_check.js（本目录有 CMakeLists.txt，说明它是一个 ctest 目标），由**本工程自己编出来的 node** 执行：
 #   * ctest 里跑的东西都是 C 或 JS，工具也该一致；
 #   * 顺带是一次自检 —— 那份脚本能被刚编出来的 node 正确执行，本身就说明
 #     它的 fs / child_process / Buffer 是好的。
 # 平台：Windows 用 dumpbin，其它用 nm（原来只有 Windows 版，见 docs/暂时还没做.md 的旧账）。
 
-set(_node_port_symbol_audit "${CMAKE_CURRENT_LIST_DIR}/../tools/symbol_check.js")
+set(_node_port_symbol_audit "${CMAKE_CURRENT_LIST_DIR}/symbol_check.js")
 if(NOT EXISTS "${_node_port_symbol_audit}")
   message(WARNING "找不到 ${_node_port_symbol_audit}，本次跳过符号审计")
   return()
