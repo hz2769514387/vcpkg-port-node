@@ -39,7 +39,9 @@ else()
   set(_node_port_symtool_arg --nm "${NODE_PORT_NM}")
 endif()
 
-# node 的静态库目录：node-config.cmake 位于 <prefix>/share/node/ 下。
+# node 的静态库目录：node-config.cmake 位于 <prefix>/share/unofficial-node/ 下。
+# 库本体在 <prefix>/lib；B1 之后 abseil/highway/crdtp/v8_zlib 等冲突库装到
+# <prefix>/lib/manual-link —— 审计两个目录都要扫（脚本接受重复的 --node-lib-dir）。
 get_filename_component(_node_port_prefix "${node_DIR}/../.." ABSOLUTE)
 set(_node_port_libdir "${_node_port_prefix}/lib")
 
@@ -69,6 +71,7 @@ endif()
 add_test(NAME symbols-no-duplicate-strong
          COMMAND node_embed "${_node_port_symbol_audit}"
                  --node-lib-dir "${_node_port_libdir}"
+                 --node-lib-dir "${_node_port_libdir}/manual-link"
                  --node-libs "${_node_port_libs_csv}"
                  --dep-root "${_node_port_packages}"
                  --triplet "${VCPKG_TARGET_TRIPLET}"

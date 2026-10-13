@@ -1,0 +1,36 @@
+--- a/tools/gyp/pylib/gyp/generator/ninja.py
++++ b/tools/gyp/pylib/gyp/generator/ninja.py
+@@ -2354,8 +2354,31 @@ def GenerateOutputForConfig(target_list, target_dicts, data, params, config_name
+                 "CC", wrappers, QuoteShellArgument(path, "win")
+             )
+             if clang_cl:
+-                # Use clang-cl to cross-compile for x86 or x86_64.
+-                command += " -m32" if arch == "x86" else " -m64"
++                # P17: upstream gyp only ever used clang-cl to cross-compile
++                # for x86/x86_64, so it hard-codes "-m64" (== x86_64) for every
++                # non-x86 arch -- arm64 included.  Node's official Windows/ARM64
++                # builds never hit this because they compile with MSVC's cl.exe,
++                # not clang-cl.
++                #
++                # On an arm64 Windows host the fallout is silent: every object
++                # comes out as x64 code, the linker infers MACHINE:X64, and then
++                # *both* halves of the environment disagree with the objects --
++                # environment.arm64's LIB only carries arm64 CRT/SDK libs, so
++                # ~204 CRT/C++-runtime symbols go unresolved (LNK2001) while the
++                # arm64 SDK libs that DO get found warn LNK4272 ('ARM64'
++                # conflicts with target machine type 'x64').
++                #
++                # clang-cl has no -m64/-m32 style switch for ARM64, so pin the
++                # target triple explicitly.  The port already exports
++                # NODE_PORT_CLANG_TARGET (aarch64-pc-windows-msvc) for the
++                # probe patches (0007/0008); reuse it here so all three stay in
++                # lockstep.
++                if arch == "arm64":
++                    command += " --target=" + os.environ.get(
++                        "NODE_PORT_CLANG_TARGET", "arm64-pc-windows-msvc"
++                    )
++                else:
++                    command += " -m32" if arch == "x86" else " -m64"
+             master_ninja.variable("cl_" + arch, command)
+ 
+     cc = GetEnvironFallback(["CC_target", "CC"], cc)

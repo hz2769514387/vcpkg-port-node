@@ -73,6 +73,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         # 一旦退化，构建当场红，而不是等到编 absl 时才炸。
         "${CMAKE_CURRENT_LIST_DIR}/patches/0015-configure-prepend-v8-bundled-includes.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0016-gyp-ninja-no-thin-archives.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0017-gyp-ninja-clang-cl-arm64-target.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。

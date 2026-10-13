@@ -8,9 +8,13 @@
 //   * 不再往仓库里引入第二个脚本语言运行时（原 python 版只在 Windows 能用）。
 //
 // 用法：
-//   node symbol_check.js --node-lib-dir <dir> --dep-root <vcpkg packages> --triplet <t>
+//   node symbol_check.js --node-lib-dir <dir> [--node-lib-dir <dir2> ...]
+//                        --dep-root <vcpkg packages> --triplet <t>
 //                        [--node-libs a.lib,b.lib,...] [--dumpbin <路径>] [--nm <路径>]
 //                        [--json out.json] [--fail-on-duplicates]
+//
+//   --node-lib-dir：可重复给出。node 的库分布在 <prefix>/lib 与
+//     <prefix>/lib/manual-link 两层（B1 之后冲突库装后者），都要进审计。
 //
 //   --node-libs：**只**把这些文件当成"node 的库"。强烈建议给。
 //     <prefix>/lib 在 manifest 模式下是整个工程共用的，里面还混着使用者自己声明
@@ -42,12 +46,14 @@ const fs = require('fs');
 const path = require('path');
 const { execFileSync } = require('child_process');
 
-const USAGE = `用法: node symbol_check.js --node-lib-dir <dir> --dep-root <pkgs> --triplet <t>
-                [--dumpbin <path>] [--nm <path>] [--json out.json] [--fail-on-duplicates]`;
+const USAGE = `用法: node symbol_check.js --node-lib-dir <dir> [--node-lib-dir <dir> ...]
+                --dep-root <pkgs> --triplet <t>
+                [--node-libs a,b,...] [--dumpbin <path>] [--nm <path>]
+                [--json out.json] [--fail-on-duplicates]`;
 
 function parseArgs(argv) {
   const opts = {
-    nodeLibDir: null, depRoot: null, triplet: null,
+    nodeLibDirs: [], depRoot: null, triplet: null,
     nodeLibs: null,
     dumpbin: null, nm: null, json: null, failOnDuplicates: false,
     selfPackage: 'node',
@@ -61,13 +67,19 @@ function parseArgs(argv) {
   for (let i = 0; i < argv.length; i++) {
     const a = argv[i];
     if (a === '--fail-on-duplicates') { opts.failOnDuplicates = true; continue; }
+    if (a === '--node-lib-dir') {
+      // 可重复：node 的库可能分布在 <prefix>/lib 与 <prefix>/lib/manual-link
+      // 两层（B1 之后 abseil/highway 等冲突库装到 manual-link），都要进审计。
+      opts.nodeLibDirs.push(argv[++i]);
+      continue;
+    }
     if (Object.prototype.hasOwnProperty.call(need, a)) {
       opts[need[a]] = argv[++i];
       continue;
     }
     throw new Error(`未知参数: ${a}\n${USAGE}`);
   }
-  if (!opts.nodeLibDir || !opts.depRoot || !opts.triplet) throw new Error(USAGE);
+  if (!opts.nodeLibDirs.length || !opts.depRoot || !opts.triplet) throw new Error(USAGE);
   return opts;
 }
 
@@ -167,6 +179,52 @@ function nmSymbols(lib, nm) {
 }
 
 // ---------------------------------------------------------------------------
+// 已知重复白名单
+// ---------------------------------------------------------------------------
+// v8 内嵌了 abseil / highway 的私有拷贝，vcpkg 又提供同名库 —— 两份拷贝的强符号
+// 在 ELF/MachO 上就是跨库重复（nm 报成强符号；Windows 上同样的重复因为是 COMDAT
+// 而被判成弱符号，所以 Windows 闸门天然是绿的，Linux/macOS 会红 —— 同一已知原因
+// 在不同平台结论相反）。这是记录在案的已知限制（暂时还没做.md §5g）。
+//
+// 白名单按**库文件名 stem**（去目录、去扩展名）匹配，dep 侧条目以 '*' 结尾表示
+// 前缀通配。命中白名单的重复照常报告（划入 known_duplicates，含 JSON），但不再
+// 触发 --fail-on-duplicates —— **白名单之外的任何新重复仍然红灯**。
+const KNOWN_DUPLICATES = [
+  {
+    node: 'abseil',
+    dep: ['absl_*'],
+    why: 'v8 内嵌 abseil vs vcpkg abseil（同一第三方库的两份拷贝，已知限制 §5g）',
+  },
+  {
+    node: 'highway',
+    dep: ['hwy', 'hwy_*'],
+    why: 'v8 内嵌 highway vs vcpkg highway / libhwy（同上，已知限制 §5g）',
+  },
+];
+
+function libStem(file) {
+  let s = file.replace(/\.(lib|a)$/i, '').replace(/^.*[\\/]/, '');
+  // POSIX 的库带 lib 前缀（libabseil.a），Windows 没有（abseil.lib）——剥掉前缀
+  // 让两边落到同一个名字上。只剩 "lib" 本身时不剥（防御性）。
+  if (/^lib./i.test(s)) s = s.slice(3);
+  return s;
+}
+
+function depStemMatches(depFile, patterns) {
+  const stem = libStem(depFile);
+  return patterns.some((p) =>
+    p.endsWith('*') ? stem.indexOf(p.slice(0, -1)) === 0 : stem === p
+  );
+}
+
+function isKnownDuplicate(nodeFile, depFile) {
+  const nodeStem = libStem(nodeFile);
+  return KNOWN_DUPLICATES.filter(
+    (e) => e.node === nodeStem && depStemMatches(depFile, e.dep)
+  ).map((e) => e.why);
+}
+
+// ---------------------------------------------------------------------------
 
 function collect(opts) {
   const isWin = process.platform === 'win32';
@@ -177,30 +235,34 @@ function collect(opts) {
     : (f) => nmSymbols(f, tool);
 
   const nodeLibs = {};
-  if (fs.existsSync(opts.nodeLibDir)) {
-    // 给了 --node-libs 就只认清单里的（推荐）；没给就扫整个目录，并在报告里点明
-    // 这会产生"自己比自己"的假阳性。
-    let names = null;
-    if (opts.nodeLibs) {
-      names = opts.nodeLibs.split(',').map((s) => s.trim()).filter(Boolean);
-      console.log(`node 侧只取清单里的 ${names.length} 个库（node_INSTALLED_LIBRARIES）`);
-    } else {
-      console.log('警告：未给 --node-libs，node 侧将扫描整个 lib 目录；'
-        + '<prefix>/lib 是共用的，会混入使用者自己的库并产生"自己比自己"的假阳性。');
-    }
-    for (const f of fs.readdirSync(opts.nodeLibDir).sort()) {
+  // 给了 --node-libs 就只认清单里的（推荐）；没给就扫整个目录，并在报告里点明
+  // 这会产生"自己比自己"的假阳性。
+  let names = null;
+  if (opts.nodeLibs) {
+    names = opts.nodeLibs.split(',').map((s) => s.trim()).filter(Boolean);
+    console.log(`node 侧只取清单里的 ${names.length} 个库（node_INSTALLED_LIBRARIES）`);
+  } else {
+    console.log('警告：未给 --node-libs，node 侧将扫描整个 lib 目录；'
+      + '<prefix>/lib 是共用的，会混入使用者自己的库并产生"自己比自己"的假阳性。');
+  }
+  for (const dir of opts.nodeLibDirs) {
+    if (!fs.existsSync(dir)) continue;  // manual-link 可能不存在（无冲突库的配置）
+    for (const f of fs.readdirSync(dir).sort()) {
       if (!f.toLowerCase().endsWith(ext)) continue;
       if (names && names.indexOf(f) < 0) continue;
-      const { syms, err } = read(path.join(opts.nodeLibDir, f));
+      if (Object.prototype.hasOwnProperty.call(nodeLibs, f)) continue;  // 两层目录同名防重
+      const { syms, err } = read(path.join(dir, f));
       if (syms) nodeLibs[f] = syms;
       else console.error(`  ! ${f}: ${err}`);
     }
-    if (names) {
-      const missing = names.filter((n) => !Object.prototype.hasOwnProperty.call(nodeLibs, n));
-      if (missing.length) {
-        console.error(`  ! 清单里有 ${missing.length} 个库在 ${opts.nodeLibDir} 下找不到: `
-          + `${missing.join(', ')}`);
-      }
+  }
+  if (names) {
+    // missing 检查必须在**所有**目录扫完之后做 —— 某个库只装在 manual-link 层，
+    // 只扫第一层就报缺会误报。
+    const missing = names.filter((n) => !Object.prototype.hasOwnProperty.call(nodeLibs, n));
+    if (missing.length) {
+      console.error(`  ! 清单里有 ${missing.length} 个库在 ${opts.nodeLibDirs.join(' / ')} 下找不到: `
+        + `${missing.join(', ')}`);
     }
   }
 
@@ -268,6 +330,12 @@ function main(argv) {
       if (common.length) found.push({ node: nl, dep: dl, syms: common.sort() });
     }
   }
+  // 白名单内/外分流：只有白名单之外的重复才触发 --fail-on-duplicates。
+  const unknown = [];
+  const known = [];
+  for (const d of found) {
+    (isKnownDuplicate(d.node, d.dep).length ? known : unknown).push(d);
+  }
   if (!found.length) {
     console.log('(无)');
   } else {
@@ -278,6 +346,13 @@ function main(argv) {
     for (const d of found.slice(0, 3)) {
       console.log(`\n--- ${d.node}  vs  ${d.dep}（前 25）---`);
       for (const s of d.syms.slice(0, 25)) console.log('   ', s);
+    }
+    if (known.length) {
+      console.log('\n== 其中命中已知重复白名单（不作为闸门失败）==');
+      for (const d of known) {
+        console.log(`  ${d.node} vs ${d.dep}  ${d.syms.length} 个  `
+          + `← ${isKnownDuplicate(d.node, d.dep)[0]}`);
+      }
     }
   }
 
@@ -292,13 +367,18 @@ function main(argv) {
       platform: process.platform,
       node_libs: toArr(nodeLibs),
       dep_libs: toArr(depLibs),
-      duplicates: found,
+      duplicates: unknown,
+      known_duplicates: known.map((d) => ({
+        ...d,
+        why: isKnownDuplicate(d.node, d.dep)[0],
+      })),
     }, null, 1));
     console.log(`\nJSON 写入 ${opts.json}`);
   }
 
-  if (opts.failOnDuplicates && found.length) {
-    console.error(`\n发现 ${found.length} 组跨库重复强符号（--fail-on-duplicates）`);
+  if (opts.failOnDuplicates && unknown.length) {
+    console.error(`\n发现 ${unknown.length} 组白名单之外的跨库重复强符号`
+      + `（--fail-on-duplicates；另有 ${known.length} 组命中已知白名单）`);
     return 1;
   }
   return 0;
