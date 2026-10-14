@@ -188,15 +188,22 @@ test ──(overlay-ports)──> ports/node
 * 官方套件这类"消费端需要的内容"，走 port 的**安装产物**（`share/`）输出，而不是让
   消费端去 port 源码目录里拿。
 
-## 平台口径（六个 triplet；CI 跑其中五个）
+## 平台口径（六个 triplet，CI 六个全跑）
 
 | preset | triplet | 编译器 | CI |
 |---|---|---|---|
-| `windows-clang-cl` | `x64-windows-static-clang` | clang-cl + 静态 CRT | Tier 1（硬门） |
-| `linux` | `x64-linux` | gcc，静态库 | Tier 1（硬门） |
-| `linux-arm64` | `arm64-linux` | gcc，静态库 | Tier 2（允许失败） |
-| `windows-clang-cl-arm64` | `arm64-windows-static-clang` | clang-cl + 静态 CRT | Tier 2 |
-| `macos` | `arm64-osx` | clang，静态库 | Tier 2 |
-| `macos-x64` | `x64-osx` | clang，静态库 | 不在 CI（macos-13 资源紧张，见欠账清单 2b） |
+| `windows-clang-cl` | `x64-windows-static-clang` | clang-cl + 静态 CRT | 硬门 |
+| `linux` | `x64-linux` | gcc，静态库 | 硬门 |
+| `linux-arm64` | `arm64-linux` | gcc，静态库 | 硬门 |
+| `windows-clang-cl-arm64` | `arm64-windows-static-clang` | clang-cl + 静态 CRT | 硬门 |
+| `macos` | `arm64-osx` | clang，静态库 | 硬门 |
+| `macos-x64` | `x64-osx` | clang，静态库 | 硬门（macos-15 arm64 镜像 + Rosetta 跑 x86_64 产物） |
 
-全部 release-only。分层含义见仓库根 `README.md`。
+2026-10-14 起**六个平台全部硬门**（allow_failure: false）：debug 首跑（run #38）六腿全红，
+失败清单逐条修完后用户拍板升硬门 —— 开发期不对消费方承诺接口稳定，红了就修。
+`macos-x64` 的交叉口径：triplet 用 `VCPKG_OSX_ARCHITECTURES x86_64`（clang 只认这个名，
+写 `x64` 会 `invalid arch name`），preset 另给 `CMAKE_OSX_ARCHITECTURES=x86_64`
+（vcpkg 不会把 triplet 的这个值透传给消费端自己的目标）。
+
+全部 release-only（triplet 里 `VCPKG_BUILD_TYPE release`；消费端 Debug 构建也要用
+release CRT，见根 `README.md` 与 `ports/node/usage`）。分层含义见仓库根 `README.md`。

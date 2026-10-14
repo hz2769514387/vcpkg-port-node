@@ -68,16 +68,17 @@ target_link_libraries(<你的目标> PRIVATE unofficial::node::node)
 
 | preset | triplet | 口径 | 等级 |
 |---|---|---|---|
-| `windows-clang-cl` | `x64-windows-static-clang` | clang-cl + 静态 CRT | **Tier 1（硬门）** |
-| `linux` | `x64-linux` | gcc，静态库 | **Tier 1（硬门）** |
-| `linux-arm64` | `arm64-linux` | gcc，静态库 | Tier 2（允许失败） |
-| `windows-clang-cl-arm64` | `arm64-windows-static-clang` | clang-cl + 静态 CRT | Tier 2 |
-| `macos` | `arm64-osx` | clang，静态库 | Tier 2 |
+| `windows-clang-cl` | `x64-windows-static-clang` | clang-cl + 静态 CRT | 硬门 |
+| `linux` | `x64-linux` | gcc，静态库 | 硬门 |
+| `linux-arm64` | `arm64-linux` | gcc，静态库 | 硬门 |
+| `windows-clang-cl-arm64` | `arm64-windows-static-clang` | clang-cl + 静态 CRT | 硬门 |
+| `macos` | `arm64-osx` | clang，静态库 | 硬门 |
+| `macos-x64` | `x64-osx` | clang，静态库 | 硬门（macos-15 arm64 + Rosetta） |
 
-全部 release-only（debug 从未实测，见"还没做的事"）。分层含义：
+2026-10-14 起六个平台**全部硬门**（`allow_failure: false`）：debug 首跑六腿全红、逐条修完后
+用户拍板升硬门 —— 开发期不对消费方承诺接口稳定，红了就修。分层含义：
 
-- **Tier 1** —— CI 保证；失败 = 红灯。
-- **Tier 2** —— CI 会跑但允许失败：结果不承诺，只用来观察趋势与提前暴露问题。
+- **硬门** —— CI 保证；失败 = 红灯。
 - 动态库 / 32 位 / mingw / android / ios —— 结构性不支持。
 
 ### CI 结构（四个 workflow）
@@ -85,12 +86,16 @@ target_link_libraries(<你的目标> PRIVATE unofficial::node::node)
 | workflow | 触发 | 跑什么 |
 |---|---|---|
 | `ci lint` | push + 手工 | 静态红线与语法闸门（与构建口径无关，两边都要跑） |
-| `ci debug` | **push**（默认）+ 手工 | 六平台的 **debug** 口径（`NODE_PORT_BUILD_TYPE=debug` + `CMAKE_BUILD_TYPE=Debug`）。debug 从未实测 ⇒ 这几档先 `allow_failure`，修到全绿再升硬门 |
+| `ci debug` | **push**（默认）+ 手工 | 六平台的 **debug** 口径（`NODE_PORT_BUILD_TYPE=debug` + `CMAKE_BUILD_TYPE=Debug`）。六腿全部硬门（2026-10-14 起） |
 | `ci release` | **只手工** | 六平台的 release 口径（交付口径，由人决定何时测） |
 | `platform` | 被上面两个 `workflow_call` | 共享的"单平台 构建 + ctest"作业体，避免两处复制漂移 |
 
-六平台 = x64/arm64 × linux/windows/macos（`x64-osx` 走 `macos-15`，Intel 镜像）。
+六平台 = x64/arm64 × linux/windows/macos（`x64-osx` 走 `macos-15`，arm64 镜像 +
+Rosetta 跑 x86_64 产物；triplet/preset 的交叉写法见 `test/cmake/triplets/x64-osx.cmake`）。
 本机想编 debug：`NODE_PORT_BUILD_TYPE=debug cmake --preset <平台> -DCMAKE_BUILD_TYPE=Debug ...`。
+★ 依赖被 triplet 钉死 release-only，所以**消费端 Debug 构建也必须用 release 静态 CRT**
+（Windows 上还要给目标加 `/INCREMENTAL:NO` 才能嵌清单）—— 完整片段与原因见
+`ports/node/usage` 的"Windows 上两件必须做的事"，`test/CMakeLists.txt` 有可抄的示范。
 
 ## 构建成本与资源需求
 

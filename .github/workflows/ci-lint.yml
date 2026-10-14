@@ -136,7 +136,10 @@ jobs:
           #   这里补一个纯文本检查器（带自测），专治这一类。
           echo "=== 引号内变量引用是否闭合 ==="
           python3 tools/check_cmake_strings.py --self-test
-          python3 tools/check_cmake_strings.py ports/node
+          # ★ 2026-10-14 起连 test/ 一起扫（含 CMakeLists.txt，排除 build/）：
+          #   此前只扫 ports/node，而 test/ 里的 CMake 一天天在多，
+          #   "引号内 ${ 没闭合"这一类在消费工程里同样致命。
+          python3 tools/check_cmake_strings.py ports/node test
 
       - name: test 工程的胶水必须能完整加载（反"早退遮蔽"闸门）
         shell: bash

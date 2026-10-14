@@ -16,8 +16,6 @@ node 提供 node v24.21.0 整棵树的静态库构建产物：
 
   * 静态库文件名遵循 node 自己 gyp 的命名规则：POSIX 上是 libnode.a / libnode_base.a，
     Windows 上是 libnode.lib / node_base.lib（消费配置已经按平台算好，你不用管）。
-  * Windows 上若要让目标嵌平台兼容性清单，可用变量
-    `node_NODE_SOURCE_MANIFEST`（指向 node.exe.extra.manifest）；缺了它进程一启动就退出码 216。
   * 这是**静态库**交付：请求 VCPKG_LIBRARY_LINKAGE=dynamic 会被 vcpkg 直接报错。
   * node 与 v8 用到的第三方（openssl / zlib / libuv / icu / sqlite3 / brotli / zstd /
     simdjson / simdutf / ada / ngtcp2 / nghttp2 / c-ares / llhttp / hdr-histogram /
@@ -30,6 +28,46 @@ node 提供 node v24.21.0 整棵树的静态库构建产物：
     （node 的 gyp 静态库之间有环，单趟扫描的链接器必须重扫；等价于 --start-group/
     --end-group），因此**消费端的 CMake 需要 ≥ 3.24**。Windows / macOS 上是平铺列表
     （link.exe 自己会反复扫描；ld64 没有 rescan 构造），没有这个版本要求。
+  * ★ 分层集成：把 `unofficial::node::node` **PRIVATE** 链进你自己的静态库、再由可执行
+    链那个静态库，是完全支持的形态（传递依赖会一路带到最终可执行）。node 只出现在
+    最底层，上层零感知。完整可抄的工程形态见本仓库 test/example_multitarget/。
+
+Windows 上两件必须做的事（都是 2026-10-14 debug 首跑实测的坑）：
+
+  1) **目标要嵌 node 的平台兼容性清单**，否则进程一启动就退出码 216。清单由消费配置
+     导出（变量 `node_NODE_SOURCE_MANIFEST`），标准片段：
+
+        if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
+          target_link_options(<你的目标> PRIVATE
+            "/MANIFEST:EMBED"
+            "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
+            "/INCREMENTAL:NO")   # ← 不能省，见下
+        endif()
+
+     `/INCREMENTAL:NO` 不能省：Debug 构建默认带 `/INCREMENTAL`，cmake 的 vs_link_exe
+     会走增量两遍链接、在命令尾部追加裸 `/MANIFEST /MANIFESTFILE:`，把 `/MANIFESTINPUT:`
+     的嵌入模式顶掉（lld-link: `/manifestinput: requires /manifest:embed`）。关掉增量
+     即回到非增量路径（Release 一直在走的那条）。
+
+  2) **Debug 构建也必须用 release 静态 CRT**。本 port 的依赖被 triplet 钉死 release-only
+     （`VCPKG_BUILD_TYPE release`——一批上游 port 的 debug-only 构建是坏的），而
+     CMake/vcpkg 的默认值带 CONFIG genex，Debug 配置下会给消费方切成 `/MTd`，于是链接期
+     直接红：`lld-link: error: /failifmismatch: mismatch detected for
+     '_ITERATOR_DEBUG_LEVEL'`（libcpmtd 的值 2 vs node 库的 0）。在主 CMakeLists 里
+     （任何 add_subdirectory 之前）加一行即可：
+
+        if(MSVC)
+          set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
+        endif()
+
+     语义：依赖 release-only ⇒ 消费方任何构建类型（Debug 也不例外）都用 release CRT。
+
+嵌入场景的退出码约定（与"node 就是整个进程"时不同）：
+
+  * JS 侧收场用 `process.exitCode = N`（或自然结束），**不要**用 `process.exit(N)` ——
+    后者走 libc exit()，带走的是**整个宿主进程**，宿主线程的收场逻辑来不及执行。
+    脚本自然结束后 `node::Start` 会**返回** N，宿主原样透传即可。
+  * 参考实现：test/example_thread_loop/loop_worker.js 与 test/example_host_exit/。
 
 可选 feature：
 

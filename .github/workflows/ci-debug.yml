@@ -1,8 +1,9 @@
 name: ci debug
 
-# push 默认跑 debug。**debug 口径从未实测**（欠账 §1），所以这几档先 continue-on-error
-# （allow_failure: true）——先把它跑起来、拿到失败清单，再逐条修；修到全绿时再升硬门。
-# 想跑 release：Actions 页面手工触发 ci release。
+# push 默认跑 debug。2026-10-14：debug 首跑（run #38）六腿全红，失败清单已逐条修完
+# （manifest/INCREMENTAL、旧头名、socket 预算、x64-osx arch 名、CRT、docstring 引号），
+# 用户拍板**全部升硬门**（allow_failure: false）——开发期不对消费方承诺接口稳定，
+# 红了就修，不再用 continue-on-error 掩盖。想跑 release：Actions 页面手工触发 ci release。
 on:
   push:
   workflow_dispatch:
@@ -27,42 +28,42 @@ jobs:
             triplet: x64-linux
             label: x64-linux (debug)
             vcpkg_conc: "4"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ""
           - os: ubuntu-24.04-arm
             preset: linux-arm64
             triplet: arm64-linux
             label: arm64-linux (debug)
             vcpkg_conc: "4"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ""
           - os: windows-latest
             preset: windows-clang-cl
             triplet: x64-windows-static-clang
             label: x64-windows (debug)
             vcpkg_conc: "4"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: x64
           - os: windows-11-arm
             preset: windows-clang-cl-arm64
             triplet: arm64-windows-static-clang
             label: arm64-windows (debug)
             vcpkg_conc: "4"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ARM64
           - os: macos-latest
             preset: macos
             triplet: arm64-osx
             label: arm64-osx (debug)
             vcpkg_conc: "2"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ""
           - os: macos-15
             preset: macos-x64
             triplet: x64-osx
             label: x64-osx (debug)
             vcpkg_conc: "2"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ""
     uses: ./.github/workflows/platform.yml
     with:

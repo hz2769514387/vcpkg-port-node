@@ -1,7 +1,8 @@
 name: ci release
 
 # release 口径**只手工触发**（默认的 push 跑 debug）：release 是交付口径、由人决定什么时候测。
-# 六个平台；x64-osx 走 macos-15（Intel）镜像。
+# 六个平台全部硬门（allow_failure: false，2026-10-14 用户拍板：开发期红了就修）。
+# x64-osx 走 macos-15（arm64 镜像 + Rosetta 跑 x86_64 产物；macos-13 Intel 资源紧张已弃用）。
 on:
   workflow_dispatch:
 
@@ -32,7 +33,7 @@ jobs:
             triplet: arm64-linux
             label: arm64-linux (release)
             vcpkg_conc: "4"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ""
           - os: windows-latest
             preset: windows-clang-cl
@@ -46,21 +47,21 @@ jobs:
             triplet: arm64-windows-static-clang
             label: arm64-windows (release)
             vcpkg_conc: "4"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ARM64
           - os: macos-latest
             preset: macos
             triplet: arm64-osx
             label: arm64-osx (release)
             vcpkg_conc: "2"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ""
           - os: macos-15
             preset: macos-x64
             triplet: x64-osx
             label: x64-osx (release)
             vcpkg_conc: "2"
-            allow_failure: "true"
+            allow_failure: "false"
             expect_arch: ""
     uses: ./.github/workflows/platform.yml
     with:

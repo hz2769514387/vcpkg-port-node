@@ -5,7 +5,15 @@ set(VCPKG_TARGET_ARCHITECTURE x64)
 set(VCPKG_CRT_LINKAGE dynamic)
 set(VCPKG_LIBRARY_LINKAGE static)
 set(VCPKG_CMAKE_SYSTEM_NAME Darwin)
-set(VCPKG_OSX_ARCHITECTURES x64)
+# ★ 必须是 `x86_64`，不能写 `x64`：vcpkg 的 vcpkg_configure_cmake 把
+#   VCPKG_OSX_ARCHITECTURES 原样转成 -DCMAKE_OSX_ARCHITECTURES，落到 clang
+#   就是 `-arch x64` —— clang 只认 x86_64/i386/arm64...，直接
+#   `clang: error: invalid arch name '-arch x64'`（2026-10-14 run #38 实测：
+#   x64-osx 腿在 vcpkg detect_compiler 阶段 0.58 秒挂掉）。vcpkg 自家的
+#   community/x64-osx 与 arm64-osx triplet 用的也是 x86_64 / arm64 这套名字。
+#   VCPKG_TARGET_ARCHITECTURE 保持 x64 —— 那是 vcpkg 自己的架构命名
+#   （映射到 CMAKE_SYSTEM_PROCESSOR=x86_64），两者不是一套词汇。
+set(VCPKG_OSX_ARCHITECTURES x86_64)
 
 # ★ 依赖**永远 release-only**，哪怕要编 node 的 debug。
 #   试过让依赖也进 debug（VCPKG_BUILD_TYPE=debug），结果是 brotli 直接 BUILD_FAILED：

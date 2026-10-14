@@ -131,7 +131,19 @@ def main(argv=None) -> int:
     for raw in args.paths:
         p = pathlib.Path(raw)
         if p.is_dir():
-            files.extend(sorted(p.rglob("*.cmake")))
+            # ★ 两类文件都要扫：`*.cmake`（胶水/脚本）与 `CMakeLists.txt`
+            #   （工程主文件）。2026-10-14 的 docstring 引号 bug 就在
+            #   test/CMakeLists.txt 里 —— 只 glob *.cmake 会整类漏掉。
+            #   build/ 等构建产物目录跳过（里面是生成物，查了也是噪音）。
+            for f in sorted(p.rglob("*")):
+                if not f.is_file():
+                    continue
+                if f.name != "CMakeLists.txt" and f.suffix != ".cmake":
+                    continue
+                if any(part == "build" or part.startswith("build-")
+                       for part in f.parts):
+                    continue
+                files.append(f)
         else:
             files.append(p)
 

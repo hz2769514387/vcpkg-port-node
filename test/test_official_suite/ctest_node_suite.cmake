@@ -249,11 +249,22 @@ endif()
 #   单用例时**连子目录都不套**（一个字符也要省）。按这套布局算出来的实际值：
 #     Linux CI 绝对侧 98 / 相对侧 80（上限 107）；macOS CI 99 / 80（上限 103，余量最薄）；
 #     本机 Windows 87 / 80（Windows 走命名管道，不查这一项）。
+# ★ 2026-10-14 run #38 修正：基目录从"本目录的构建目录"（…/test_official_suite，比工程
+#   构建根深 19 字符）改成**工程构建根**（CMAKE_BINARY_DIR）。起因是 3b77455 把套件目录
+#   从 tests/ 改名 test_official_suite/（+13 字符），把三个腿同时顶穿红线：
+#     x64-linux 绝对侧 118 > 107、arm64-linux 同因、arm64-osx 119 > 103 ——
+#     三腿全部配置期 FATAL（vcpkg install 两小时白跑）。改名是"消费端目录卫生"，
+#     但临时根的位置不该被它绑架：临时根只对 node 套件有意义，放工程构建根同样
+#   "和套件根同一棵树"（套件根就在 <构建根>/vcpkg_installed/... 下），② 的相对侧
+#   只由"上溯层数"决定，与临时根的绝对深度无关。改后实测（CI 路径，同一算式）：
+#     x64-linux 98 / 80（上限 107）；arm64-linux 104 / 80（上限 107，余量 3，最薄）；
+#     arm64-osx 99 / 80（上限 103）。
 #   要换地方：-DNODE_PORT_TEST_TMPBASE=<目录>（但换了要重算这两个数，红线会替你把关）。
 if(NODE_PORT_TEST_TMPBASE)
   set(_node_suite_tmpbase "${NODE_PORT_TEST_TMPBASE}")
 else()
-  set(_node_suite_tmpbase "${CMAKE_CURRENT_BINARY_DIR}")
+  # 工程构建根（不是本目录的构建目录）：见上面 2026-10-14 的修正说明。
+  set(_node_suite_tmpbase "${CMAKE_BINARY_DIR}")
 endif()
 file(TO_CMAKE_PATH "${_node_suite_tmpbase}" _node_suite_tmpbase)
 # ★ Windows 上**不能**用带 8.3 短名的目录（典型就是 %TEMP% = C:\Users\RUNNER~1\AppData\Local\Temp）。
