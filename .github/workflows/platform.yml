@@ -135,6 +135,28 @@ jobs:
           echo "$bin" >> "$GITHUB_PATH"
           "$bin/cmake" --version | head -1
 
+      # ---- x64-osx 交叉编译的 Rosetta 守卫 ------------------------------------
+      # macos-15 是 arm64 镜像，而 x64-osx triplet 要的是 x86_64 产物。portfile 用
+      # node 自己的机制（--dest-cpu=x64 --no-cross-compiling，见 portfile 0.5 段）
+      # 把整棵构建——**包括构建工具**（mksnapshot/torque/js2c/gen-regexp-special-case）
+      # 和 ctest 要跑的可执行——都编成 x86_64；这些二进制在 arm64 宿主上靠
+      # Rosetta 2 运行。GitHub 的 arm64 镜像不保证预装 Rosetta（社区反馈需要
+      # softwareupdate 手动装），所以这里先探测、缺了就装：
+      # 否则失败点会是离真因极远的 "Bad CPU type in executable"/"exec format error"。
+      - name: 确保 Rosetta 2 可用（仅 x64-osx）
+        if: runner.os == 'macOS' && inputs.triplet == 'x64-osx'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if /usr/bin/arch -x86_64 /usr/bin/true >/dev/null 2>&1; then
+            echo "Rosetta 2 已可用（x86_64 二进制可执行）"
+            exit 0
+          fi
+          echo "Rosetta 2 不可用，安装中……"
+          sudo softwareupdate --install-rosetta --agree-to-license
+          /usr/bin/arch -x86_64 /usr/bin/true
+          echo "Rosetta 2 安装完成"
+
       # ---- Windows：确保 clang-cl 可用 ----------------------------------------
       # ★ 不能只找 `Llvm/x64`（那是 x64 宿主的布局），也不能"随便挑一个"：
       #   本机实测 VS 会**同时装 x64 与 ARM64 两套 LLVM**（`Llvm/x64`、`Llvm/ARM64`），

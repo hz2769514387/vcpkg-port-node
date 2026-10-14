@@ -18,6 +18,9 @@
 #     这也是 ninja 生成器能编过 node 的 DevTools 协议模板的前提。
 #   * 依赖全部走 vcpkg（`--shared-*`），不编 node 内嵌副本；ICU 走 system-icu。
 #   * 交付物是**静态库**：请求动态库时报错（结构性不可能，而非"没测过"）。
+#   * 交叉编译走 node 自己的机制（`--dest-cpu` + `--no-cross-compiling`），
+#     目前覆盖 macOS（arm64 宿主 × x64-osx；工具/测试经 Rosetta 运行）——
+#     详见下面 0.5 段。Linux/Windows 的交叉未覆盖（矩阵里也没有）。
 
 vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
@@ -321,6 +324,58 @@ if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
 endif()
 
 # ---------------------------------------------------------------------------
+# 0.5) 交叉编译：目标架构与宿主不同时，用 node 自己的机制声明目标架构。
+#
+# 为什么必须传（2026-10-14 run #39 x64-osx 实测）：不传的话 configure.py 的
+# target_arch 静默等于宿主架构 —— arm64 宿主机上整棵 node 按 arm64 编，再去链
+# vcpkg 装出来的 x86_64 外部库，死在
+#   ld: symbol(s) not found for architecture arm64（icu_78::… 一片 undefined）
+# 而且报错离真因极远（先编完 1900 个目标才在链接处炸）。
+#
+# 两个 flag 是一套，缺一不可（都查过 node 24.21.0 源码确认）：
+#   --dest-cpu=<arch> → configure_arch() 设 target_arch → common.gypi 的
+#     `['OS=="mac"', … target_arch=="x64" → xcode_settings.ARCHS=['x86_64']]`
+#     → gyp 的 xcode 仿真把它翻译成每条编译/链接命令的 `-arch x86_64`。
+#   --no-cross-compiling → 不置 GYP_CROSSCOMPILE。一旦置位，gyp 的
+#     xcode_emulation 会**跳过** ARCHS→-arch 的翻译（注释原话：假设架构由
+#     CC_host/CXX_host/CC_target/CXX_target 提供），且
+#     want_separate_host_toolset=1 会把构建工具切成**宿主**架构 —— 而工具
+#     同样要链 vcpkg 的**目标**架构外部库（gen-regexp-special-case 链 ICU），
+#     又是 not found。不置位则 ninja 生成器直接忽略 host toolset
+#     （generator_supports_multiple_toolsets = CrossCompileRequested()），
+#     全部按目标架构编；arm64 宿主上这些 x86_64 工具与测试经 Rosetta 2 运行
+#     （workflow 里有守卫步骤确保 Rosetta 装着）。
+#
+# 只覆盖 macOS：Linux/Windows 的交叉是另一套故事（separate host toolset 需要
+# 宿主架构的外部库、clang-cl 的 -m64 那套），当前矩阵没有那些组合，
+# 不臆造实现。本机原生构建不受影响：目标==宿主时不加这两个 flag。
+#
+# 参考：Debian 的 nodejs 打包总是传 --dest-cpu（debian/rules 的 destCpu 映射），
+# 交叉时再加 --cross-compiling + CC_host/CXX_host（他们有 multiarch 宿主库，
+# 与我们的处境不同）。
+# ---------------------------------------------------------------------------
+set(_node_dest_cpu_args "")
+if(VCPKG_TARGET_IS_OSX)
+    set(_node_host_arch "")
+    if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64)$")
+        set(_node_host_arch "arm64")
+    elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|[Xx]64)$")
+        set(_node_host_arch "x64")
+    endif()
+    # node 的 valid_arch 含 x86/x64/arm/arm64（x86 由 configure_arch 归一成
+    # ia32），与 vcpkg 的 VCPKG_TARGET_ARCHITECTURE 用词一致，可直接透传。
+    if(_node_host_arch AND VCPKG_TARGET_ARCHITECTURE MATCHES "^(x86|x64|arm|arm64)$"
+       AND NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "${_node_host_arch}")
+        set(_node_dest_cpu_args
+            "--dest-cpu=${VCPKG_TARGET_ARCHITECTURE}"
+            "--no-cross-compiling")
+        message(STATUS
+            "node port: 交叉编译 ${_node_host_arch} → ${VCPKG_TARGET_ARCHITECTURE}"
+            "（--dest-cpu + --no-cross-compiling；x86_64 工具/测试经 Rosetta 运行）")
+    endif()
+endif()
+
+# ---------------------------------------------------------------------------
 # 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
 #    --ninja → configure.py 传 `-f ninja-<flavor>`（Windows 上是 ninja-win）。这是合法
 #    写法：gyp 的 Load() 里有 `if "-" in format: format, flavor = format.split("-", 1)`，
@@ -332,6 +387,7 @@ vcpkg_execute_required_process(
         --ninja
         ${_node_cfg_arg}
         ${_node_clang_cl_arg}
+        ${_node_dest_cpu_args}
         --with-intl=system-icu
         ${_node_shared_args}
         "-DVCPKG_SIMDUTF_INCLUDE=${_inc}"

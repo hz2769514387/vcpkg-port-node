@@ -201,9 +201,17 @@ test ──(overlay-ports)──> ports/node
 
 2026-10-14 起**六个平台全部硬门**（allow_failure: false）：debug 首跑（run #38）六腿全红，
 失败清单逐条修完后用户拍板升硬门 —— 开发期不对消费方承诺接口稳定，红了就修。
-`macos-x64` 的交叉口径：triplet 用 `VCPKG_OSX_ARCHITECTURES x86_64`（clang 只认这个名，
-写 `x64` 会 `invalid arch name`），preset 另给 `CMAKE_OSX_ARCHITECTURES=x86_64`
-（vcpkg 不会把 triplet 的这个值透传给消费端自己的目标）。
+`macos-x64` 的交叉口径（三处配套，缺一不可）：
+  * triplet `VCPKG_OSX_ARCHITECTURES x86_64`（clang 只认这个名，写 `x64` 会
+    `invalid arch name`；vcpkg 把它原样转成 `-DCMAKE_OSX_ARCHITECTURES` 给 port 构建）；
+  * preset `CMAKE_OSX_ARCHITECTURES=x86_64`（vcpkg 不会把 triplet 的这个值透传给
+    消费端自己的目标，arm64 宿主上不设就会用 arm64 代码链 x86_64 库）；
+  * portfile 收到交叉组合时给 configure.py 传 `--dest-cpu=x64 --no-cross-compiling`
+    （node 自己的交叉机制：target_arch → common.gypi 的 `ARCHS=['x86_64']` →
+    gyp 翻译成 `-arch x86_64`；不置 GYP_CROSSCOMPILE，否则 gyp 跳过 -arch 翻译
+    且把构建工具切成宿主架构——工具可链不着目标架构的 ICU）。
+  macos-15 是 arm64 镜像，编出来的 x86_64 工具与测试经 Rosetta 2 运行
+  （platform.yml 有守卫步骤确保装着）。
 
 全部 release-only（triplet 里 `VCPKG_BUILD_TYPE release`；消费端 Debug 构建也要用
 release CRT，见根 `README.md` 与 `ports/node/usage`）。分层含义见仓库根 `README.md`。
