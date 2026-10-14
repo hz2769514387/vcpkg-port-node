@@ -286,15 +286,30 @@ jobs:
       # 照样能跑，于是 ctest 全绿却什么也没证明。这条直接读 PE 头，一眼定架构。
       # 用 od 而不是 dumpbin：后者要先把 VS 环境摆好，而这个断言要能在**任何**一步失败后
       # 用最少的前提跑起来。
+      #
+      # ★ 产物路径 = example_embed/node.exe（**不是** app/node.exe）。
+      #   2026-10-14 run #40 实测踩过：`app/` 是 test/ 目录按 example_ / test_ 重排
+      #   （提交 3b77455）**之前**的布局，重排后已经没有这个目录，于是两个 Windows 腿
+      #   编译明明跑满 `[20/20] Linking …` 却在这里红：
+      #       ::error::test/build/windows-clang-cl/app/node.exe 不存在，无法断言架构
+      #   node.exe 由 test/example_embed/ 生成（node_embed 目标 + OUTPUT_NAME node），
+      #   所以路径跟着 example_embed/ 走。
+      #   找不到时退到全树 find，并把实际存在的可执行列出来 —— 这样下一次目录再变，
+      #   日志会直接告诉你该指向哪，而不是只说一句"不存在"。
       - name: 断言产物架构（Windows）
         if: runner.os == 'Windows'
         shell: bash
         run: |
           set -euo pipefail
-          exe="test/build/${{ inputs.preset }}/app/node.exe"
           want="${{ inputs.expect_arch }}"
+          root="test/build/${{ inputs.preset }}"
+          exe="$root/example_embed/node.exe"
           if [ ! -f "$exe" ]; then
-            echo "::error::$exe 不存在，无法断言架构"
+            exe="$(find "$root" -maxdepth 2 -type f -iname 'node.exe' 2>/dev/null | head -1 || true)"
+          fi
+          if [ -z "$exe" ] || [ ! -f "$exe" ]; then
+            echo "::error::$root 下找不到 node.exe，无法断言架构。实际布局："
+            find "$root" -maxdepth 2 -type f -iname 'node*' 2>/dev/null | head -20 || true
             exit 1
           fi
           # PE：e_lfanew（4 字节，偏移 0x3C）指向 "PE\0\0"，其后 2 字节是 Machine。
@@ -331,13 +346,21 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          exe="test/build/${{ inputs.preset }}/app/node.exe"
-          [ -f "$exe" ] || exe="test/build/${{ inputs.preset }}/app/node"
+          # 与上面的架构断言同一套解析（优先 example_embed/，退到全树 find）。
+          # run #40 实测：这两处曾各写一份 app/node.exe，而**带 `[ -f ] ||` 的那处
+          # 静默跳过** ⇒ run 页面上从来没出现过 process.config，路径早已失效却没人发现。
+          root="test/build/${{ inputs.preset }}"
+          exe="$root/example_embed/node.exe"
+          [ -f "$exe" ] || exe="$root/example_embed/node"
+          if [ ! -f "$exe" ]; then
+            exe="$(find "$root" -maxdepth 2 -type f -iname 'node' 2>/dev/null | head -1 || true)"
+          fi
           {
             echo "## ${{ inputs.triplet }} 实际构建配置"
             echo '```'
             echo "--- process.config（编出来的 node 自己报的）---"
-            if [ -f "$exe" ]; then
+            if [ -n "$exe" ] && [ -f "$exe" ]; then
+              echo "# 可执行：$exe"
               "$exe" -p "process.config" 2>&1 | head -40 || echo "(读不到 process.config)"
             else
               echo "(没找到 node 可执行，跳过)"

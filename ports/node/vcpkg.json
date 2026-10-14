@@ -1,7 +1,7 @@
 {
   "name": "node",
   "version": "24.21.0",
-  "port-version": 13,
+  "port-version": 14,
   "description": [
     "把 Node.js v24.21.0 整棵源码树（含 V8 与 V8 内嵌第三方）用官方 gyp → ninja 编成可链接的 node 静态库，并安装头文件与 CMake 消费配置。Node 自身依赖的官方 port 在此声明，消费方经传递依赖自动获得。",
     "限制（先读再决定怎么用）：(1) 内嵌的是 Node 自带的 V8，不是 vcpkg 的 v8 端口；(2) 只交付静态库，请求动态库会被 vcpkg 直接拒绝；(3) Windows 必须用 clang-cl 口径的 triplet；(4) 同一个可执行里不能再链 vcpkg 的 abseil / highway —— V8 用的是它们的内部符号，两份实现会重复定义（详见 share/node/usage）。"

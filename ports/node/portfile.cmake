@@ -353,19 +353,82 @@ endif()
 # 参考：Debian 的 nodejs 打包总是传 --dest-cpu（debian/rules 的 destCpu 映射），
 # 交叉时再加 --cross-compiling + CC_host/CXX_host（他们有 multiarch 宿主库，
 # 与我们的处境不同）。
+#
+# ★★ 宿主架构必须用 `VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR`，**不能**用
+#   `CMAKE_HOST_SYSTEM_PROCESSOR`（2026-10-14 run #40 实测，整整浪费一轮 13 分钟）：
+#     * vcpkg 用 `cmake -P`（**脚本模式**）执行 portfile。脚本模式下
+#       `CMAKE_HOST_SYSTEM_PROCESSOR` **不会被定义**（那是 `project()` 才设的），
+#       所以 `MATCHES` 是拿空串比 ⇒ 恒假 ⇒ 这个 if 块**一次都没进**。
+#     * 证据：整份 run #40 日志里下面那句 `message(STATUS "node port: 交叉编译 …")`
+#       **出现 0 次**，而失败的链接命令仍带 `-arch arm64`：
+#         /usr/bin/c++ … -arch arm64 … gen-regexp-special-case … libcrypto.a …
+#         ld: warning: ignoring file '…/libcrypto.a(…)': found architecture
+#             'x86_64', required architecture 'arm64'
+#       ⇒ 症状与 run #39 一模一样，`--dest-cpu` 一次都没传出去。
+#     * 正确变量由 vcpkg 自己导出：`scripts/get_cmake_vars/CMakeLists.txt` 把
+#       `CMAKE_HOST_SYSTEM_PROCESSOR` 写进 buildtrees 下的 cmake-vars-*.log，形如
+#       `set(VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR "AMD64")`，并在
+#       `scripts/ports.cmake:99` include 那个文件。vcpkg 自家
+#       `scripts/cmake/vcpkg_configure_make.cmake:8` 用的就是这个变量。
+#       `scripts/ports.cmake:186-194` 的告警注释也明说：宿主信息看
+#       `CMAKE_HOST_<SYSTEM>` / `VCPKG_HOST_IS_<SYSTEM>`，目标信息看
+#       `VCPKG_DETECTED_<VARIABLE>`。
+#
+# ★★ 下面**任何情况都要打一行 STATUS**（"决定走哪条路"），否则"分支没走"在日志里
+#   只有"少了某一行"这种极弱信号：run #40 就是因为静默跳过，判读时先怀疑了半天才
+#   确认 if 没进。判读方法论：先 grep 这三句话，再看后面的报错。
 # ---------------------------------------------------------------------------
 set(_node_dest_cpu_args "")
 if(VCPKG_TARGET_IS_OSX)
+    # 优先 vcpkg 导出的那个；万一将来 vcpkg 改了导出机制，退回 CMAKE_HOST_*，
+    # 再退回 `uname -m`（POSIX 一定有，且不受 CMake 模式影响）。
+    set(_node_host_raw "${VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR}")
+    if(_node_host_raw STREQUAL "")
+        set(_node_host_raw "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+    endif()
+    if(_node_host_raw STREQUAL "")
+        find_program(_node_uname uname)
+        if(_node_uname)
+            vcpkg_execute_required_process(
+                COMMAND "${_node_uname}" -m
+                WORKING_DIRECTORY "${SOURCE_PATH}"
+                OUTPUT_VARIABLE _node_host_raw
+                ERROR_QUIET OUTPUT_QUIET
+            )
+            string(STRIP "${_node_host_raw}" _node_host_raw)
+        endif()
+        unset(_node_uname)
+    endif()
+
     set(_node_host_arch "")
-    if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64)$")
+    if(_node_host_raw MATCHES "^(arm64|aarch64|ARM64)$")
         set(_node_host_arch "arm64")
-    elseif(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(x86_64|AMD64|[Xx]64)$")
+    elseif(_node_host_raw MATCHES "^(x86_64|AMD64|[Xx]64)$")
         set(_node_host_arch "x64")
     endif()
     # node 的 valid_arch 含 x86/x64/arm/arm64（x86 由 configure_arch 归一成
     # ia32），与 vcpkg 的 VCPKG_TARGET_ARCHITECTURE 用词一致，可直接透传。
-    if(_node_host_arch AND VCPKG_TARGET_ARCHITECTURE MATCHES "^(x86|x64|arm|arm64)$"
-       AND NOT VCPKG_TARGET_ARCHITECTURE STREQUAL "${_node_host_arch}")
+    if(NOT _node_host_arch)
+        # 认不出来 ⇒ 只能当原生构建（不加 flag）。这不是安全的默认：万一真在交叉，
+        # 后面就会重演 run #39/#40 那种"编完 1900 个目标才在链接处炸"的远距离报错。
+        # 所以这里把判据原样打出来，让人一眼看出是"变量没取到"而不是"目标==宿主"。
+        message(WARNING
+            "node port: **认不出宿主架构**（VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR="
+            "'${VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR}'、"
+            "CMAKE_HOST_SYSTEM_PROCESSOR='${CMAKE_HOST_SYSTEM_PROCESSOR}'、"
+            "uname -m='${_node_host_raw}'），"
+            "无法判断目标 ${VCPKG_TARGET_ARCHITECTURE} 是否与宿主不同。"
+            "按原生构建处理（不加 --dest-cpu）。"
+            "若是交叉构建，请到 vcpkg/issues 反馈并附上这三个值。")
+    elseif(NOT VCPKG_TARGET_ARCHITECTURE MATCHES "^(x86|x64|arm|arm64)$")
+        message(WARNING
+            "node port: 目标架构 ${VCPKG_TARGET_ARCHITECTURE} 不在 node 的 valid_arch "
+            "（x86/x64/arm/arm64）里，交叉声明跳过（当原生处理）")
+    elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "${_node_host_arch}")
+        message(STATUS
+            "node port: 目标 ${VCPKG_TARGET_ARCHITECTURE} == 宿主 "
+            "（读自 '${_node_host_raw}'），原生构建，不加 --dest-cpu")
+    else()
         set(_node_dest_cpu_args
             "--dest-cpu=${VCPKG_TARGET_ARCHITECTURE}"
             "--no-cross-compiling")

@@ -207,6 +207,92 @@ if(NODE_PORT_TEST_SKIP)
   unset(_node_suite_extra_skips)
 endif()
 
+# ---------------------------------------------------------------------------
+# debug 口径专属的跳过清单（第二个文件，同样是「单一来源 + 强制写理由」）
+#
+# 为什么要与上面那个分开：node-suite-skips.txt 按**平台**筛，而下面这些失败只在
+# **debug 构建**下出现 —— release 腿（口径 = 交付口径）必须照跑。放进平台清单里
+# 等于让 release 也失去这些覆盖，而那正是最该被测的一档。
+#
+# ★ 2026-10-14 run #40（arm64-osx debug）实测，两类**不同源**的失败：
+#
+#   ① debug 版 V8 的 DCHECK 打死 coverage 一族（17+15+6+4+1+1+2 = 46 处失败）
+#      直接死因（子进程输出原文）：
+#        Fatal error in ../../deps/v8/src/debug/debug-coverage.cc, line 346
+#        Debug check failed: previous_block.end != kNoSourcePosition (-1 vs. -1).
+#      ⇒ `deps/v8/src/base/logging.h:466-486`：`DCHECK_NE` 等宏是 `#ifdef DEBUG`
+#        门控的，release 分支展开成 `((void) 0)` ⇒ **release 构建里这行代码根本不存在**。
+#        失败落在 FilterAliasedSingletons（debug-coverage.cc:343-346）：它假定
+#        "重复的 singleton 已被合并"，而 debug 下 V8 的 coverage 块合并顺序与该假定不符。
+#      ⇒ 不是 port 缺陷，是**上游 V8 在 debug 下的内部断言**（我们不改上游源码）。
+#      连带效应：子进程 SIGTRAP（status null）⇒ 拿不到 coverage 报告 ⇒
+#      `Cannot read properties of undefined (reading 'functions' / 'branches' / 'lines')`
+#      与 `78.35% line coverage does not meet threshold of 99%` 全是**同一个根因的回声**。
+#      受影响文件（按 run #40 的 `Location:` 统计）：
+#        test-runner-coverage.js / -coverage-thresholds.js / -coverage-source-map.js /
+#        -coverage-default-exclusion.mjs / test-snapshot-coverage.js /
+#        test-config-file.js / test-runner-flag-propagation.js
+#      后两个看着不相关，实际同源：它们的子进程也开 NODE_V8_COVERAGE / 用
+#      --experimental-test-coverage，跑的是同一段 coverage 收集路径。
+#
+#   ② debug 下 inspector 通知超时（test-inspector-strip-types）
+#      与 ① 不同源：`inspector-helper.js:13` 的 `TIMEOUT = platformTimeout(15s)`，
+#      而 `test/common/index.js:293-294` 里 `platformTimeout` 在 debug 下**自动 ×2**
+#      ⇒ 上游已经给 debug 放宽到 30s，仍然超时 ⇒ debug 版 V8 的类型剥离路径在
+#      macOS arm64 runner 上确实比 30s 慢。这是**慢**，不是断言失败。
+#      （与 run #32 那批 Windows 0xC0000409 不是一回事：那是提交量耗尽，已由 -j 2 缓解。）
+#
+# 撤销条件：上游修好 coverage 的 singleton 合并（debug-coverage.cc 那处 DCHECK）后，
+#   或我们改用 release CRT/优化等级让 debug 也不触发 —— 两种都发生过就把这些条目删掉。
+# ---------------------------------------------------------------------------
+string(TOLOWER "${CMAKE_BUILD_TYPE}" _node_suite_build_type)
+if(_node_suite_build_type STREQUAL "debug")
+  set(_node_suite_debug_skip_file "${CMAKE_SOURCE_DIR}/cmake/node-suite-skips-debug.txt")
+  if(EXISTS "${_node_suite_debug_skip_file}")
+    # 解析规则与上面那个文件完全一致（file(READ) + 按行切，理由为空即 FATAL）。
+    file(READ "${_node_suite_debug_skip_file}" _node_suite_debug_text)
+    string(REPLACE "\r\n" "\n" _node_suite_debug_text "${_node_suite_debug_text}")
+    string(REPLACE "\n" ";" _node_suite_debug_lines "${_node_suite_debug_text}")
+    unset(_node_suite_debug_text)
+    foreach(_node_suite_line IN LISTS _node_suite_debug_lines)
+      string(STRIP "${_node_suite_line}" _node_suite_line)
+      if(_node_suite_line STREQUAL "" OR _node_suite_line MATCHES "^#")
+        continue()
+      endif()
+      string(REPLACE "|" ";" _node_suite_fields "${_node_suite_line}")
+      list(LENGTH _node_suite_fields _node_suite_field_count)
+      if(NOT _node_suite_field_count EQUAL 3)
+        message(FATAL_ERROR
+          "node-suite-skips-debug.txt 这一行不是「用例名 | 平台 | 理由」三段：\n  ${_node_suite_line}")
+      endif()
+      list(GET _node_suite_fields 0 _node_suite_name)
+      list(GET _node_suite_fields 1 _node_suite_plat)
+      list(GET _node_suite_fields 2 _node_suite_why)
+      string(STRIP "${_node_suite_name}" _node_suite_name)
+      string(STRIP "${_node_suite_plat}" _node_suite_plat)
+      string(STRIP "${_node_suite_why}" _node_suite_why)
+      if(_node_suite_why STREQUAL "")
+        message(FATAL_ERROR
+          "node-suite-skips-debug.txt 里这条跳过没写理由：${_node_suite_name}"
+          "（欠账 §5b 的规矩：只放环境相关的，且理由必须写清楚）")
+      endif()
+      if(_node_suite_plat STREQUAL "all" OR _node_suite_plat STREQUAL "${_node_suite_os}")
+        list(APPEND _node_suite_skips "${_node_suite_name}")
+      endif()
+    endforeach()
+    unset(_node_suite_line)
+    unset(_node_suite_fields)
+    unset(_node_suite_field_count)
+    message(STATUS
+      "node 官方套件 debug 口径额外跳过（${_node_suite_os}）：见 cmake/node-suite-skips-debug.txt")
+  else()
+    message(WARNING
+      "找不到 debug 口径跳过清单 ${_node_suite_debug_skip_file}："
+      "debug 构建下已知会失败的用例本轮会照跑并失败")
+  endif()
+endif()
+unset(_node_suite_build_type)
+
 if(_node_suite_skips)
   list(REMOVE_DUPLICATES _node_suite_skips)
   list(JOIN _node_suite_skips "," _node_suite_skips_joined)

@@ -1,0 +1,90 @@
+# node 官方套件在 **debug 构建**下的额外跳过清单 —— 单一来源。
+#
+# ★ 为什么单独一个文件（而不是并进 cmake/node-suite-skips.txt）：
+#   那个文件按**平台**筛（all / windows / linux / macos），而这里每一条都只在
+#   **debug 构建**下失败 —— release 腿（交付口径）必须照跑。放错文件等于让 release
+#   也失去这些覆盖，而那正是最该被测的一档。生效条件见
+#   test/test_official_suite/ctest_node_suite.cmake（`CMAKE_BUILD_TYPE` 匹配 debug）。
+#
+# 格式与 node-suite-skips.txt **完全一致**（同一段解析代码，同样的"理由为空即 FATAL"）：
+#     <用例名> | <平台> | <理由>
+#   平台：all / windows / linux / macos
+#   用例名按 test.py 的口径：**不带 .js / .mjs**，也不带 test/<suite>/ 前缀
+#
+# ★ 判据（沿用 node-suite-skips.txt 顶部那几条，并额外强调一条）：
+#   **"崩在原生层的先怀疑自己"在 debug 下也要克制地反过来用一次** —— 但前提是能证明
+#   那段代码在 release 下**根本不存在**。本文件每一条都给了这个证明（宏的条件编译门、
+#   或明确的超时代码），而不是"看起来像 debug 才有的问题"。
+#
+# ---------------------------------------------------------------------------
+# ① debug 版 V8 的 DCHECK 打死 coverage 一族（2026-10-14 run #40，arm64-osx debug）
+#
+# 直接死因（套件子进程输出原文）：
+#     Fatal error in ../../deps/v8/src/debug/debug-coverage.cc, line 346
+#     Debug check failed: previous_block.end != kNoSourcePosition (-1 vs. -1).
+# 子进程 SIGTRAP（`status = null, signal = SIGTRAP`）。
+#
+# 为什么只在 debug 出现（证明，不是推测）：
+#     `deps/v8/src/base/logging.h:466-486` —— `DCHECK_NE` / `DCHECK_IMPLIES` 等宏是
+#     `#ifdef DEBUG` 门控的，非 debug 分支展开成 `((void) 0)`。
+#     ⇒ **release 构建里这行断言根本不存在**，不是"release 下恰好通过"。
+#     断言位置 `deps/v8/src/debug/debug-coverage.cc:343-346`
+#     （FilterAliasedSingletons）：代码假定"重复的 singleton 已合并"，而 debug 下 V8
+#     的 coverage 块合并顺序与该假定不符。属**上游 V8 在 debug 下的内部断言**，
+#     我们不改上游源码（改了就等于伪造一个"官方等价"的构建）。
+#
+# 连带效应（这些不是独立失败，全是同一个根因的回声）：
+#     拿不到 coverage 报告 ⇒ `Cannot read properties of undefined
+#     (reading 'functions' / 'branches' / 'lines')`，
+#     以及 `78.35% line coverage does not meet threshold of 99%` 这类断言连锁失败。
+#
+# 受影响文件按 run #40 的 `Location:` 逐条统计：
+#     test-runner-coverage.js                  17 处
+#     test-runner-coverage-thresholds.js       15 处
+#     test-runner-coverage-source-map.js        6 处
+#     test-runner-coverage-default-exclusion.mjs 4 处
+#     test-config-file.js                       2 处
+#     test-runner-flag-propagation.js           2 处
+#     test-snapshot-coverage.js                 1 处（--build-snapshot + NODE_V8_COVERAGE）
+# 后两个看着不相关，实际同源：它们的子进程同样开 NODE_V8_COVERAGE /
+# 用 --experimental-test-coverage，跑的是同一段 coverage 收集路径。
+#
+# 平台口径：**all** —— 断言在 V8 源码里，与平台无关（四条腿的 node 都编自同一份
+# node 24.21.0，DEBUG 由 CMAKE_BUILD_TYPE=Debug 决定）。只在 debug 清单里生效，
+# release 腿照跑。
+
+test-runner-coverage | all | debug 版 V8 的 debug-coverage.cc:346 DCHECK 打死 coverage 收集（SIGTRAP），DCHECK 由 #ifdef DEBUG 门控、release 不编译该断言
+test-runner-coverage-thresholds | all | 同上：拿不到 coverage 报告导致阈值断言连锁失败，根因是 debug-coverage.cc:346 的 DCHECK
+test-runner-coverage-source-map | all | 同上：source-map 覆盖率报告依赖同一段 debug 下会崩的收集路径
+test-runner-coverage-default-exclusion | all | 同上：默认排除规则的覆盖率统计走同一条 debug 下崩的路径
+test-snapshot-coverage | all | 同上：子进程 --build-snapshot 带 NODE_V8_COVERAGE，触发同一个 DCHECK 后 SIGTRAP（status null expected 0）
+test-config-file | all | 同上：断言 diff 里直接带出 debug-coverage.cc:346 的 Fatal error 输出，子进程开 NODE_V8_COVERAGE
+test-runner-flag-propagation | all | 同上：验证 --experimental-test-coverage 传播，flag 生效即触发同一条 DCHECK
+
+# ---------------------------------------------------------------------------
+# ② debug 下 inspector 通知超时（与 ① 不同源）
+#
+# 失败点 `test/parallel/test-inspector-strip-types.js:94`：
+#     Timed out waiting for matching notification ((notification) => {
+#       if (notification.method === 'Debugger.scriptParsed') { … }
+#
+# 超时是**多少**：`test/common/inspector-helper.js:13`
+#     const TIMEOUT = common.platformTimeout(15 * 1000);
+# 而 `test/common/index.js:289-307` 的 platformTimeout 在 debug 下**自动 ×2**
+#     if (isDebug) ms = multipliers.two * ms;
+# ⇒ 上游已经给 debug 放宽到 **30 秒**，仍然超时 ⇒ debug 版 V8 的类型剥离
+# （type stripping）路径在 macOS arm64 runner 上确实比 30s 慢。
+#
+# 这是**慢**，不是断言失败，也不是原生层崩溃（没有 SIGTRAP、没有 debug-coverage 报错）。
+# 与 run #32 那批 Windows 0xC0000409 不是一回事：那是提交量耗尽，已由 -j 2 缓解。
+#
+# 平台口径：**all** —— 同样是 debug 慢（不是 macOS 特有），只在 debug 清单里生效。
+
+test-inspector-strip-types | all | debug 下等 Debugger.scriptParsed 通知超时：上游 platformTimeout 已给 debug 放宽到 30s 仍不够，是 debug 真的慢而非断言失败
+
+# ---------------------------------------------------------------------------
+# 撤销条件（记下来，避免"skip 了一次就永远跳下去"）：
+#   * 上游修好 coverage 的 singleton 合并（debug-coverage.cc:343-346 那处 DCHECK）；或
+#   * 我们换一种 debug 口径（例如让 V8 不开 DEBUG 但保留符号），使断言不参与编译。
+# 两种情况发生任一 ⇒ 把对应条目删掉，并在 node-suite-skips.txt 的"撤销记录"里留一行。
+# 复查方法：临时把本文件改名后跑一轮 debug 腿，看这些用例是否仍然失败。
