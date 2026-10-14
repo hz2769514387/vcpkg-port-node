@@ -250,9 +250,19 @@ jobs:
           set -uo pipefail
           cd test
           log="$RUNNER_TEMP/configure.log"
+          # debug Windows 的 node 官方套件并行度再压一档：preset 里 windows 两档写死
+          # NODE_PORT_TEST_JOBS=2（run #32 的提交量缓解），但 debug 版 V8 的堆明显更大，
+          # run #41 实测 -j 2 仍偶发 0xC0000409（提交量耗尽，见 ctest_node_suite.cmake
+          # L114-127 的诊断）。release V8 堆小，保持 -j 2 不变。
+          extra_cfg=""
+          if [ "${{ inputs.debug }}" = "1" ]; then
+            case "${{ inputs.os }}" in
+              windows*) extra_cfg="-DNODE_PORT_TEST_JOBS=1" ;;
+            esac
+          fi
           delays=(10 60 120)
           for attempt in 0 1 2 3; do
-            if cmake --preset ${{ inputs.preset }}${{ inputs.debug == '1' && ' -DCMAKE_BUILD_TYPE=Debug' || '' }} 2>&1 | tee "$log"; then
+            if cmake --preset ${{ inputs.preset }}${{ inputs.debug == '1' && ' -DCMAKE_BUILD_TYPE=Debug' || '' }} $extra_cfg 2>&1 | tee "$log"; then
               echo "配置成功（第 $((attempt+1)) 次尝试）"
               exit 0
             fi

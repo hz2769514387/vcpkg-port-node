@@ -134,7 +134,7 @@ ctest --test-dir build/<preset> -N                              # 只列用例
 
 ### 跳过清单：`cmake/node-suite-skips.txt`
 
-长期有效的跳过集中在**一个文件**里，格式是 `用例名 | 平台 | 理由`（平台 `all`/`windows`/`linux`/`macos`）。
+长期有效的跳过集中在**一个文件**里，格式是 `用例名 | 平台 | 理由`（平台 `all`/`windows`/`linux`/`macos`，可再带 `-<架构>` 后缀限定到具体架构，如 `macos-arm64` 只在 arm64 的 macOS 腿命中；架构按**目标**判，x64-osx 走 Rosetta 也仍算 x64）。
 这样做的原因有两条：
 
 * 之前同一份列表在三个 preset 里各抄了一遍，改一条要在三处同步；

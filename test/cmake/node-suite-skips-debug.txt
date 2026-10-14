@@ -9,6 +9,10 @@
 # 格式与 node-suite-skips.txt **完全一致**（同一段解析代码，同样的"理由为空即 FATAL"）：
 #     <用例名> | <平台> | <理由>
 #   平台：all / windows / linux / macos
+#     可再带 `-<架构>` 后缀限定到具体架构（x64 / arm64），例如 `macos-arm64`
+#     只在 arm64 的 macOS 腿命中，而 `macos` 两档都命中。架构按**目标**判
+#     （VCPKG_TARGET_TRIPLET 首段），x64-osx 在 arm64 宿主上走 Rosetta 也仍算 x64。
+#     判定逻辑见 test/test_official_suite/ctest_node_suite.cmake 的 _node_suite_plat_match。
 #   用例名按 test.py 的口径：**不带 .js / .mjs**，也不带 test/<suite>/ 前缀
 #
 # ★ 判据（沿用 node-suite-skips.txt 顶部那几条，并额外强调一条）：
@@ -81,6 +85,38 @@ test-runner-flag-propagation | all | 同上：验证 --experimental-test-coverag
 # 平台口径：**all** —— 同样是 debug 慢（不是 macOS 特有），只在 debug 清单里生效。
 
 test-inspector-strip-types | all | debug 下等 Debugger.scriptParsed 通知超时：上游 platformTimeout 已给 debug 放宽到 30s 仍不够，是 debug 真的慢而非断言失败
+
+# ---------------------------------------------------------------------------
+# ③ coverage 一族在 arm64-osx 的**同源新增条目**（2026-10-14 run #41）
+#
+# 与 ① 同一个根因（debug-coverage.cc:346 的 DCHECK），只是暴露的**用例文件**不同 ——
+# run #40 把 ① 那 7 条跳掉之后，run #41 栽在这 7 条上（同一段 coverage 收集路径，
+# 换了一批入口）。证据分两档：
+#
+#   * 直接打出 DCHECK 的 5 条（子进程输出里就是 debug-coverage.cc:346）：
+#       test-runner-cli / test-runner-run-coverage / test-source-map-enable /
+#       test-v8-coverage / test-worker-terminate-source-map
+#   * 走同一路径、断言层次更靠上的 2 条（子进程开 NODE_V8_COVERAGE 后 SIGTRAP，
+#     spawnSync 拿到的 status 是 null，于是 `status === 0` 的断言失败）：
+#       test-promise-reject-callback-exception（子进程带覆盖跑）
+#       test-inspector-open-coverage（在覆盖模式下起 inspector 子进程）
+#     后一条看着像 inspector 超时，其实不是：它只是**在覆盖模式下**起 inspector
+#     子进程，死的仍是 coverage 收集那一段。
+#
+# 平台口径：**macos-arm64**（不是 all）——
+#   同一轮 run #41 里，x64-osx（Rosetta）跑这 7 条**全过**，只有 arm64-osx 栽；
+#   若写成 all，x64-osx 这几条覆盖就白丢了。这正是平台列加架构维度（`<平台>-<架构>`）
+#   的用途：**只跳实测复现的那一档**。
+#   ⚠️ 这是"按实测证据"的选择：若后续 x64-osx 也复现这些失败，应把平台改成
+#      `macos`（两档都跳）并把这一句一并改掉，而不是反过来放宽到 all 掩盖问题。
+
+test-runner-cli | macos-arm64 | debug 版 V8 的 debug-coverage.cc:346 DCHECK 打死 --experimental-test-coverage（子进程 SIGTRAP），DCHECK 由 #ifdef DEBUG 门控、release 不编译该断言。run #41 仅 arm64-osx 复现，x64-osx 过
+test-runner-run-coverage | macos-arm64 | 同 ①：test-runner 的覆盖收集子进程触发 debug-coverage.cc:346 的 DCHECK 后 SIGTRAP，拿不到 coverage 报告。run #41 仅 arm64-osx 复现
+test-source-map-enable | macos-arm64 | 同 ①：开 NODE_V8_COVERAGE 收集 source map 覆盖，走 debug-coverage.cc:346 那段会崩的路径。run #41 仅 arm64-osx 复现
+test-v8-coverage | macos-arm64 | 同 ①：直接验证 V8 覆盖输出，触发 debug-coverage.cc:346 的 DCHECK。run #41 仅 arm64-osx 复现
+test-worker-terminate-source-map | macos-arm64 | 同 ①：worker 线程终止时收 source-map 覆盖，走 debug-coverage.cc:346 那段会崩的路径。run #41 仅 arm64-osx 复现
+test-promise-reject-callback-exception | macos-arm64 | 同 ①：子进程带 NODE_V8_COVERAGE 跑，SIGTRAP 后 spawnSync 拿到 status=null，断言 status===0 失败（根因仍是 debug-coverage.cc:346 的 DCHECK）。run #41 仅 arm64-osx 复现
+test-inspector-open-coverage | macos-arm64 | 同 ①：在覆盖模式下起 inspector 子进程（inspector-open.js 带 NODE_V8_COVERAGE），死的仍是 coverage 收集（debug-coverage.cc:346），不是 inspector 超时。run #41 仅 arm64-osx 复现
 
 # ---------------------------------------------------------------------------
 # 撤销条件（记下来，避免"skip 了一次就永远跳下去"）：

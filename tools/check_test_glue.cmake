@@ -74,6 +74,14 @@ function(_gate_load_glue _label _build_type)
   set(NODE_PORT_TEST_NODE_ARGS "")
   set(NODE_PORT_TEST_TMPBASE "${_work}/tmp")
   set(CMAKE_BUILD_TYPE "${_build_type}")
+  # 真实 CI 六个腿都给 VCPKG_TARGET_TRIPLET（见 test/CMakePresets.json），跳过清单的
+  # 架构维度（`<平台>-<架构>`）正是靠它的首段判架构。fixture 也给一个，让闸门
+  # 跟真实配置期走同一条 arch 解析分支，而不是 `_node_suite_arch` 恒空那条捷径。
+  set(VCPKG_TARGET_TRIPLET "x64-linux")
+  # 脚本模式下 CMAKE_SYSTEM_NAME 是空的（没有 project()），而胶水靠它定平台。
+  # 给一个与上面 triplet 一致的值，让闸门真的走 os+arch 那条匹配分支，
+  # 而不是 `_node_suite_os` 恒空、所有非 all 条目一律不命中那条捷径。
+  set(CMAKE_SYSTEM_NAME "Linux")
 
   # 顶掉两个"脚本模式不可用"的命令，并数一数注册了几个用例。
   # 计数用文件而不是变量：胶水是在 `function(_node_suite_register ...)` 里调 add_test 的，

@@ -127,6 +127,11 @@ endif()
 # 压到 2 之后峰值提交量大约减半（约 5~9 GB，16 GB 的 runner 有足够余量）。
 # 代价：套件墙钟时间约翻倍（x64-windows 实测 8:42 → 15 分钟量级），远小于 job 超时。
 #
+# ★ debug 口径再压一档到 **-j 1**：debug 版 V8 的堆比 release 大一截，run #41 实测
+#   debug Windows -j 2 仍偶发 0xC0000409。由 .github/workflows/platform.yml 在配置期
+#   传 -DNODE_PORT_TEST_JOBS=1 覆盖 preset 的 2（仅 debug+windows 叠加时生效）。
+#   release 不动 —— 堆小，-j 2 够，且 release 是交付口径不该再降吞吐。
+#
 # 这不是"把失败藏起来"：crash 码、根因与缓解依据都记在这里，且 -j 只影响**并行度**，
 # 用例一条都不少跑、一条都不跳过。
 # 崩溃诊断用的透传参数（见 test/CMakeLists.txt 里 NODE_PORT_TEST_NODE_ARGS 的说明）。
@@ -141,7 +146,8 @@ endif()
 #
 # 见 test/cmake/node-suite-skips.txt 顶部：为什么要有这个文件、以及加条目之前要过的判据。
 # 这里做三件事：
-#   1) 按当前平台筛选（all / windows / linux / macos）；
+#   1) 按当前平台筛选（all / windows / linux / macos，可加 `-<架构>` 后缀限定，
+#      如 macos-arm64 —— 见下面 `_node_suite_plat_match` 的说明）；
 #   2) **理由为空就 FATAL_ERROR** —— 空的跳过等于把 bug 藏起来，宁可在配置期红；
 #   3) 跟 NODE_PORT_TEST_SKIP（使用者用 -D 或 preset 额外加的）合并去重。
 # ---------------------------------------------------------------------------
@@ -149,6 +155,62 @@ string(TOLOWER "${CMAKE_SYSTEM_NAME}" _node_suite_os)
 if(_node_suite_os STREQUAL "darwin")
   set(_node_suite_os "macos")
 endif()
+
+# ---------------------------------------------------------------------------
+# 目标架构（x64 / arm64）—— 平台列的**可选第二段**（`<平台>-<架构>`）。
+#
+# ★ 判据与 test/cmake/toolchains/msvc-command-line-env.cmake 完全一致：
+#     ① NODE_PORT_TARGET_ARCH（Windows 腿由 triplet/toolchain 解析后存进 cache）；
+#     ② 退到 VCPKG_TARGET_TRIPLET 的首段（vcpkg 约定 `<arch>-<os>[-变体]`，
+#        本仓库 test/cmake/triplets/ 的六个都照此命名）。
+#   **不要用 CMAKE_SYSTEM_PROCESSOR**：x64-osx 在 arm64 宿主上走 Rosetta，
+#   那个变量会报 arm64（见 test/cmake/triplets/x64-osx.cmake:9-16 的说明），
+#   那样 x64-osx 会被误判成 arm64，正好把下面这个维度做反。
+# ---------------------------------------------------------------------------
+set(_node_suite_arch "")
+if(DEFINED NODE_PORT_TARGET_ARCH AND NOT NODE_PORT_TARGET_ARCH STREQUAL "")
+  set(_node_suite_arch "${NODE_PORT_TARGET_ARCH}")
+elseif(DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
+  string(REGEX MATCH "^[^-]+" _node_suite_arch "${VCPKG_TARGET_TRIPLET}")
+endif()
+
+# 日志/闸门里用的平台标签（`macos-arm64` 这样直说，免得看日志时还得反推架构）。
+set(_node_suite_plat_label "${_node_suite_os}")
+if(NOT _node_suite_arch STREQUAL "")
+  set(_node_suite_plat_label "${_node_suite_os}-${_node_suite_arch}")
+endif()
+
+# 平台列判定：`all` / 纯平台名（windows / linux / macos，不限架构）/
+# 或 `<平台>-<架构>`（如 macos-arm64，只在目标架构也相符时命中）。
+#
+# ★ 为什么加这个维度（2026-10-14 run #41）：debug 口径有一批失败**只在 arm64-osx
+#   复现**，x64-osx（Rosetta）跑同一条用例是过的。若一律按平台名跳过，x64-osx 就
+#   白白丢掉这些覆盖 —— 而覆盖正是跳过最不该牺牲的东西。有了它，就能"只跳实测
+#   复现的那一档"。
+# ★ 未知平台名/架构名**不报错**（与上游 node-suite-skips.txt 的既有行为一致：只
+#   是不命中），架构名打错的效果 = 这条跳过静默不生效 ⇒ 该用例照跑照红，不会
+#   把失败藏起来（安全性偏保守的一侧）。
+#
+# 结果写进 <out_var>（TRUE / FALSE）。
+function(_node_suite_plat_match _plat _out_var)
+  set(_hit FALSE)
+  if(_plat STREQUAL "all")
+    set(_hit TRUE)
+  else()
+    if(_plat MATCHES "^([^-]+)-([^-]+)$")
+      set(_plat_os "${CMAKE_MATCH_1}")
+      set(_plat_arch "${CMAKE_MATCH_2}")
+    else()
+      set(_plat_os "${_plat}")
+      set(_plat_arch "")
+    endif()
+    if(_plat_os STREQUAL "${_node_suite_os}"
+       AND (_plat_arch STREQUAL "" OR _plat_arch STREQUAL "${_node_suite_arch}"))
+      set(_hit TRUE)
+    endif()
+  endif()
+  set(${_out_var} "${_hit}" PARENT_SCOPE)
+endfunction()
 
 set(_node_suite_skips "")
 set(_node_suite_skip_file "${CMAKE_SOURCE_DIR}/cmake/node-suite-skips.txt")
@@ -184,13 +246,15 @@ if(EXISTS "${_node_suite_skip_file}")
         "node-suite-skips.txt 里这条跳过没写理由：${_node_suite_name}"
         "（欠账 §5b 的规矩：只放环境相关的，且理由必须写清楚）")
     endif()
-    if(_node_suite_plat STREQUAL "all" OR _node_suite_plat STREQUAL "${_node_suite_os}")
+    _node_suite_plat_match("${_node_suite_plat}" _node_suite_plat_hit)
+    if(_node_suite_plat_hit)
       list(APPEND _node_suite_skips "${_node_suite_name}")
     endif()
   endforeach()
   unset(_node_suite_line)
   unset(_node_suite_fields)
   unset(_node_suite_field_count)
+  unset(_node_suite_plat_hit)
 else()
   message(WARNING
     "找不到跳过清单 ${_node_suite_skip_file}：本轮不做任何额外跳过"
@@ -276,15 +340,18 @@ if(_node_suite_build_type STREQUAL "debug")
           "node-suite-skips-debug.txt 里这条跳过没写理由：${_node_suite_name}"
           "（欠账 §5b 的规矩：只放环境相关的，且理由必须写清楚）")
       endif()
-      if(_node_suite_plat STREQUAL "all" OR _node_suite_plat STREQUAL "${_node_suite_os}")
+      _node_suite_plat_match("${_node_suite_plat}" _node_suite_plat_hit)
+      if(_node_suite_plat_hit)
         list(APPEND _node_suite_skips "${_node_suite_name}")
       endif()
     endforeach()
     unset(_node_suite_line)
     unset(_node_suite_fields)
     unset(_node_suite_field_count)
+    unset(_node_suite_plat_hit)
     message(STATUS
-      "node 官方套件 debug 口径额外跳过（${_node_suite_os}）：见 cmake/node-suite-skips-debug.txt")
+      "node 官方套件 debug 口径额外跳过（${_node_suite_plat_label}）："
+      "见 cmake/node-suite-skips-debug.txt")
   else()
     message(WARNING
       "找不到 debug 口径跳过清单 ${_node_suite_debug_skip_file}："
@@ -297,9 +364,9 @@ if(_node_suite_skips)
   list(REMOVE_DUPLICATES _node_suite_skips)
   list(JOIN _node_suite_skips "," _node_suite_skips_joined)
   list(APPEND _node_suite_args "--skip-tests=${_node_suite_skips_joined}")
-  message(STATUS "node 官方套件额外跳过（${_node_suite_os}）：${_node_suite_skips_joined}")
+  message(STATUS "node 官方套件额外跳过（${_node_suite_plat_label}）：${_node_suite_skips_joined}")
 else()
-  message(STATUS "node 官方套件没有额外跳过（${_node_suite_os}）")
+  message(STATUS "node 官方套件没有额外跳过（${_node_suite_plat_label}）")
 endif()
 
 string(REPLACE "," ";" _node_suite_list "${NODE_PORT_TEST_SUITES}")

@@ -11,6 +11,10 @@
 # 格式（每行一条；`#` 开头是注释；空行忽略）：
 #     <用例名> | <平台> | <理由>
 #   平台：all / windows / linux / macos
+#     可再带 `-<架构>` 后缀限定到具体架构（x64 / arm64），例如 `macos-arm64`
+#     只在 arm64 的 macOS 腿命中，而 `macos` 两档都命中。架构按**目标**判
+#     （VCPKG_TARGET_TRIPLET 首段），x64-osx 在 arm64 宿主上走 Rosetta 也仍算 x64。
+#     判定逻辑见 test/test_official_suite/ctest_node_suite.cmake 的 _node_suite_plat_match。
 #   用例名按 test.py 的口径写：**不带 .js**，也不带 test/<suite>/ 前缀
 #   （例如 test/parallel/test-fs-rm.js 写作 test-fs-rm）。
 #
