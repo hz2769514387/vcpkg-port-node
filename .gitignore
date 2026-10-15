@@ -1,0 +1,20 @@
+# Maintainer-local working copy. Never tracked, never referenced by tracked files.
+.user_local/
+.workbuddy/
+.tmp/
+
+# Build outputs and downloaded trees.
+build/
+out/
+vcpkg_installed/
+downloads/
+packages/
+
+# Editor and IDE state.
+.vs/
+.idea/
+*.swp
+compile_commands.json
+
+# Logs and scratch.
+*.log

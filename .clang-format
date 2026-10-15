@@ -1,0 +1,21 @@
+# Mirrors the style of the project we wrap: upstream Node.js uses Google based on 2-space
+# indent and an 80 column limit. Our own C++ is limited to consumer examples and test glue
+# under test/ (the Node.js sources themselves are never formatted here).
+---
+Language: Cpp
+BasedOnStyle: Google
+AccessModifierOffset: -1
+AlignAfterOpenBracket: Align
+AllowShortFunctionsOnASingleLine: Inline
+BinPackArguments: false
+BinPackParameters: false
+ColumnLimit: 80
+DerivePointerAlignment: false
+FixNamespaceComments: true
+IndentCaseLabels: true
+IndentWidth: 2
+PointerAlignment: Left
+SortIncludes: true
+SpacesBeforeTrailingComments: 2
+TabWidth: 8
+UseTab: Never

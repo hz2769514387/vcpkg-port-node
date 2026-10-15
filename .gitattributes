@@ -1,0 +1,28 @@
+# Normalize every tracked text file to LF on checkout and on commit.
+#
+# This is a correctness requirement, not a style preference: our patches are applied with
+# `git apply`, and the version-tree hash under `versions/` is a git tree object hash, so a
+# stray CR would make the result depend on the machine that produced it.
+* text=auto eol=lf
+
+# Binary files must never be normalized or diffed as text.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.bmp binary
+*.pdf binary
+*.zip binary
+*.gz binary
+*.bz2 binary
+*.xz binary
+*.7z binary
+*.exe binary
+*.dll binary
+*.lib binary
+*.a binary
+*.so binary
+*.dylib binary
+*.obj binary
+*.pdb binary
