@@ -50,6 +50,11 @@ The other two are in the matrix rather than absent because the port claims to su
 leaving them red-but-non-blocking is how the claim stays honest instead of aspirational. They
 stop being experimental when a full build plus a suite run passes on them.
 
+`experimental` is an input to `build-test.yml`, not `continue-on-error` on the caller, and the
+legs are separate jobs rather than a matrix. Both keywords are accepted by the workflow parser
+and then produce a run with **zero jobs** and a "workflow file issue" failure - a job that calls
+a reusable workflow takes neither. If you add either back, that is what you will see.
+
 Windows is deliberately the Visual Studio generator with an explicit `x64` architecture: the
 default platform of a Visual Studio generator is Win32, and a `x64-windows-static` triplet
 would then be asked for a Win32 build.
