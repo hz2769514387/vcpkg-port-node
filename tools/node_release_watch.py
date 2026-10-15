@@ -191,6 +191,11 @@ def render_body(kind, pinned, finding, extra):
 
 def ensure_issue(repo, title, body, dry_run):
     """Create the issue, or rewrite the body if one with this title is already open."""
+    if dry_run:
+        # Deliberately before any `gh` call: a dry run has to work without credentials, or
+        # the lint job that checks this tool every push fails on nothing but a missing token.
+        return "would file %r in %s" % (title, repo)
+
     listed = subprocess.run(
         ["gh", "issue", "list", "--repo", repo, "--state", "open",
          "--limit", "200", "--search", title, "--json", "number,title"],

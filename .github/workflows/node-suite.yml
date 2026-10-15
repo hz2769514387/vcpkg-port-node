@@ -20,28 +20,33 @@ permissions:
   contents: read
 
 jobs:
-  build:
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          - runner: windows-latest
-            preset: windows
-            triplet: x64-windows-static
-            experimental: false
-          - runner: ubuntu-latest
-            preset: linux
-            triplet: x64-linux
-            experimental: true
-          - runner: macos-latest
-            preset: macos
-            triplet: arm64-osx
-            experimental: true
-    continue-on-error: ${{ matrix.experimental }}
+  # One job per platform rather than a matrix: a matrix on a job that calls a reusable
+  # workflow produced a run with zero jobs and an "invalid workflow file" failure. See ci.yml.
+  windows:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
-      runner: ${{ matrix.runner }}
-      preset: ${{ matrix.preset }}
-      triplet: ${{ matrix.triplet }}
+      runner: windows-latest
+      preset: windows
+      triplet: x64-windows-static
+      ctest-options: -R node-suite
+
+  linux:
+    continue-on-error: true
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      preset: linux
+      triplet: x64-linux
+      ctest-options: -R node-suite
+
+  macos:
+    continue-on-error: true
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: macos-latest
+      preset: macos
+      triplet: arm64-osx
       ctest-options: -R node-suite
