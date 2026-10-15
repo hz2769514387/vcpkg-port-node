@@ -1,0 +1,31 @@
+name: Node.js release watch
+
+# ADR 0002: this repository follows the Node.js v26 line and pins the exact patch, and nothing
+# else will tell us when upstream moves - Renovate and Dependabot have no vcpkg manager. So
+# the watcher runs here, once a day, and files an issue when a newer release exists.
+#
+# The tool makes exactly one HTTP request per run and writes nowhere except this repository.
+
+on:
+  schedule:
+    - cron: '23 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Compare the pinned version with nodejs.org
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/node_release_watch.py

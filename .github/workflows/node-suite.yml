@@ -1,0 +1,47 @@
+name: Node.js test suite
+
+# The slow gate. Node.js's own suite, run through its own driver, against the executable this
+# repository's consumer project links from libnode. Weekly, and on demand, because one run is
+# roughly an hour per platform.
+#
+# The whole point of this repository is that the result is still Node.js, so this is the test
+# that actually decides it - it just cannot be the one that runs on every push.
+
+on:
+  schedule:
+    - cron: '17 3 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: node-suite-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: windows-latest
+            preset: windows
+            triplet: x64-windows-static
+            experimental: false
+          - runner: ubuntu-latest
+            preset: linux
+            triplet: x64-linux
+            experimental: true
+          - runner: macos-latest
+            preset: macos
+            triplet: arm64-osx
+            experimental: true
+    continue-on-error: ${{ matrix.experimental }}
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ${{ matrix.runner }}
+      preset: ${{ matrix.preset }}
+      triplet: ${{ matrix.triplet }}
+      ctest-options: -R node-suite

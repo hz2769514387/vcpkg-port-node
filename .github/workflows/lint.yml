@@ -1,0 +1,35 @@
+name: Lint
+
+# Checks that cost seconds. They guard the invariants that are easy to break and impossible
+# to notice in review: a version file whose git-tree no longer matches the port, a tracked
+# file that quietly picked up CRLF or CJK text, a patch a portfile still references after it
+# was renamed.
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  hygiene:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Version files match the ports
+        run: python3 tools/version_tree.py --check
+
+      - name: Repository hygiene
+        run: python3 tools/check_repo.py
+
+      - name: The release watcher still parses the upstream feed
+        run: python3 tools/node_release_watch.py --dry-run

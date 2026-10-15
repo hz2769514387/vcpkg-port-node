@@ -1,0 +1,148 @@
+name: Build and test the node port
+
+# The shared body of every build in this repository: check out the pinned vcpkg, let the
+# consumer test project build the port through it, then run ctest. Called by ci.yml and
+# node-suite.yml, so the two never drift apart.
+#
+# Everything here uses the public consumption path on purpose - overlay ports, a manifest, a
+# stock triplet. If the port only builds when driven in some special way, this is where that
+# would show up.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner image to use.
+        required: true
+        type: string
+      preset:
+        description: Name of the CMake configure/build preset in test/CMakePresets.json.
+        required: true
+        type: string
+      triplet:
+        description: vcpkg triplet, for the log header only - the preset already sets it.
+        required: true
+        type: string
+      vcpkg-commit:
+        description: "vcpkg commit to check out (ADR 0003: the baseline is pinned)."
+        required: false
+        type: string
+        default: 9e593bb18ea69cc5095e012465dcd675a822ed0d
+      ctest-options:
+        description: Flags for ctest, e.g. "-LE node-suite" for the fast path.
+        required: false
+        type: string
+        default: -LE node-suite
+      vcpkg-binary-sources:
+        description: VCPKG_BINARY_SOURCES. Defaults to the GitHub Actions binary cache.
+        required: false
+        type: string
+        default: clear;x-gha,readwrite
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: 300
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_BINARY_SOURCES: ${{ inputs.vcpkg-binary-sources }}
+      VCPKG_MAX_CONCURRENCY: 3
+      # English diagnostics from MSVC's tools: gyp decodes their output as UTF-8, and a
+      # localized message turns a real link failure into a UnicodeDecodeError (docs/build.md).
+      VSLANG: 1033
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Report the starting point
+        shell: bash
+        run: |
+          echo "### Port build"
+          echo "- runner: ${{ inputs.runner }}"
+          echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }})"
+          echo "- vcpkg: ${{ inputs.vcpkg-commit }}"
+          echo "- ctest: ${{ inputs.ctest-options }}"
+          echo ""
+          echo "Free space before:"; df -h . || true
+
+      - name: Check out the pinned vcpkg
+        shell: bash
+        env:
+          VCPKG_COMMIT: ${{ inputs.vcpkg-commit }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$VCPKG_ROOT"
+          cd "$VCPKG_ROOT"
+          git init --quiet
+          git remote add origin https://github.com/microsoft/vcpkg.git
+          git fetch --depth 1 origin "$VCPKG_COMMIT"
+          git checkout --quiet FETCH_HEAD
+          git rev-parse HEAD
+
+      - name: Bootstrap vcpkg
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            "$VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
+          else
+            "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+          fi
+
+      - name: Toolchain inventory
+        shell: bash
+        run: |
+          # Everything below is a hard requirement of the node port, and each one has failed
+          # at least once somewhere: cargo for Node.js 26's Temporal crate, python for gyp and
+          # for the official test driver, clang-cl on Windows (upstream requirement since 24).
+          echo "cargo         : $(cargo --version || echo MISSING)"
+          echo "python        : $(python --version 2>&1 || echo MISSING)"
+          echo "python3       : $(python3 --version 2>&1 || echo MISSING)"
+          echo "cmake         : $(cmake --version | head -n 1 || echo MISSING)"
+          echo "ninja         : $(ninja --version 2>/dev/null || echo MISSING)"
+          if [ "$RUNNER_OS" = "Windows" ]; then
+            echo "clang-cl      : $(command -v clang-cl || echo MISSING)"
+          fi
+
+      - name: Configure the consumer test project
+        shell: bash
+        working-directory: test
+        env:
+          PRESET: ${{ inputs.preset }}
+        run: |
+          set -euo pipefail
+          # This is also what builds the port: vcpkg runs in manifest mode during configure.
+          cmake --preset "$PRESET"
+
+      - name: Build the consumer test project
+        shell: bash
+        working-directory: test
+        env:
+          PRESET: ${{ inputs.preset }}
+        run: |
+          set -euo pipefail
+          cmake --build --preset "$PRESET"
+
+      - name: Run the tests
+        shell: bash
+        working-directory: test
+        env:
+          PRESET: ${{ inputs.preset }}
+          CTEST_OPTIONS: ${{ inputs.ctest-options }}
+        run: |
+          set -euo pipefail
+          # -C is only meaningful for multi-config generators (Visual Studio); the
+          # single-config ones ignore it.
+          ctest --test-dir "build/$PRESET" -C Release --output-on-failure $CTEST_OPTIONS
+
+      - name: Keep the logs when something fails
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: logs-${{ inputs.preset }}-${{ github.run_id }}
+          path: |
+            test/build/**/*.log
+          if-no-files-found: ignore
+          retention-days: 7
