@@ -1,0 +1,89 @@
+node provides a linkable static build of the whole Node.js v26.11.1 tree:
+
+  * headers: <prefix>/include/node/ (embedding headers) and
+    <prefix>/include/node-v8/ (public V8 headers)
+  * static libraries: <prefix>/lib/ - libnode, node_base, the v8_* libraries,
+    and Node's own uvwasi / merve / nbytes / ncrypto / crdtp / node_crates.
+    A dual build puts the Debug libraries in <prefix>/debug/lib/
+  * consumer config: <prefix>/share/unofficial-node/unofficial-node-config.cmake
+
+Usage (CMake):
+
+    find_package(unofficial-node CONFIG REQUIRED)
+    target_link_libraries(<your target> PRIVATE unofficial::node::node)
+
+`unofficial::node::node` brings in the whole implementation and every
+third-party dependency, together with the include directories.
+
+## Two things to know before using it
+
+  1) A stock vcpkg triplet is enough. On Windows Node.js is compiled with
+     clang-cl (a Node.js 24+ upstream requirement), but both the compiler and
+     the MSVC command-line environment are prepared by this port, so you do not
+     need your own triplet, toolchain or chainload file.
+
+  2) The build follows your triplet:
+       * VCPKG_BUILD_TYPE unset (dual triplet, e.g. x64-windows-static) builds
+         Release and Debug; the Debug libraries go to debug/lib/.
+       * VCPKG_BUILD_TYPE=release builds Release only; a Windows Debug consumer
+         then gets a clear configure-time error instead of a link-time LNK2038.
+       * VCPKG_BUILD_TYPE=debug is rejected: a debug-only tree breaks several
+         upstream ports (their vcpkg_copy_tools step fails), and it leaves
+         Release consumers without a library. Use a dual triplet for Debug.
+       * VCPKG_CRT_LINKAGE selects the static (/MT, /MTd) or dynamic (/MD, /MDd)
+         CRT. Both are supported and follow the triplet.
+
+## Other notes
+
+  * Library file names follow Node's own gyp rules: libnode.a / libnode_base.a
+    on POSIX, libnode.lib / node_base.lib on Windows. The consumer config
+    already accounts for this; you do not have to.
+  * Static delivery only: requesting VCPKG_LIBRARY_LINKAGE=dynamic is rejected.
+  * The third-party libraries Node.js and V8 use (openssl / zlib / libuv / icu /
+    sqlite3 / brotli / zstd / simdjson / simdutf / ada / ngtcp2 / nghttp2 /
+    c-ares / llhttp / hdr-histogram / abseil / highway) all come from vcpkg as
+    transitive dependencies; you do not find_package them yourself. In
+    particular abseil, highway, simdutf and the Chromium zlib are externalized,
+    so exactly one copy of each ends up in your process.
+  * `unofficial::node::node` already lists that whole set, so do not link any of
+    it again on your own target. nghttp2 is one of them - it ships no CMake
+    package config, so this port creates `unofficial::node::nghttp2` and wires
+    it into the interface.
+  * On GNU platforms (Linux/BSD) the link interface uses CMake's
+    `$<LINK_GROUP:RESCAN,...>` (the gyp archives have cycles, so a
+    single-pass linker must rescan); that needs a consumer CMake >= 3.24.
+    Windows and macOS use a flat list.
+  * C++20 is declared on the `unofficial::node::node` INTERFACE
+    (`INTERFACE_COMPILE_FEATURES cxx_std_20`), so you do not add it yourself.
+    MSVC (cl.exe) also gets `/Zc:__cplusplus` automatically.
+
+## Windows specifics
+
+  * MSVC command-line environment: vcpkg prepares it only for the port build.
+    Configure and build your own project from a Visual Studio developer command
+    prompt (or any shell that has run vcvarsall), so that cl.exe / rc.exe and
+    INCLUDE / LIB are present.
+  * CMAKE_MSVC_RUNTIME_LIBRARY is yours to set: vcpkg's /MT script only applies
+    to the port build, so your CMake defaults to /MD and a static-CRT node
+    install fails at link time. With a static-CRT triplet set
+        set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")
+    (leave it unset for a dynamic-CRT triplet). Forgetting it produces an
+    explicit FATAL_ERROR from find_package telling you what to set.
+  * The Windows platform compatibility manifest and the 8 MiB stack size are
+    linked automatically through `unofficial::node::node`; you do not add them.
+
+## Features
+
+  * `tools`: also install the node executable and npm / npx / corepack into
+    <prefix>/tools/node (the official distribution layout: executable +
+    node_modules/{npm,corepack} + shims, with both POSIX sh and Windows .cmd
+    shims). The consumer config exports node_TOOLS_DIR, node_EXECUTABLE,
+    node_NPM, node_NPX and node_COREPACK.
+  * `test-suite`: also install the official test suite (test/ plus the
+    tools/test.py driver) into <prefix>/share/node/test-suite, exported as
+    node_TEST_SUITE_DIR. Run it with
+        python <node_TEST_SUITE_DIR>/tools/test.py --shell=<your exe> \
+               --test-root=<node_TEST_SUITE_DIR>/test parallel
+
+This port does not ship a triplet or toolchain - that is the consumer's build
+configuration, and using this port needs none beyond a stock one.

@@ -1,0 +1,73 @@
+--- a/tools/v8_gypfiles/simdutf.gyp
++++ b/tools/v8_gypfiles/simdutf.gyp
+@@ -2,21 +2,32 @@
+   'includes': ['toolchain.gypi'],
+   'targets': [
+     {
++      # vcpkg port: build no simdutf here. The port builds with
++      # --shared-simdutf, so the implementation comes from vcpkg (simdutf.lib);
++      # this target only satisfies the dependency edge that deps/ada/ada.gyp
++      # declares unconditionally, and hands out the external include directory.
++      # V8's own sources already include "simdutf.h" without a third_party
++      # prefix, so the external header resolves directly.
++      # The libraries entry in all_dependent_settings propagates the vcpkg
++      # simdutf.lib to every target that depends on this one (including V8
++      # tools like mksnapshot.exe), so the externalized symbols resolve.
+       'target_name': 'simdutf',
+-      'type': 'static_library',
++      'type': 'none',
+       'toolsets': ['host', 'target'],
+-      'variables': {
+-        'SIMDUTF_ROOT': '../../deps/v8/third_party/simdutf',
+-      },
+       'all_dependent_settings': {
+         'include_dirs': [
+-          '<(SIMDUTF_ROOT)',
++          '<(VCPKG_SIMDUTF_INCLUDE)',
++        ],
++        'conditions': [
++          ['OS=="win"', {
++            'libraries': ['-lsimdutf'],
++          }],
++          ['OS!="win"', {
++            'libraries': ['-lsimdutf'],
++          }],
+         ],
+       },
+-      'include_dirs': ['.'],
+-      'sources': [
+-        '<(SIMDUTF_ROOT)/simdutf.cpp',
+-      ],
++      'include_dirs': ['<(VCPKG_SIMDUTF_INCLUDE)'],
+     },  # simdutf
+   ],
+ }
+--- a/tools/v8_gypfiles/v8.gyp
++++ b/tools/v8_gypfiles/v8.gyp
+@@ -644,15 +644,23 @@
+         'v8_libbase',
+         'fp16',
++        'simdutf.gyp:simdutf',
+       ],
+       'conditions': [
+         ['node_shared_abseil=="false"', {
+           'dependencies': ['abseil.gyp:abseil'],
+         }],
+         ['node_shared_highway=="false"', {
+           'dependencies': ['highway.gyp:highway'],
+         }],
+-        ['node_shared_simdutf=="false"', {
+-          'dependencies': ['simdutf.gyp:simdutf'],
+-        }],
+       ],
++      'all_dependent_settings': {
++        'conditions': [
++          ['OS=="win"', {
++            'libraries': ['-lsimdutf'],
++          }],
++          ['OS!="win"', {
++            'libraries': ['-lsimdutf'],
++          }],
++        ],
++      },
+       'direct_dependent_settings': {

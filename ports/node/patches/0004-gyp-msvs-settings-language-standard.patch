@@ -1,0 +1,30 @@
+--- a/tools/gyp/pylib/gyp/MSVSSettings.py
++++ b/tools/gyp/pylib/gyp/MSVSSettings.py
+@@ -796,9 +796,24 @@
+     _compile, "CompileAsManaged", _Enumeration([], new=["false", "true"])
+ )  # /clr
+ _MSBuildOnly(_compile, "CreateHotpatchableImage", _boolean)  # /hotpatch
+-_MSBuildOnly(_compile, "LanguageStandard", _string)
+-_MSBuildOnly(_compile, "LanguageStandard_C", _string)
+-_MSBuildOnly(_compile, "MultiProcessorCompilation", _boolean)  # /MP
++# LanguageStandard/ManualProcessorCompilation affect the command line that the
++# ninja generator builds too, so they are declared as real flags rather than
++# MSBuild-only.  msvs_emulation.py emits "/std:<lang>" for them and filters /MP
++# back out (ninja does its own parallel scheduling), but declaring them here is
++# what stops the "unrecognized setting" warning from drowning the build log.
++_Same(
++    _compile,
++    "LanguageStandard",
++    _Enumeration(
++        [], new=["Default", "stdcpp14", "stdcpp17", "stdcpp20", "stdcpplatest"]
++    ),
++)
++_Same(
++    _compile,
++    "LanguageStandard_C",
++    _Enumeration([], new=["Default", "stdc11", "stdc17", "stdclatest"]),
++)
++_Same(_compile, "MultiProcessorCompilation", _boolean)  # /MP
+ _MSBuildOnly(_compile, "PreprocessOutputPath", _string)  # /Fi
+ _MSBuildOnly(_compile, "ProcessorNumber", _integer)  # the number of processors
+ _MSBuildOnly(_compile, "TrackerLogDirectory", _folder_name)

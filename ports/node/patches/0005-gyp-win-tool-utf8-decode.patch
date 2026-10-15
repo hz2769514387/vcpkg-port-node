@@ -1,0 +1,65 @@
+--- a/tools/gyp/pylib/gyp/win_tool.py
++++ b/tools/gyp/pylib/gyp/win_tool.py
+@@ -137,7 +137,7 @@
+             stdout=subprocess.PIPE,
+             stderr=subprocess.STDOUT,
+         )
+-        out = link.communicate()[0].decode("utf-8")
++        out = link.communicate()[0].decode("utf-8", errors="replace")
+         for line in out.splitlines():
+             if (
+                 not line.startswith("   Creating library ")
+@@ -217,7 +217,7 @@
+             our_manifest = "%(out)s.manifest" % variables
+             # Load and normalize the manifests. mt.exe sometimes removes whitespace,
+             # and sometimes doesn't unfortunately.
+-            with open(our_manifest) as our_f, open(assert_manifest) as assert_f:
++            with open(our_manifest, encoding='utf-8') as our_f, open(assert_manifest, encoding='utf-8') as assert_f:
+                 translator = str.maketrans("", "", string.whitespace)
+                 our_data = our_f.read().translate(translator)
+                 assert_data = assert_f.read().translate(translator)
+@@ -227,7 +227,7 @@
+                 def dump(filename):
+                     print(filename, file=sys.stderr)
+                     print("-----", file=sys.stderr)
+-                    with open(filename) as f:
++                    with open(filename, encoding='utf-8', errors='replace') as f:
+                         print(f.read(), file=sys.stderr)
+                         print("-----", file=sys.stderr)
+ 
+@@ -250,7 +250,7 @@
+         popen = subprocess.Popen(
+             args, shell=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+         )
+-        out = popen.communicate()[0].decode("utf-8")
++        out = popen.communicate()[0].decode("utf-8", errors="replace")
+         for line in out.splitlines():
+             if line and "manifest authoring warning 81010002" not in line:
+                 print(line)
+@@ -294,7 +294,7 @@
+         popen = subprocess.Popen(
+             args, shell=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+         )
+-        out = popen.communicate()[0].decode("utf-8")
++        out = popen.communicate()[0].decode("utf-8", errors="replace")
+         # Filter junk out of stdout, and write filtered versions. Output we want
+         # to filter is pairs of lines that look like this:
+         # Processing C:\Program Files (x86)\Microsoft SDKs\...\include\objidl.idl
+@@ -313,7 +313,7 @@
+         popen = subprocess.Popen(
+             args, shell=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+         )
+-        out = popen.communicate()[0].decode("utf-8")
++        out = popen.communicate()[0].decode("utf-8", errors="replace")
+         for line in out.splitlines():
+             if (
+                 not line.startswith("Copyright (C) Microsoft Corporation")
+@@ -331,7 +331,7 @@
+         popen = subprocess.Popen(
+             args, shell=True, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+         )
+-        out = popen.communicate()[0].decode("utf-8")
++        out = popen.communicate()[0].decode("utf-8", errors="replace")
+         for line in out.splitlines():
+             if (
+                 not line.startswith("Microsoft (R) Windows (R) Resource Compiler")

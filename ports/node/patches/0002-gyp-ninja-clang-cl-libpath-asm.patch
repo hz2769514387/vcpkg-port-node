@@ -1,0 +1,116 @@
+--- a/tools/gyp/pylib/gyp/generator/ninja.py
++++ b/tools/gyp/pylib/gyp/generator/ninja.py
+@@ -1076,8 +1076,12 @@
+         elif self.flavor == "win":
+             asmflags = self.msvs_settings.GetAsmflags(config_name)
+             cflags = self.msvs_settings.GetCflags(config_name)
+-            cflags_c = self.msvs_settings.GetCflagsC(config_name)
+-            cflags_cc = self.msvs_settings.GetCflagsCC(config_name)
++            cflags_c = self.msvs_settings.GetCflagsC(
++                config_name, self.GypPathToNinja
++            )
++            cflags_cc = self.msvs_settings.GetCflagsCC(
++                config_name, self.GypPathToNinja
++            )
+             extra_defines = self.msvs_settings.GetComputedDefines(config_name)
+             # See comment at cc_command for why there's two .pdb files.
+             pdbpath_c = pdbpath_cc = self.msvs_settings.GetCompilerPdbName(
+@@ -1218,9 +1222,15 @@
+                 command = "cc_s"
+             elif (
+                 self.flavor == "win"
+-                and ext in ("asm", "S")
++                and ext == "asm"
+                 and not self.msvs_settings.HasExplicitAsmRules(spec)
+             ):
++                # P17: ".S" (GAS syntax) must not be handed to MASM (ml64) --
++                # it can never assemble it. On Windows, .S files are expected
++                # to be consumed by explicit actions (e.g. v8's
++                # asm_to_inline_asm.py) or ignored, matching the MSBuild
++                # generator where they never reach ClCompile. Only ".asm"
++                # (MASM syntax) gets the implicit ml64 rule.
+                 command = "asm"
+                 # Add the _asm suffix as msvs is capable of handling .cc and
+                 # .asm files of the same name without collision.
+@@ -1494,7 +1504,24 @@
+         if self.flavor == "mac":
+             libraries = self.xcode_settings.AdjustLibraries(libraries, config_name)
+         elif self.flavor == "win":
+-            libraries = self.msvs_settings.AdjustLibraries(libraries)
++            # A "-L<dir>" entry in the libraries list is a linker search path, not
++            # a library name. On Windows everything is passed to link.exe through a
++            # response file, where a bare "-L<dir>" is not understood (it is turned
++            # into "/L<dir>" by the rsp writer). Translate it into /LIBPATH:<dir>
++            # and prepend it, so it lands before the libraries it applies to.
++            extra_libdirs = []
++            kept = []
++            for lib in libraries:
++                if lib.startswith("-L") and not lib.startswith("-LIB"):
++                    extra_libdirs.append(
++                        "/LIBPATH:"
++                        + QuoteShellArgument(
++                            self.GypPathToNinja(lib[2:]), self.flavor
++                        )
++                    )
++                else:
++                    kept.append(lib)
++            libraries = extra_libdirs + self.msvs_settings.AdjustLibraries(kept)
+ 
+         self.WriteVariableList(ninja_file, "libs", library_dirs + libraries)
+ 
+@@ -1580,7 +1607,7 @@
+         elif spec["type"] == "static_library":
+             self.target.binary = self.ComputeOutput(spec)
+             if (
+-                self.flavor not in ("ios", "mac", "netbsd", "openbsd", "win")
++                self.flavor not in ("ios", "mac", "netbsd", "openbsd", "win", "linux")
+                 and not self.is_standalone_static_library
+             ):
+                 self.ninja.build(
+@@ -2263,7 +2290,11 @@
+             ar_host = os.path.join(build_to_root, value)
+         if key == "CC":
+             cc = os.path.join(build_to_root, value)
+-            if cc.endswith("clang-cl"):
++            # Accept "clang-cl" as well as the executable spelling "clang-cl.exe";
++            # the .exe suffix is what Node's configure.py passes through and a
++            # strict endswith() check would miss it, silently falling back to MSVC's
++            # cl.exe (which cannot compile Node's DevTools protocol templates).
++            if cc.lower().endswith(("clang-cl", "clang-cl.exe")):
+                 clang_cl = cc
+         if key == "CXX":
+             cxx = os.path.join(build_to_root, value)
+@@ -2323,8 +2354,31 @@
+                 "CC", wrappers, QuoteShellArgument(path, "win")
+             )
+             if clang_cl:
+-                # Use clang-cl to cross-compile for x86 or x86_64.
+-                command += " -m32" if arch == "x86" else " -m64"
++                # P17: upstream gyp only ever used clang-cl to cross-compile
++                # for x86/x86_64, so it hard-codes "-m64" (== x86_64) for every
++                # non-x86 arch -- arm64 included.  Node's official Windows/ARM64
++                # builds never hit this because they compile with MSVC's cl.exe,
++                # not clang-cl.
++                #
++                # On an arm64 Windows host the fallout is silent: every object
++                # comes out as x64 code, the linker infers MACHINE:X64, and then
++                # *both* halves of the environment disagree with the objects --
++                # environment.arm64's LIB only carries arm64 CRT/SDK libs, so
++                # ~204 CRT/C++-runtime symbols go unresolved (LNK2001) while the
++                # arm64 SDK libs that DO get found warn LNK4272 ('ARM64'
++                # conflicts with target machine type 'x64').
++                #
++                # clang-cl has no -m64/-m32 style switch for ARM64, so pin the
++                # target triple explicitly.  The port already exports
++                # NODE_PORT_CLANG_TARGET (aarch64-pc-windows-msvc) for the
++                # probe patches (0007/0008); reuse it here so all three stay in
++                # lockstep.
++                if arch == "arm64":
++                    command += " --target=" + os.environ.get(
++                        "NODE_PORT_CLANG_TARGET", "arm64-pc-windows-msvc"
++                    )
++                else:
++                    command += " -m32" if arch == "x86" else " -m64"
+             master_ninja.variable("cl_" + arch, command)
+ 
+     cc = GetEnvironFallback(["CC_target", "CC"], cc)

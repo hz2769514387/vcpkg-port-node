@@ -1,0 +1,10 @@
+--- a/deps/v8/src/codegen/compiler.cc
++++ b/deps/v8/src/codegen/compiler.cc
+@@ -58,6 +58,7 @@
+ #include "src/objects/literal-objects.h"
+ #include "src/objects/map.h"
+ #include "src/objects/object-list-macros.h"
++#include "src/objects/descriptor-array-inl.h"
+ #include "src/objects/objects-body-descriptors-inl.h"
+ #include "src/objects/objects.h"
+ #include "src/objects/shared-function-info.h"

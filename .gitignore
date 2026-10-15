@@ -1,6 +1,7 @@
 # Maintainer-local working copy. Never tracked, never referenced by tracked files.
 .user_local/
 .workbuddy/
+.codeartsdoer/
 .tmp/
 
 # Build outputs and downloaded trees.

@@ -1,0 +1,17 @@
+--- a/tools/icu/icu-system.gyp
++++ b/tools/icu/icu-system.gyp
+@@ -16,5 +16,14 @@
+       'type': 'none',
+       'toolsets': [ 'host', 'target' ],
+     },
++    {
++      # v8.gyp depends on <(icu_gyp_path):icudata unconditionally on Windows,
++      # but upstream's system-icu manifest omits that target, so Windows +
++      # system-icu fails with "Dependency ... icudata#target not found". Add an
++      # empty target to catch the edge; real icudata comes from vcpkg's icu port.
++      'target_name': 'icudata',
++      'type': 'none',
++      'toolsets': [ 'host', 'target' ],
++    },
+   ],
+ }

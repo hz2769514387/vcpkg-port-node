@@ -1,0 +1,33 @@
+--- a/tools/gyp/pylib/gyp/common.py
++++ b/tools/gyp/pylib/gyp/common.py
+@@ -440,13 +440,29 @@
+     else:
+         return defines
+ 
++    # clang-cl is a cl.exe-compatible driver: it warns "unknown argument
++    # ignored in clang-cl: '-dM'" and emits no macro dump, so the predefines
++    # would come back empty.  Its clang.exe sibling understands the GNU-style
++    # probe flags once told to target the MSVC ABI, so borrow it for the probe.
++    # The triple is deliberately not hard-coded: the vcpkg port hands over the
++    # *target* architecture (x86_64 / aarch64 / i686) via NODE_PORT_CLANG_TARGET.
++    if cmd and os.path.basename(cmd[0]).lower() == "clang-cl.exe":
++        clang = os.path.join(os.path.dirname(cmd[0]), "clang.exe")
++        if os.path.exists(clang):
++            target = os.environ.get("NODE_PORT_CLANG_TARGET",
++                                    "x86_64-pc-windows-msvc")
++            cmd = [clang, "--target=" + target] + cmd[1:]
++
+     if sys.platform == "win32":
+         fd, input = tempfile.mkstemp(suffix=".c")
+         real_cmd = [*cmd, "-dM", "-E", "-x", "c", input]
+         try:
+             os.close(fd)
++            # Run with shell=False: cmd is already a token list, and
++            # shell=True re-splits the unquoted executable path on its
++            # spaces ("C:/Program Files/..."), failing the probe outright.
+             stdout = subprocess.run(
+-                real_cmd, shell=True, capture_output=True, check=True
++                real_cmd, shell=False, capture_output=True, check=True
+             ).stdout
+         except subprocess.CalledProcessError as e:
+             print(

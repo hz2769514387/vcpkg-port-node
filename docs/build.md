@@ -191,17 +191,48 @@ Environment: `GYP_MSVS_VERSION=2022`, `GYP_MSVS_OVERRIDE_PATH=<VS root>`,
 `lib` directory (gyp links by name; the `/LIBPATH:` entries configure emits do not reach
 every link line).
 
-## 6. Where a full build currently stops
+## 6. Full build status
 
-The remaining gap to a linked `libnode` is not abseil or highway — it is the set of
-pre-existing gyp integration problems plus the fact that a minimal experiment still builds
-the bundled dependencies:
+The port builds `libnode.lib` successfully on `x64-windows-static` with Node.js v26.11.1
+(measured: 2026-10-15). Both Release and Debug configurations complete; the full
+`vcpkg install` including binary cache submission takes ~40 min on this machine.
 
-1. PCH flags/paths (§4.4) on the `msvs`-emulation path.
-2. `--with-intl=system-icu` is required; bundled ICU does not build with clang-cl (§4.6).
-3. `/WHOLEARCHIVE` paths (§4.5) before any final link.
+### 6.1 What was needed beyond §4
 
-Whether each fix is still needed after the port applies its own patch set is a question for
-the port build itself, not for this document. What is settled here is the part issue #1
-asked about: the externalization wiring for abseil and highway works, V8 stops compiling its
-bundled copies, and abseil-consuming host tools link against vcpkg's abseil.
+The fixes in §4 were necessary but not sufficient. Three additional problems surfaced
+during the full build:
+
+1. **simdutf `atomic_*` symbols missing.** V8 v26.11.1 bundles simdutf 7.7.0; vcpkg ships
+   8.2.0. V8 calls `simdutf::atomic_binary_to_base64` and `simdutf::atomic_base64_to_binary_safe`,
+   which are gated by `SIMDUTF_ATOMIC_REF` (requires `__cpp_lib_atomic_ref >= 201806L`, a
+   C++20 feature). vcpkg's simdutf defaults to `SIMDUTF_CXX_STANDARD=11`, so the `atomic_*`
+   functions are not compiled into the library. Fix: an overlay port `ports/simdutf` that
+   forces `SIMDUTF_CXX_STANDARD=20`.
+
+2. **simdutf gyp target not reachable after externalization.** `v8.gyp` gates the
+   `simdutf.gyp:simdutf` dependency on `node_shared_simdutf=="false"`, so externalizing
+   simdutf removes the dependency edge — but `simdutf.gyp` is still unconditionally
+   included by `ada.gyp`, and the V8 host tools (`mksnapshot.exe`, `node_mksnapshot.exe`)
+   need `-lsimdutf` on their link line. Fix: patch `v8.gyp` to add `simdutf.gyp:simdutf`
+   as an **unconditional** dependency of `v8_base_without_compiler` (type `none`, no
+   sources), and propagate `-lsimdutf` through `all_dependent_settings.libraries` on that
+   target.
+
+3. **`simdutf.lib` vs `-lsimdutf` in gyp `libraries`.** A bare `simdutf.lib` in
+   `all_dependent_settings.libraries` is treated by the ninja generator as a build output
+   path (`tools\v8_gypfiles\simdutf.lib`), not a system library. Using `-lsimdutf` lets the
+   linker search `LIB` and find the vcpkg-installed copy.
+
+### 6.2 Installed artifacts
+
+| Artifact | Path |
+|---|---|
+| `libnode.lib` (Release) | `lib/libnode.lib` (9.7 MB) |
+| `libnode.lib` (Debug) | `debug/lib/libnode.lib` (12 MB) |
+| Headers | `include/node/` (246 `.h` files) |
+| CMake config | `share/unofficial-node/unofficial-node-config.cmake` |
+| CMake version | `share/unofficial-node/unofficial-node-config-version.cmake` |
+
+The CMake config declares `unofficial::node::node` and pulls in all shared dependencies
+(zlib, OpenSSL, libuv, llhttp, c-ares, brotli, ada, simdjson, simdutf, ngtcp2, zstd, ICU,
+sqlite3, hdr_histogram, highway) via `find_dependency`.
