@@ -631,9 +631,11 @@ if("tools" IN_LIST FEATURES)
     endif()
     file(INSTALL "${SOURCE_PATH}/deps/npm/" DESTINATION "${_node_tools}/node_modules/npm"
         USE_SOURCE_PERMISSIONS)
-    file(INSTALL "${SOURCE_PATH}/deps/corepack/" DESTINATION "${_node_tools}/node_modules/corepack"
-        USE_SOURCE_PERMISSIONS)
-    foreach(_shim IN ITEMS npm npx corepack)
+    if(EXISTS "${SOURCE_PATH}/deps/corepack/package.json")
+        file(INSTALL "${SOURCE_PATH}/deps/corepack/" DESTINATION "${_node_tools}/node_modules/corepack"
+            USE_SOURCE_PERMISSIONS)
+    endif()
+    foreach(_shim IN ITEMS npm npx)
         file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/scripts/${_shim}" DESTINATION "${_node_tools}"
             RENAME "${_shim}"
             FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
@@ -641,6 +643,14 @@ if("tools" IN_LIST FEATURES)
         file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/scripts/${_shim}.cmd" DESTINATION "${_node_tools}"
             RENAME "${_shim}.cmd")
     endforeach()
+    if(EXISTS "${SOURCE_PATH}/deps/corepack/package.json")
+        file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/scripts/corepack" DESTINATION "${_node_tools}"
+            RENAME "corepack"
+            FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
+                            GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+        file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/scripts/corepack.cmd" DESTINATION "${_node_tools}"
+            RENAME "corepack.cmd")
+    endif()
     unset(_shim)
 endif()
 
@@ -765,8 +775,11 @@ if("tools" IN_LIST FEATURES)
         "set(node_TOOLS_DIR \"\${_node_prefix}/tools/node\")\n"
         "set(node_EXECUTABLE \"\${_node_prefix}/tools/node/${_node_exe_name}\")\n"
         "set(node_NPM \"\${_node_prefix}/tools/node/npm${_node_shim_ext}\")\n"
-        "set(node_NPX \"\${_node_prefix}/tools/node/npx${_node_shim_ext}\")\n"
-        "set(node_COREPACK \"\${_node_prefix}/tools/node/corepack${_node_shim_ext}\")\n")
+        "set(node_NPX \"\${_node_prefix}/tools/node/npx${_node_shim_ext}\")\n")
+    if(EXISTS "${SOURCE_PATH}/deps/corepack/package.json")
+        string(APPEND _cfg
+            "set(node_COREPACK \"\${_node_prefix}/tools/node/corepack${_node_shim_ext}\")\n")
+    endif()
 endif()
 
 # Everything gyp produces for a Node.js build. abseil/highway/simdutf/zlib come
