@@ -21,7 +21,7 @@ versioned with the code and reviewed in pull requests.
 | Document | Purpose | Status |
 |---|---|---|
 | [decisions/](decisions/README.md) | Architecture decision records | active |
-| `dependency-disposition.md` | Per-dependency verdict for the Node.js v26 line: externalized, overlay-pinned, or vendored — and why | planned |
+| [dependency-disposition.md](dependency-disposition.md) | Per-dependency verdict for the Node.js v26 line: externalized, overlay-pinned, or vendored — with the measurements behind each | active |
 | `build.md` | How the port builds Node.js (gyp → ninja), and what each patch is for | planned |
 | `ci.md` | Workflows, platforms, gates | planned |
 
