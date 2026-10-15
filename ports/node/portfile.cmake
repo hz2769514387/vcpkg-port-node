@@ -576,10 +576,21 @@ foreach(_node_cfg IN LISTS _node_configs)
     endif()
 
     # Windows/macOS: gyp puts static libraries under obj/ (recursively) and, on
-    # macOS, static_library lands in the output root as well.
+    # macOS, static_library lands in the output root as well.  Rust crates
+    # (node_crates) land under gen/ on Windows.
     file(GLOB_RECURSE _node_archives "${_node_out_dir}/obj/*${_node_lib_suffix}")
     file(GLOB _node_archives_root "${_node_out_dir}/*${_node_lib_suffix}")
     list(APPEND _node_archives ${_node_archives_root})
+    file(GLOB_RECURSE _node_gen_archives "${_node_out_dir}/gen/*${_node_lib_suffix}")
+    foreach(_g IN LISTS _node_gen_archives)
+        get_filename_component(_gname "${_g}" NAME)
+        if(_gname MATCHES "^[a-zA-Z_]+${_node_lib_suffix}$")
+            list(APPEND _node_archives "${_g}")
+        endif()
+    endforeach()
+    unset(_g)
+    unset(_gname)
+    unset(_node_gen_archives)
     file(INSTALL ${_node_archives} DESTINATION "${_node_pkg_lib_dir}")
 
     if(_node_rt_builtins_lib)
@@ -764,8 +775,9 @@ endif()
 set(_node_all_archives
     libnode node_base
     v8_base_without_compiler v8_compiler v8_init v8_initializers
-    v8_initializers_slow v8_snapshot v8_libbase v8_libplatform v8_zlib
-    ncrypto ncrypto_engine nbytes merve uvwasi crdtp node_crates)
+    v8_snapshot v8_libbase v8_libplatform v8_zlib
+    ncrypto ncrypto_engine nbytes merve uvwasi crdtp node_crates
+    liblief libffi)
 set(_node_archive_links "")
 foreach(_a IN LISTS _node_all_archives)
     _node_archive_filename("${_a}" _file)
@@ -882,7 +894,7 @@ if(VCPKG_TARGET_IS_WINDOWS)
     endif()
     string(APPEND _cfg
         "endif()\n"
-        "target_link_libraries(unofficial::node::node INTERFACE winmm unofficial::node::clang_rt_builtins)\n")
+        "target_link_libraries(unofficial::node::node INTERFACE winmm ntdll bcrypt unofficial::node::clang_rt_builtins)\n")
 
     # Stack size: upstream node.gyp sets StackReserveSize 0x800000, but that only
     # applies to the executable gyp builds. A consumer's executable (built by
