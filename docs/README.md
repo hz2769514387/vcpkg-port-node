@@ -23,7 +23,8 @@ versioned with the code and reviewed in pull requests.
 | [decisions/](decisions/README.md) | Architecture decision records | active |
 | [dependency-disposition.md](dependency-disposition.md) | Per-dependency verdict for the Node.js v26 line: externalized, overlay-pinned, or vendored — with the measurements behind each | active |
 | [build.md](build.md) | How the port builds Node.js (gyp → ninja): the externalization mechanism, the platform quirks, and the fixes the port must carry | active |
-| `ci.md` | Workflows, platforms, gates | planned |
+| [ci.md](ci.md) | Workflows, the platform matrix, what each gate decides, caching, the release watcher | active |
+| [test-suite-results.md](test-suite-results.md) | Results of running Node.js's own suite against the port-built executable, with every skip explained | active |
 
 ## Where work items live
 

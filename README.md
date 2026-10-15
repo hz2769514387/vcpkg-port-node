@@ -54,10 +54,15 @@ The `tools` feature installs a `node` executable together with `npm` and `npx`;
 own embedder binary.
 
 Both the working example and the validation harness live in `test/`: `cmake --preset …`
-followed by `ctest`.
+followed by `ctest`. `test/README.md` has the details.
 
-*(`ports/` and `test/` land with their first real content — a directory in this repository
-always arrives with something in it.)*
+## Continuous integration
+
+Three gates, described in `docs/ci.md`: a seconds-long lint pass on every push, a build of the
+port through `test/` on Windows (measured), Linux and macOS (experimental, non-blocking until
+each has a full passing run), and a weekly run of Node.js's own test suite. A scheduled
+watcher compares the pinned Node.js version against `nodejs.org` and opens an issue when
+upstream moves, because nothing else will: Renovate and Dependabot have no vcpkg manager.
 
 ## Repository layout
 
@@ -65,8 +70,9 @@ always arrives with something in it.)*
 |---|---|
 | `ports/` | The overlay ports: `node` plus any dependency that has to be pinned or patched |
 | `test/` | Consumer-side example project and the validation harness (ctest) |
-| `tools/` | Maintenance scripts, including the version-tree hasher |
-| `versions/` | vcpkg version file for the `node` port |
+| `tools/` | Maintenance scripts: the version-tree hasher, the hygiene checker, the release watcher |
+| `versions/` | vcpkg version files (one per port), carrying each port's git-tree |
+| `.github/workflows/` | Continuous integration; see `docs/ci.md` |
 | `docs/` | Design notes, dependency disposition, build and CI reference |
 | `docs/decisions/` | Architecture decision records |
 

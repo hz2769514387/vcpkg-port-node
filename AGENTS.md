@@ -68,6 +68,9 @@ The project is in its **development period** until the first version tag.
 Development period (now):
 
 - Work directly on `main`. Small, frequent commits. `main` is allowed to be broken.
+- CI runs on every push (`docs/ci.md`): a lint job, then the port built through `test/` on the
+  platform matrix. Linux and macOS legs are marked experimental and do not block a merge
+  until each has a full passing build.
 - CI may be red while work is in flight; failures are worked down, not hidden.
 - Self-review is acceptable.
 - No interface stability is promised to consumers; change whatever needs changing.
@@ -112,6 +115,11 @@ Where things go:
 
 ## 7. Before you say "done"
 
+- Run the same thing CI runs when it is affordable:
+  `cmake --preset <platform> && cmake --build --preset <platform>` then
+  `ctest --test-dir build/<platform> -C Release -LE node-suite` from `test/`. The suite
+  (`-R node-suite`) is what decides the result is still Node.js, and it is worth its hour
+  before anything that touches the build.
 - Say what changed, what you verified, and what you did **not** verify.
 - Prefer evidence to reasoning: exact commands, file paths, versions, log excerpts.
 - If verification needs a heavy build or a CI run, hand it over explicitly instead of
