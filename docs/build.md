@@ -236,3 +236,30 @@ during the full build:
 The CMake config declares `unofficial::node::node` and pulls in all shared dependencies
 (zlib, OpenSSL, libuv, llhttp, c-ares, brotli, ada, simdjson, simdutf, ngtcp2, zstd, ICU,
 sqlite3, hdr_histogram, highway) via `find_dependency`.
+### 6.3 sqlite3 overlay port
+
+vcpkg's official `sqlite3` port does not enable `SQLITE_ENABLE_FTS3_PARENTHESIS`
+or `SQLITE_ENABLE_RBU`, both of which Node.js requires (its own
+`deps/sqlite3/sqlite3.gyp` enables them). The `fts3` feature only sets
+`SQLITE_ENABLE_FTS3`; the `session` feature sets `SQLITE_ENABLE_SESSION` and
+`SQLITE_ENABLE_PREUPDATE_HOOK` but not `SQLITE_ENABLE_RBU`.
+
+Fix: a `ports/sqlite3` overlay port that adds `SQLITE_ENABLE_FTS3_PARENTHESIS`
+to the `fts3` feature and `SQLITE_ENABLE_RBU` to the `session` feature, and
+adds the corresponding `#cmakedefine` entries to `sqlite3-vcpkg-config.h.in`
+so they are visible to `sqlite3.c` at compile time. All other files are
+identical to the vcpkg 2026.07.29 `sqlite3` port.
+
+### 6.4 Test-suite results
+
+The official test-suite passes with 4960 / 4990 tests (99.4 %) on
+`x64-windows-static` Release (measured: 2026-10-16). All 30 failures are
+environment-specific or upstream test bugs on Windows; none are caused by the
+port. See [test-suite-results.md](test-suite-results.md) for the full
+breakdown.
+
+| Category | Count | Cause |
+|---|---|---|
+| Windows symlink EPERM | 28 | No `SeCreateSymbolicLinkPrivilege` |
+| CRLF in tsc output | 1 | `test-snapshot-typescript` — upstream Windows bug |
+| FORCE_COLOR / NO_COLOR | 1 | `test-runner-reporters` — env interaction |
