@@ -32,21 +32,21 @@ jobs:
       ctest-options: -R node-suite
 
   linux:
-    continue-on-error: true
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
       runner: ubuntu-latest
       preset: linux
       triplet: x64-linux
+      experimental: true
       ctest-options: -R node-suite
 
   macos:
-    continue-on-error: true
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
       runner: macos-latest
       preset: macos
       triplet: arm64-osx
+      experimental: true
       ctest-options: -R node-suite

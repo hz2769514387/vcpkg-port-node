@@ -38,6 +38,11 @@ on:
         required: false
         type: string
         default: clear;x-gha,readwrite
+      experimental:
+        description: "Mark the platform as unverified: failures are reported but do not fail the run."
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -46,6 +51,10 @@ jobs:
   build:
     runs-on: ${{ inputs.runner }}
     timeout-minutes: 300
+    # continue-on-error has to live here rather than on the caller: a job that calls a
+    # reusable workflow does not accept it - the file is accepted and then produces a run
+    # with zero jobs and "this run likely failed because of a workflow file issue".
+    continue-on-error: ${{ inputs.experimental }}
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
       VCPKG_BINARY_SOURCES: ${{ inputs.vcpkg-binary-sources }}

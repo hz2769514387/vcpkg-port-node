@@ -22,9 +22,11 @@ permissions:
   contents: read
 
 jobs:
-  # One job per platform rather than a matrix: a matrix on a job that calls a reusable
-  # workflow produced a run with zero jobs and an "invalid workflow file" failure, so the
-  # legs are spelled out. They share their steps through build-test.yml anyway.
+  # One job per platform rather than a matrix: a job that calls a reusable workflow takes
+  # neither a matrix nor continue-on-error (either one is accepted by the parser and then
+  # produces a run with zero jobs), so the legs are spelled out and 'experimental' is passed
+  # into the called workflow, which applies it to its own job. The steps still live once in
+  # build-test.yml.
   #
   # Windows is the only platform this port has been measured on (docs/build.md), so it fails
   # the run. Linux and macOS are marked experimental: the port claims to support them and the
@@ -41,21 +43,21 @@ jobs:
       ctest-options: -LE node-suite
 
   linux:
-    continue-on-error: true
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
       runner: ubuntu-latest
       preset: linux
       triplet: x64-linux
+      experimental: true
       ctest-options: -LE node-suite
 
   macos:
-    continue-on-error: true
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
       runner: macos-latest
       preset: macos
       triplet: arm64-osx
+      experimental: true
       ctest-options: -LE node-suite
