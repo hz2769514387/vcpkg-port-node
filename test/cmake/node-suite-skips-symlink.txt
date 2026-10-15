@@ -1,0 +1,43 @@
+# Skips applied only when this machine cannot create symlinks - read by
+# test/cmake/NodeTestSuite.cmake, which probes the capability instead of guessing from the
+# platform name.
+#
+# Creating a file symlink on Windows requires SeCreateSymbolicLinkPrivilege, which a normal
+# unprivileged process does not have. It is a property of the account Windows gives you
+# (developers with Developer Mode enabled, most CI images: fine; a plain local shell: EPERM),
+# so the port cannot fix it and the platform name cannot predict it. Hence the probe.
+#
+# All 28 entries below were measured as EPERM failures on such a machine with the port-built
+# executable (docs/test-suite-results.md, 2026-10-16). They are expected to pass wherever
+# symlinks are permitted, and they are re-examined on every Node.js version bump.
+#
+# Same format as node-suite-skips.txt:  <test name> | <platform> | <reason>
+
+test-child-process-exec-any-shells-windows | all | creates a symlink to the shell executable
+test-fs-cp-async-copy-non-directory-symlink | all | copies a symlink that points at a file
+test-fs-cp-async-dereference-symlink | all | dereferences symlinks while copying
+test-fs-cp-async-destination-appears-late | all | fixture is built with symlinks
+test-fs-cp-async-dest-symlink-points-to-src-error | all | fixture is built with symlinks
+test-fs-cp-async-symlink-dest-points-to-src | all | fixture is built with symlinks
+test-fs-cp-async-symlink-over-file | all | fixture is built with symlinks
+test-fs-cp-async-verbatim-dir-symlinks-with-filter | all | copies directory symlinks verbatim
+test-fs-cp-sync-copy-symlink-not-pointing-to-folder | all | copies a file symlink
+test-fs-cp-sync-copy-symlink-over-file-error | all | fixture is built with symlinks
+test-fs-cp-sync-copy-symlinks-to-existing-symlinks | all | fixture is built with symlinks
+test-fs-cp-sync-dereference-directory | all | dereferences a directory symlink
+test-fs-cp-sync-dereference-file | all | dereferences a file symlink
+test-fs-cp-sync-dereference-nested-symlink | all | dereferences nested symlinks
+test-fs-cp-sync-dereference | all | dereferences symlinks while copying
+test-fs-cp-sync-parent-symlink-dest-points-to-src-error | all | fixture is built with symlinks
+test-fs-cp-sync-resolve-relative-symlinks-default | all | resolves relative symlinks
+test-fs-cp-sync-resolve-relative-symlinks-false | all | copies relative symlinks verbatim
+test-fs-cp-sync-symlink-dest-points-to-src-error | all | fixture is built with symlinks
+test-fs-cp-sync-verbatim-dir-symlinks-with-filter | all | copies directory symlinks verbatim
+test-fs-cp-sync-verbatim-symlinks-true | all | copies symlinks verbatim
+test-fs-lchown-negative-one | all | lchown acts on a symlink, which needs the link itself
+test-fs-promises | all | the promises suite creates symlinks in its fixtures
+test-fs-rm | all | removes symlinks pointing at directories
+test-fs-symlink-longpath | all | creates symlinks with long target paths
+test-fs-utimes | all | utimes follows symlinks in its fixtures
+test-fs-watch-recursive-symlink | all | watches directories reached through symlinks
+test-vfs-real-provider-symlinks | all | exercises the real filesystem provider with symlinks

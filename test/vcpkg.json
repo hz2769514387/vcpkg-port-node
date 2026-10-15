@@ -1,0 +1,47 @@
+{
+  "name": "node-port-test",
+  "version-string": "0.0.0",
+  "description": [
+    "Consumer-side validation project for the node port: it consumes the port exactly the way anyone else would (overlay-ports + manifest + stock triplet + find_package(unofficial-node)), links the same libraries Node.js itself externalizes next to the ones V8 would otherwise compile in, and runs Node.js's own test suite against both the embedded runtime and the tools feature executable.",
+    "This project is never installed anywhere; it exists to answer two questions: can the node port be consumed, and is what it produced still Node.js."
+  ],
+  "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
+  "dependencies": [
+    {
+      "name": "node",
+      "features": [
+        "test-suite",
+        "tools"
+      ]
+    },
+    "abseil",
+    "ada-url",
+    "brotli",
+    "c-ares",
+    "hdr-histogram",
+    "highway",
+    "icu",
+    "libuv",
+    "llhttp",
+    "nghttp2",
+    "ngtcp2",
+    "openssl",
+    "simdjson",
+    "simdutf",
+    {
+      "name": "sqlite3",
+      "features": [
+        "dbstat",
+        "fts3",
+        "fts5",
+        "geopoly",
+        "math",
+        "percentile",
+        "rtree",
+        "session"
+      ]
+    },
+    "zlib",
+    "zstd"
+  ]
+}

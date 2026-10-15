@@ -1,0 +1,34 @@
+# Skips for Node.js's own test suite - the single source of truth, read by
+# test/cmake/NodeTestSuite.cmake.
+#
+# Format, one per line:  <test name> | <platform> | <reason>
+#
+#   <test name>   the driver's name for it: no .js suffix, no test/<suite>/ prefix
+#                 (test/parallel/test-fs-rm.js is written as test-fs-rm).
+#   <platform>    all / windows / linux / macos, optionally narrowed with -<arch>
+#                 (windows-x64, macos-arm64). Unrecognized values simply never match, so a
+#                 typo makes the case run instead of hiding it.
+#   <reason>      mandatory. An entry without one fails the configure step.
+#
+# Before adding anything here:
+#
+#   * Upstream already marks cases SKIP or FLAKY in each *.status file and the driver honours
+#     those. Listing them again is a duplicate and it freezes upstream's decision.
+#   * A test that fails because a file is missing is usually our installation being
+#     incomplete - install the file, do not skip the test.
+#   * Anything that crashes in native code is our build until proven otherwise. Cross-check
+#     against the official Node.js binary first: official passes and ours fails means look
+#     here, not at Node.js.
+#
+# Every entry is re-examined whenever the pinned Node.js version changes.
+
+# -- Windows ------------------------------------------------------------------
+# The TypeScript compiler emits CRLF on Windows while the fixture expects LF. Upstream test
+# bug, reproduced here with the port-built executable; see docs/test-suite-results.md.
+test-snapshot-typescript | windows | tsc emits CRLF on Windows, the fixture compares against LF
+
+# The test asserts empty stderr and the environment carries both NO_COLOR and FORCE_COLOR,
+# which makes Node.js print a warning about that combination. Measured 2026-10-16 with a
+# port-built executable; re-check against the official binary before trusting this entry,
+# because an environment difference could just as easily be ours.
+test-runner-reporters | windows | NO_COLOR and FORCE_COLOR both present in the run environment
