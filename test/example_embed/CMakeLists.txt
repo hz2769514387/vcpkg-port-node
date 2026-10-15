@@ -16,22 +16,16 @@
 add_executable(node_embed main.cpp)
 set_target_properties(node_embed PROPERTIES OUTPUT_NAME node)
 target_link_libraries(node_embed PRIVATE unofficial::node::node)
-target_compile_features(node_embed PRIVATE cxx_std_20)
+# C++20 由 unofficial::node::node 的 INTERFACE 声明（port 侧 cxx_std_20），这里不写。
 
-# Windows：目标必须嵌 node 的平台兼容性清单，否则进程一启动就退出码 216（实测）。
-# node 的消费配置导出了清单路径变量 `node_NODE_SOURCE_MANIFEST`。
-# ★ /INCREMENTAL:NO 不能省：Debug 构建默认带 /INCREMENTAL，cmake 的 vs_link_exe
-#   会改走"增量"两遍链接，并在链接命令尾部追加裸 /MANIFEST /MANIFESTFILE: ——
-#   它把我们这条 /MANIFESTINPUT: 的嵌入模式顶掉，lld-link 直接报
-#   `/manifestinput: requires /manifest:embed`（2026-10-14 ci debug 首跑实测；
-#   Release 不复现，因为非增量路径没有这段追加）。关掉增量 = 回到 Release
-#   同一条已经验证过的链接路径。
-if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-  target_link_options(node_embed PRIVATE
-    "/MANIFEST:EMBED"
-    "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
-    "/INCREMENTAL:NO")
-endif()
+# Windows：平台兼容性清单 / 栈大小 / compiler-rt 现在都由消费配置**自动带上**
+# （unofficial::node::node 的 INTERFACE 链接选项，2026-10-14 重构）——
+# 可执行只要链了 node 就自动带，不用像以前那样在这里手抄
+# /MANIFEST:EMBED + /MANIFESTINPUT: + /INCREMENTAL:NO 三行。
+# （以前必须手抄的原因：Debug 构建默认带 /INCREMENTAL，cmake 的 vs_link_exe 会走
+#   增量两遍链接、在命令尾部追加裸 /MANIFEST /MANIFESTFILE:，把 /MANIFESTINPUT:
+#   的嵌入模式顶掉 ⇒ lld-link 报 `/manifestinput: requires /manifest:embed`；
+#   缺了清单则进程一启动就退出码 216。现在这些都在 port 侧解决。）
 
 # MSVC 前端请显式声明源码是 UTF-8（本文件注释是中文）。
 if(MSVC)

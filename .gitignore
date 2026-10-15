@@ -76,4 +76,5 @@ __pycache__/
 
 # temporary
 .tmp/
+tmp/
 log/

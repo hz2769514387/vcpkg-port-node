@@ -17,19 +17,15 @@
 add_executable(worker_threads main.cpp)
 set_target_properties(worker_threads PROPERTIES OUTPUT_NAME worker_threads)
 target_link_libraries(worker_threads PRIVATE unofficial::node::node)
-target_compile_features(worker_threads PRIVATE cxx_std_20)
+# C++20 由 unofficial::node::node 的 INTERFACE 声明（port 侧 cxx_std_20），这里不写。
 
 # Windows：与 example_embed 同样的两条必要处置 ——
 #   1) 嵌 node 的平台兼容性清单，否则进程一启动就退出码 216（实测）；
 #   2) MSVC 前端显式声明源码是 UTF-8（本文件注释是中文）。
 # /INCREMENTAL:NO 的原因见 example_embed/CMakeLists.txt：Debug 下 vs_link_exe 的
 # 增量路径会往链接命令尾部追加裸 /MANIFEST，顶掉 /MANIFESTINPUT 的嵌入模式。
-if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-  target_link_options(worker_threads PRIVATE
-    "/MANIFEST:EMBED"
-    "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
-    "/INCREMENTAL:NO")
-endif()
+# Windows 的清单/栈/compiler-rt 由 unofficial::node::node 的 INTERFACE 自动带上
+# （2026-10-14 重构后不再需要手抄 /MANIFEST 片段，见 example_embed 里的说明）。
 if(MSVC)
   target_compile_options(worker_threads PRIVATE /utf-8)
 endif()

@@ -29,7 +29,9 @@
 #     * 不重复：同一件事只在一个地方做（示例演示"怎么用"，内部测试核对"对不对"）；
 #     * 不耦合：任何 example_* / test_* 都可以单独删掉，不影响其它任何一个。
 #
-#   cmake/ 是共享的（triplets / toolchains / 跳过清单），不属于上面两组。
+#   cmake/ 是共享的（官方套件跳过清单 node-suite-skips*.txt），不属于上面两组。
+#   2026-10-14 重构后这里**不再有** triplets/ 与 toolchains/ —— 消费端用 vcpkg 自带
+#   标准 triplet，port 自己摆 MSVC 环境（见 ports/node/scripts/node-msvc-env.cmake）。
 #
 # 依赖方向只有一条：本工程 ──(overlay-ports)──> ports/node。
 cmake_minimum_required(VERSION 3.21)
@@ -111,21 +113,13 @@ unset(_node_port_var)
 # `unofficial::node::node`（含传递依赖与平台链接选项）。
 find_package(unofficial-node CONFIG REQUIRED)
 
-# ★ Windows：消费方**任何**构建类型（Debug 也不例外）都用 release 静态 CRT（/MT）。
-#   本工程依赖的 vcpkg 库（node 及其全部依赖）被 triplet 钉死 release-only
-#   （VCPKG_BUILD_TYPE=release，见 cmake/triplets/*.cmake —— 那是 a92c781 的决策：
-#   一批上游 port 的 debug-only 构建是坏的）。而 CMake/vcpkg 的默认值带 CONFIG
-#   genex（MultiThreaded$<$<CONFIG:Debug>:Debug>…），Debug 配置下会把消费方切成
-#   /MTd，于是链接期直接红：
-#     lld-link: error: /failifmismatch: mismatch detected for '_ITERATOR_DEBUG_LEVEL':
-#     >>> libcpmtd.lib(xthrow.obj) has value 2
-#     >>> node_base.lib(...) has value 0
-#   （2026-10-14 ci debug 首跑 x64-windows 实测；就算绕过这关，一个进程里两份 CRT
-#    也是 heap / locale 各自一套的灾难。）这里用普通变量覆盖工具链的 cache 默认值：
-#   target 都在后面的 add_subdirectory 里创建，届时读到的就是覆盖后的值。
-if(MSVC)
-  set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-endif()
+# ★ Windows CRT：**不需要**任何设置（2026-10-14 重构，路线 A 双份构建）。
+#   本工程用双份 triplet（x64-windows-static，不设 VCPKG_BUILD_TYPE）⇒ port 编
+#   Release + Debug 两份、debug 库进 debug/lib/。Debug 构建（CMAKE_BUILD_TYPE=Debug）
+#   时：本工程自己的代码 /MTd、node 的 debug 库 /MTd、依赖的 debug 库 /MTd，天然一致。
+#   （曾经的坑：依赖 release-only + 消费方 Debug 默认 /MTd ⇒ _ITERATOR_DEBUG_LEVEL
+#     mismatch 链接必红，当时靠在这里强制 MultiThreaded。那条约束已随双份构建消灭；
+#     release-only 安装 + Windows Debug 现在由导出配置给一条清楚的配置期报错。）
 
 # 跑官方套件与符号审计都要 python（node 自带的 driver 就是 python）。
 find_package(Python3 COMPONENTS Interpreter)

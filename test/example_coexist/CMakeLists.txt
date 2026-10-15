@@ -64,15 +64,9 @@ add_executable(mutual_roundtrip mutual_roundtrip.cpp)
 #   传递已覆盖 ZLIB / OpenSSL / sqlite3 / simdjson / ada / ICU 的头文件与符号。
 target_link_libraries(mutual_roundtrip PRIVATE
     unofficial::node::node)            # 内含 v8、vcpkg 的 abseil/highway，以及下面这些依赖
-target_compile_features(mutual_roundtrip PRIVATE cxx_std_20)
-if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-  # 与 example_embed 同样的原因：Windows 上目标必须嵌 node 的平台兼容性清单，否则一启动就退出码 216。
-  # /INCREMENTAL:NO 的原因见 example_embed/CMakeLists.txt（Debug + vs_link_exe 增量路径会把
-  # 裸 /MANIFEST 追加到链接命令尾部，顶掉 /MANIFESTINPUT 的嵌入模式）。
-  target_link_options(mutual_roundtrip PRIVATE
-    "/MANIFEST:EMBED" "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
-    "/INCREMENTAL:NO")
-endif()
+# C++20 由 unofficial::node::node 的 INTERFACE 声明（port 侧 cxx_std_20），这里不写。
+# Windows 的清单/栈/compiler-rt 由 unofficial::node::node 的 INTERFACE 自动带上
+# （2026-10-14 重构后不再需要手抄 /MANIFEST 片段，见 example_embed 里的说明）。
 if(MSVC)
   target_compile_options(mutual_roundtrip PRIVATE /utf-8)
 endif()

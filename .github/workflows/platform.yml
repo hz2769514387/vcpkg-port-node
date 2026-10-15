@@ -18,16 +18,20 @@
 #   portfile.cmake 用的就是 PATH 上的 cmake。镜像里 ubuntu/macos 是 3.31 → 装依赖的第一个
 #   port（zstd）就挂；Windows 恰好是 4.4 才侥幸能过。所以这里统一钉版本，不依赖镜像自带的那份。
 #
-# 平台口径（路线 B）：
-#   * Windows：clang-cl + 静态 CRT + 静态库（x64/arm64-windows-static-clang）—— node 24+ 官方口径。
-#   * Linux：gcc + 静态库（x64/arm64-linux）。
-#   * macOS：clang + 静态库（arm64-osx）。
-#   triplet / toolchain 都在**消费端**：test/cmake/{triplets,toolchains}/。
-#   ports/node/ 只含 port 自身（portfile + vcpkg.json + patches + usage），自包含、不引用目录外文件。
+# 平台口径（2026-10-14 重构后）：
+#   * 六腿全部用 **vcpkg 自带标准 triplet**（消费端不写任何 triplet/toolchain）：
+#     ci-debug 用双份变体（不设 VCPKG_BUILD_TYPE ⇒ port 编 Release+Debug 两份、
+#     debug 库进 debug/lib/，消费方 Debug 链 debug 库）；ci-release 用 *-release
+#     变体（VCPKG_BUILD_TYPE=release ⇒ 只编 Release，省一半构建时间）。
+#   * Windows：node 由 clang-cl 编（node 24+ 官方口径）—— 编译器与 MSVC 命令行环境
+#     由 port 自己准备（ports/node/scripts/node-msvc-env.cmake +
+#     vcpkg_find_acquire_program(CLANG)）；依赖与消费端代码由标准 triplet 决定。
+#   * Linux：gcc；macOS：clang（x64-osx 经 Rosetta 跑 x86_64 产物）。
+#   * ports/node/ 只含 port 自身（portfile + vcpkg.json + patches + scripts + usage），
+#     自包含、不引用目录外文件。
 #
 # 策略：
 #   只编译 test（清单模式自动装依赖），不做单独的 vcpkg install。
-#   只出 Release（triplet 里设 VCPKG_BUILD_TYPE=release）。
 #   并发度**按平台**给（矩阵里的 vcpkg_conc）：x64 给 4、macOS 压到 2
 #   （3 核 / 7 GB，5 个并发 V8 编译单元容易 OOM）。这个值会经 VCPKG_CONCURRENCY
 #   传给 port 内部的 ninja -j —— 给 2 会让 node 的全量构建更容易撞 job 超时。
@@ -40,10 +44,9 @@ name: platform
 # 但作业体完全一样 —— 复制几百行只会在下次改动时漂移。平台差异全部走 inputs：
 #   os / preset / triplet / label / vcpkg_conc / allow_failure / expect_arch / debug
 #
-# debug="" 表示 release 口径；debug="1" 时：
-#   * 作业环境里带 NODE_PORT_BUILD_TYPE=debug ⇒ 三元组把 VCPKG_BUILD_TYPE 设成 debug
-#     （依赖也按 debug 编、Windows 上是 /MTd 那套）；
-#   * 配置时额外传 -DCMAKE_BUILD_TYPE=Debug（消费端测试工程也按 debug 编）。
+# debug="" 表示 release 口径；debug="1" 时配置时额外传 -DCMAKE_BUILD_TYPE=Debug
+#   （消费端测试工程按 debug 编、链 port 的 debug 库）。port 编哪几份由 triplet 的
+#   VCPKG_BUILD_TYPE 决定（重构后没有私有开关 NODE_PORT_BUILD_TYPE 了）。
 on:
   workflow_call:
     inputs:
@@ -72,8 +75,6 @@ jobs:
     #   `allow_failure: "true"`（带引号 ⇒ 字符串），直接写成 `${{ inputs.allow_failure }}` 会被
     #   GH 判 `Unexpected value 'true'`，六个腿全在 0 秒处报错。所以这里显式比一次得到布尔。
     continue-on-error: ${{ inputs.allow_failure == 'true' }}
-    env:
-      NODE_PORT_BUILD_TYPE: ${{ inputs.debug == '1' && 'debug' || 'release' }}
     runs-on: ${{ inputs.os }}
     # GitHub 单个 job 的硬上限是 6 小时。给一个留余量的值：超时被取消时，
     # `if: always()` 的收集步骤仍会跑，日志能带走 —— 否则白等一场。
@@ -157,13 +158,17 @@ jobs:
           /usr/bin/arch -x86_64 /usr/bin/true
           echo "Rosetta 2 安装完成"
 
-      # ---- Windows：确保 clang-cl 可用 ----------------------------------------
+      # ---- Windows：给 port 的 clang-cl 发现一个明确覆盖 -------------------------
       # ★ 不能只找 `Llvm/x64`（那是 x64 宿主的布局），也不能"随便挑一个"：
       #   本机实测 VS 会**同时装 x64 与 ARM64 两套 LLVM**（`Llvm/x64`、`Llvm/ARM64`），
-      #   按字典序挑会选中 ARM64，把 x64 档的编译器悄悄换掉。所以**按 runner 自己的架构挑**，
-      #   找不到再放宽到任意架构兜底。
-      #   NODE_PORT_LLVM_ROOT 取 `<...>/Llvm/<arch>` —— clang-cl.cmake 会在它下面
-      #   先找 `x64/bin` 再找 `bin/`，两种布局都覆盖，所以 x64 档行为不变。
+      #   按字典序挑会选中 ARM64，把 x64 档的编译器悄悄换掉（在 x64 宿主上执行 ARM64
+      #   二进制直接 WinError 216，报错点还在 configure.py 的宏探测里、离真因极远）。
+      #   所以**按 runner 自己的架构挑**，找不到再放宽到任意架构兜底。
+      #   NODE_PORT_LLVM_ROOT 取 `<...>/Llvm/<arch>` —— portfile 会在它下面先找
+      #   `x64/bin` 再找 `bin/`，两种布局都覆盖。
+      # ★ 2026-10-14 重构后这只是**覆盖项**：port 自己会经 vcpkg_find_acquire_program(CLANG)
+      #   找 clang-cl。保留这步是为了①在装依赖之前就明确失败（省一轮 3 小时）、
+      #   ②钉住 runner 上"两套 LLVM 按架构挑"这个坑。
       - name: 定位 clang-cl（Windows）
         if: runner.os == 'Windows'
         shell: bash
@@ -230,6 +235,39 @@ jobs:
             exit 1
           fi
 
+      # ---- Windows：给**消费端**的 cmake 一个 MSVC 命令行环境 --------------------
+      # vcpkg 自己会给 port 构建摆好 MSVC 环境（所以装依赖这一步从来不需要它），但
+      # **消费端工程**的 cmake 是跑在裸 shell 里的：没有 cl.exe / rc.exe / LIB / INCLUDE，
+      # 编译器探测直接挂在一个离真因很远的地方（2026-10-15 实测）：
+      #     RC Pass 1: command "rc /fo ... manifest.res ... manifest.rc" failed
+      #     no such file or directory
+      # 这不是本 port 的要求 —— Windows 上**任何** CMake 工程都一样：要么在 VS 开发者
+      # 命令行里跑，要么自己摆环境。CI 的 bash 两者都不是，所以这里定位 vcvarsall，
+      # 再把下面几步的 cmake 调用包一层（见 runw()）。
+      - name: 定位 MSVC 命令行环境（Windows）
+        if: runner.os == 'Windows'
+        shell: bash
+        run: |
+          set -euo pipefail
+          vswhere="/c/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+          vs="$("$vswhere" -latest -products '*' \
+                -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 \
+                -property installationPath | tr -d '\r' | tail -1)"
+          if [ -z "$vs" ] || [ ! -f "$vs/VC/Auxiliary/Build/vcvarsall.bat" ]; then
+            echo "::error::找不到 vcvarsall.bat（vswhere 给出：'$vs'）"
+            ls -d "/c/Program Files/Microsoft Visual Studio"/*/* 2>/dev/null || true
+            exit 1
+          fi
+          # arm64 那一档是**交叉编译**：宿主 x64、目标 arm64 ⇒ vcvarsall 的 x64_arm64。
+          # （port 内部编 node 用的是 clang-cl --target=aarch64，不吃这个参数。）
+          case "${{ inputs.triplet }}" in
+            arm64*) msvc_arch="x64_arm64" ;;
+            *)      msvc_arch="x64" ;;
+          esac
+          echo "VCVARSALL=$vs/VC/Auxiliary/Build/vcvarsall.bat" >> "$GITHUB_ENV"
+          echo "MSVC_ARCH=$msvc_arch" >> "$GITHUB_ENV"
+          echo "vcvarsall: $vs/VC/Auxiliary/Build/vcvarsall.bat  arch: $msvc_arch"
+
       # ---- L2 + L3：配置 + 构建 + 运行消费端冒烟 ------------------------------
       # 清单模式：test/vcpkg.json 声明依赖 node，vcpkg 自动装（含 overlay port）。
       # CMake preset 指定 triplet 和 toolchain，无需手敲 -D。
@@ -260,9 +298,21 @@ jobs:
               windows*) extra_cfg="-DNODE_PORT_TEST_JOBS=1" ;;
             esac
           fi
+          # ★ triplet 以矩阵为准（-D 覆盖 preset 的默认值）：ci-debug 传双份 triplet、
+          #   ci-release 传 *-release。preset 里的默认值只是本机开发的默认。
+          extra_cfg="-DVCPKG_TARGET_TRIPLET=${{ inputs.triplet }} $extra_cfg"
+          # ★ Windows 上要把 cmake 放进 vcvars 摆好的环境里跑（理由见上一步）。
+          #   非 Windows 什么都不加，保持原来的调用形态。
+          runw() {
+            if [ "${RUNNER_OS}" = "Windows" ]; then
+              cmd //c "call \"${VCVARSALL}\" ${MSVC_ARCH} && $*"
+            else
+              eval "$*"
+            fi
+          }
           delays=(10 60 120)
           for attempt in 0 1 2 3; do
-            if cmake --preset ${{ inputs.preset }}${{ inputs.debug == '1' && ' -DCMAKE_BUILD_TYPE=Debug' || '' }} $extra_cfg 2>&1 | tee "$log"; then
+            if runw "cmake --preset ${{ inputs.preset }}${{ inputs.debug == '1' && ' -DCMAKE_BUILD_TYPE=Debug' || '' }} $extra_cfg" 2>&1 | tee "$log"; then
               echo "配置成功（第 $((attempt+1)) 次尝试）"
               exit 0
             fi
@@ -288,7 +338,13 @@ jobs:
           #   "没有匹配到错误行（若本 job 成功属正常）"—— 误导。
           set -o pipefail
           cd test
-          cmake --build --preset ${{ inputs.preset }} 2>&1 | tee "$RUNNER_TEMP/test-build.log"
+          # 同上：Windows 上要在 MSVC 命令行环境里跑（cl.exe / rc.exe / LIB）。
+          if [ "${RUNNER_OS}" = "Windows" ]; then
+            cmd //c "call \"${VCVARSALL}\" ${MSVC_ARCH} && cmake --build --preset ${{ inputs.preset }}" \
+              2>&1 | tee "$RUNNER_TEMP/test-build.log"
+          else
+            cmake --build --preset ${{ inputs.preset }} 2>&1 | tee "$RUNNER_TEMP/test-build.log"
+          fi
 
       # ---- 断言产物架构 --------------------------------------------------------
       # 为什么需要（不是装饰）：arm64 Windows runner 带 **x64 仿真** —— 工具链配置不当
@@ -509,9 +565,12 @@ jobs:
             c++ --version 2>&1 || true
             clang-cl --version 2>&1 || true
             echo "=== installed libs ==="
-            ls -la "$VCPKG_ROOT/installed/${{ inputs.triplet }}/lib/" 2>&1 || true
+            # 清单模式下产物在 test/vcpkg_installed/<triplet>/（不是 $VCPKG_ROOT/installed）。
+            ls -la "test/vcpkg_installed/${{ inputs.triplet }}/lib/" 2>&1 || true
             echo "=== installed node-config ==="
-            sed -n '1,80p' "$VCPKG_ROOT/installed/${{ inputs.triplet }}/share/node/node-config.cmake" 2>&1 || true
+            sed -n '1,80p' \
+              "test/vcpkg_installed/${{ inputs.triplet }}/share/unofficial-node/unofficial-node-config.cmake" \
+              2>&1 || true
             echo "=== disk space ==="
             df -h 2>&1 || true
           } > "$RUNNER_TEMP/ci-logs/env_info.txt"

@@ -48,7 +48,7 @@ target_link_libraries(test_node_coexist PRIVATE
     unofficial::node::node
     fmt::fmt)
 target_include_directories(test_node_coexist PRIVATE "${NGHTTP2_INCLUDE_DIR}")
-target_compile_features(test_node_coexist PRIVATE cxx_std_20)
+# C++20 由 unofficial::node::node 的 INTERFACE 声明（port 侧 cxx_std_20），这里不写。
 
 # 把"拿哪个 node 起进程"告诉 C++ 侧。
 # ★ 走 file(GENERATE) 写成头文件，**不要**用 target_compile_definitions：

@@ -25,6 +25,18 @@
 
 #include <node.h>
 
+#ifdef _WIN32
+// Debug 构建下 CRT debug heap 断言抑制。详见 example_embed/main.cpp 同名注释。
+#ifdef _DEBUG
+#include <crtdbg.h>
+struct _SuppressCrtAssert {
+  _SuppressCrtAssert() {
+    _CrtSetReportMode(_CRT_ASSERT, 0);
+  }
+} _suppress_crt_assert;
+#endif
+#endif
+
 #include <algorithm>
 #include <atomic>
 #include <chrono>

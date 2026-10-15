@@ -1,17 +1,28 @@
 # MSVC 命令行环境：nmake 在 PATH 上，INCLUDE / LIB 指向 CRT 与 Windows SDK。
 #
-# 为什么单独一个文件、而不是并进 clang-cl.cmake：
+# 归属（2026-10-14 重构）：本文件原来在**消费端**（示例工程的 toolchains 目录下），由 triplet
+# include；现搬进 port 内部（ports/node/scripts/），由 portfile.cmake include。
+# 动机（1014-应然审计 §2.2）：消费方不该为了用一个 port 而维护 543 行工具链。
+# 本机实测（2026-10-14，干净 shell + 标准 triplet）：vcpkg 自己会给**依赖**的构建
+# 摆好 MSVC 环境（c-ares/openssl 双份都编过）；但 **port 自己的 gyp/ninja 构建**
+# （clang-cl 直接调、不经 CMake）必须自己把 INCLUDE/LIB/PATH 摆好 —— 这就是本文件的职责。
 #
-# **不是每个 vcpkg port 都走 CMake**。openssl 用 nmake 构建（node 也用 nmake 构建它），
-# vcpkg 的 nmake 支路一进来就 `find_program(NMAKE nmake REQUIRED)`，而它的 makefile 要
-# 通过 INCLUDE/LIB 找到 <inttypes.h>。**不走 vcpkg_configure_cmake 的 port 根本不会加载
-# chainload 的 toolchain 文件** —— 只加载 triplet。所以只写在 clang-cl.cmake 里的东西，
-# 恰恰对最需要它的那些 port 不可见。于是这个模块被两处都 include。
+# 为什么单独一个文件、而不是并进 portfile 主流程：portfile 已经 1000+ 行，而这 300 行
+# 是"找 VS → 设 INCLUDE/LIB/PATH → 找 SDK 版本 → 找 rc.exe"一整段自洽逻辑；
+# 独立文件可以单独读、单独改，portfile 里只留一行 include。
 #
 # 它防的故障很难查：一路 configure 成功、别的 port 都过，最后 openssl 挂了；
-# 而且它只在**没有 vcpkg 二进制缓存**的机器上出现（缓存命中时 openssl 直接还原归档，压根不跑 nmake）。
+# 而且它只在**没有 vcpkg 二进制缓存**的机器上出现（缓存命中时直接还原归档，压根不跑 nmake）。
 #
 # 开发者命令提示符里这三样本来就齐；那种情况下这里只补 nmake，不动已有的 INCLUDE/LIB。
+#
+# ★ 与消费端版的差异（脚本模式适配）：
+#   1. 无 cache —— `cmake -P` 脚本模式下 cache 不存在，全部改普通变量；
+#   2. 宿主架构加 `PROCESSOR_ARCHITECTURE` 兜底 —— `CMAKE_HOST_SYSTEM_PROCESSOR`
+#      在脚本模式下不会被定义（那是 project() 才设的，run #40 同款教训），
+#      Windows 上原生的第三档是环境变量而不是 uname；
+#   3. 日志用 STATUS —— triplet 版是"每个 port 加载一次"才用 VERBOSE，
+#      portfile 整个构建只加载一次，STATUS 正好留在 buildtrees 日志里。
 
 if(_NODE_PORT_MSVC_CMD_ENV_INCLUDED)
   return()
@@ -21,8 +32,7 @@ set(_NODE_PORT_MSVC_CMD_ENV_INCLUDED TRUE)
 # vcpkg 的**下载模式**（`vcpkg install --only-downloads`）会把 `execute_process` 整个换成
 # 一个直接 FATAL_ERROR 的版本（见 vcpkg 自己的 scripts/cmake/execute_process.cmake：
 # `if (DEFINED VCPKG_DOWNLOAD_MODE)`）。那个模式下不构建任何东西，也就不需要 INCLUDE/LIB 与 nmake。
-#
-# 所以这里直接返回。不返回的话，`--only-downloads` 会在**加载 triplet 的那一刻**就死，
+# 所以这里直接返回。不返回的话，`--only-downloads` 会在加载 triplet 的那一刻就死，
 # 报错是 "This command cannot be executed in Download Mode." —— 读起来像 vcpkg 的问题，
 # 其实是"在下载模式里做了只有构建模式才该做的事"。
 if(DEFINED VCPKG_DOWNLOAD_MODE)
@@ -113,7 +123,7 @@ if(_node_port_vs_root STREQUAL "" AND NOT _node_port_pf_x86 STREQUAL "")
       if(NOT _node_port_vswhere_out STREQUAL "")
         string(REPLACE "\n" ";" _node_port_vswhere_lines "${_node_port_vswhere_out}")
         list(GET _node_port_vswhere_lines 0 _node_port_vs_root)
-        message(VERBOSE "node-port: vswhere 命中（查询 [${_node_port_vswhere_query}]）→ ${_node_port_vs_root}")
+        message(STATUS "node-port: vswhere 命中（查询 [${_node_port_vswhere_query}]）→ ${_node_port_vs_root}")
         break()
       endif()
     endforeach()
@@ -133,15 +143,27 @@ if(NOT _node_port_vs_root STREQUAL "")
   file(TO_CMAKE_PATH "${_node_port_vs_root}" _node_port_vs_root)
 endif()
 
-# 给 clang-cl.cmake 用：它要从同一个安装里取 VC/Tools/Llvm。
+# 给 portfile 用：gyp 在中文 locale 下要靠 GYP_MSVS_OVERRIDE_PATH 找到 VS；
+# clang-cl 也从同一个安装里取 VC/Tools/Llvm。
 set(NODE_PORT_VS_INSTALL_ROOT "${_node_port_vs_root}")
 
 # 宿主架构（x64 / arm64）——决定各处"**宿主**工具"的目录。
 # 注意与 _node_port_msvc_arch（**目标**架构）区分开：宿主工具必须能在构建机上跑。
+# ★ 三级取法（portfile 脚本模式下 CMAKE_HOST_SYSTEM_PROCESSOR 未定义，同 run #40 教训）：
+#   VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR → CMAKE_HOST_SYSTEM_PROCESSOR
+#   → $ENV{PROCESSOR_ARCHITECTURE}（Windows 原生：AMD64 / ARM64 / x86）
+set(_node_port_host_raw "${VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR}")
+if(_node_port_host_raw STREQUAL "")
+  set(_node_port_host_raw "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+endif()
+if(_node_port_host_raw STREQUAL "")
+  set(_node_port_host_raw "$ENV{PROCESSOR_ARCHITECTURE}")
+endif()
 set(_node_port_host_arch "x64")
-if(CMAKE_HOST_SYSTEM_PROCESSOR MATCHES "^(ARM64|arm64|aarch64)$")
+if(_node_port_host_raw MATCHES "^(ARM64|arm64|aarch64)$")
   set(_node_port_host_arch "arm64")
 endif()
+message(STATUS "node-port: 宿主架构 ${_node_port_host_arch}（读自 '${_node_port_host_raw}'）")
 
 # --- MSVC -------------------------------------------------------------------
 set(_node_port_msvc_root "")
@@ -156,26 +178,15 @@ if(NOT _node_port_vs_root STREQUAL "")
 endif()
 
 # ---------------------------------------------------------------------------
-# 目标架构（x64 / arm64 / x86 / arm）—— 决定 LIB 目录，也被 clang-cl.cmake 用来
-# 算 `--target=`。
+# 目标架构（x64 / arm64 / x86 / arm）—— 决定 LIB 目录。
 #
 # ★ 判据的顺序是有讲究的：**不能只看 VCPKG_TARGET_ARCHITECTURE**。
-#   vcpkg **编 port** 时会把 `-DVCPKG_TARGET_ARCHITECTURE=<arch>` 显式传给那个子进程
-#   （实测：abseil 的 configure 命令行里有它），但**消费端工程**（本仓库 test/）
-#   走的是 vcpkg.cmake —— 那个文件在第 209 行就 include 本文件，而它**从不设置**
-#   这个变量（只在 971 行把它列进 try_compile 的传播名单，值本身由 vcpkg 工具进程
-#   自己持有）⇒ 在消费端它**永远是空的**。原来空值落到 "x64" 默认，后果：
-#     * 消费端的 LIB 一直指向 `<MSVC>/lib/x64`，而 --target 也按 x64 给（前者见下、
-#       后者见 clang-cl.cmake）；
-#     * run #28 之前 node 自己的库也被 gyp 的 -m64 编成 x64 —— 两半错得一致，
-#       所以只是"CRT 符号找不到"，看不出根因；
-#     * run #29（patch 0017 让 node 的库真 arm64 之后）消费端还是 x64，于是
-#       lld-link: error: node_base.lib(node_base.callback.obj): machine type arm64 conflicts with x64
-#   退路按可靠性排序：
+#   vcpkg **编 port** 时会把 `-DVCPKG_TARGET_ARCHITECTURE=<arch>` 显式传给那个子进程，
+#   所以 portfile 上下文里它是**一定有**的；但保留三级退路是为了这段逻辑被别处
+#   （比如消费端工程）复用时不静默错。
 #     ① VCPKG_TARGET_ARCHITECTURE（port 侧唯一权威）；
-#     ② VCPKG_TARGET_TRIPLET 的首段（vcpkg 的 triplet 命名约定是 `<arch>-<os>[-变体]`，
-#        本仓库 test/cmake/triplets/ 的六个也都照此命名）；
-#     ③ 宿主架构（本仓库 Windows 两档都是 host==target 的原生构建）。
+#     ② VCPKG_TARGET_TRIPLET 的首段（vcpkg 的 triplet 命名约定 `<arch>-<os>[-变体]`）；
+#     ③ 宿主架构。
 #   三条都拿不到就**直接红**：宁可配置期报错，也不再"静默编成宿主的 x64"。
 # ---------------------------------------------------------------------------
 set(_node_port_target_arch_src "")
@@ -188,7 +199,7 @@ elseif(DEFINED VCPKG_TARGET_TRIPLET AND NOT VCPKG_TARGET_TRIPLET STREQUAL "")
 else()
   set(NODE_PORT_TARGET_ARCH_RAW "${_node_port_host_arch}")
   set(_node_port_target_arch_src
-      "宿主架构（CMAKE_HOST_SYSTEM_PROCESSOR=${CMAKE_HOST_SYSTEM_PROCESSOR}）")
+      "宿主架构（PROCESSOR_ARCHITECTURE/CMAKE_HOST_SYSTEM_PROCESSOR='${_node_port_host_raw}'）")
 endif()
 
 if(NODE_PORT_TARGET_ARCH_RAW STREQUAL "x64")
@@ -208,10 +219,7 @@ endif()
 unset(_node_port_target_arch_src)
 unset(NODE_PORT_TARGET_ARCH_RAW)
 
-# 存进 cache：本文件可能有 include 守卫（二次 include 直接 return），而 clang-cl.cmake
-# 与 triplet 都依赖这个值 —— cache 变量不受"谁先 include、在哪个作用域"的影响。
-set(NODE_PORT_TARGET_ARCH "${_node_port_target_arch_value}" CACHE INTERNAL
-    "本工程的目标架构（MSVC 写法：x64/arm64/x86/arm）；由 msvc-command-line-env.cmake 解析")
+set(NODE_PORT_TARGET_ARCH "${_node_port_target_arch_value}")
 
 # MSVC 的 lib 目录名就是这套写法，直接沿用。
 set(_node_port_msvc_arch "${NODE_PORT_TARGET_ARCH}")
@@ -334,24 +342,29 @@ if(NOT _node_port_sdk_version STREQUAL "")
     message(FATAL_ERROR
       "在 Windows SDK ${_node_port_sdk_version} 下找不到任何带 rc.exe 的宿主工具目录：\n"
       "  ${_node_port_kits_root}/bin/${_node_port_sdk_version}/*\n"
-      "缺 rc.exe 时 CMake 的 vs_link_exe 连 try-compile 都过不了（报在别的 port 的 configure 里，\n"
+      "缺 rc.exe 时 gyp 的 msvs 仿真连构建期小工具都编不出来（报在别的 port 的 configure 里，\n"
       "读起来完全看不出是这里的问题）。请把 SDK 的桌面工具装全。")
   endif()
-  message(VERBOSE "node-port: SDK 宿主工具目录用 ${_node_port_sdk_bin_arch}（宿主架构 ${_node_port_host_arch}）")
+  message(STATUS "node-port: SDK 宿主工具目录用 ${_node_port_sdk_bin_arch}（宿主架构 ${_node_port_host_arch}）")
   _node_port_env_prepend(PATH "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}")
 endif()
 
-# VERBOSE 而不是 STATUS：triplet 每个 port 都要加载一次，STATUS 会刷很多遍。
-# Windows SDK 的 mt.exe：给可执行嵌 manifest 用它，**不用** LLVM 的 llvm-mt ——
-# 后者不支持 `-outputresource:`（实测直接回 "ignoring unsupported 'outputresource:'
-# option"，什么都不做）。路径跟着上面算出来的 SDK 版本走，不写死版本号。
+# STATUS 而不是 VERBOSE：port 构建只加载一次（triplet 版是每个 port 一次才用 VERBOSE）。
+# Windows SDK 的 mt.exe：gyp 的 msvs 仿真给 node.exe 嵌 manifest 用它，
+# **不用** LLVM 的 llvm-mt —— 后者不支持 `-outputresource:`（实测直接回
+# "ignoring unsupported 'outputresource:' option"，什么都不做）。
+# 路径跟着上面算出来的 SDK 版本走，不写死版本号；msvs_emulation 经 PATH 找它。
 if(NOT _node_port_sdk_version STREQUAL "")
-  set(NODE_PORT_WINSDK_MT "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}/mt.exe"
-      CACHE FILEPATH "Windows SDK 的 mt.exe（嵌清单；llvm-mt 不支持 -outputresource）")
+  set(NODE_PORT_WINSDK_MT "${_node_port_kits_root}/bin/${_node_port_sdk_version}/${_node_port_sdk_bin_arch}/mt.exe")
 endif()
 
 if(NOT _node_port_msvc_root STREQUAL "" AND NOT _node_port_sdk_version STREQUAL "")
-  message(VERBOSE "node-port: MSVC 命令行环境就绪（MSVC ${_node_port_msvc_root}，Windows SDK ${_node_port_sdk_version}）")
+  message(STATUS "node-port: MSVC 命令行环境就绪（MSVC ${_node_port_msvc_root}，Windows SDK ${_node_port_sdk_version}）")
+elseif(_node_port_msvc_root STREQUAL "")
+  message(WARNING
+    "node-port: 没找到 MSVC 工具集（VS 未装或 vswhere 查不到）。\n"
+    "  gyp/clang-cl 构建需要 MSVC 的头文件与库。若你在开发者命令提示符里跑，\n"
+    "  环境本来就齐，可以忽略；否则请装 VS 的「C++ 工作负荷」或设 VCPKG_VISUAL_STUDIO_PATH。")
 endif()
 
 unset(_node_port_msvc_root)

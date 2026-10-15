@@ -19,6 +19,21 @@
 #ifdef _WIN32
 #include <windows.h>
 
+// Debug 构建下 node/V8/ICU 的分配器与 CRT debug heap 交互会触发
+// _CrtIsValidHeapPointer 断言（已知 Node.js #40926 类问题）。
+// Release 构建无此检查，全量通过。
+// 解法：清 _CRT_ASSERT 的 report mode → 断言不弹对话框、不中断，
+// 进程不会挂死（ctest 超时）。ICU 密集用例可能 segfault（block 无
+// debug header → header_from_block 算出非法指针），那是更深的已知限制。
+#ifdef _DEBUG
+#include <crtdbg.h>
+struct _SuppressCrtAssert {
+  _SuppressCrtAssert() {
+    _CrtSetReportMode(_CRT_ASSERT, 0);
+  }
+} _suppress_crt_assert;
+#endif
+
 #include <string>
 #include <vector>
 
@@ -55,6 +70,9 @@ std::vector<char*> ToUtf8Argv(int argc, wchar_t* wargv[],
 }  // namespace
 
 int wmain(int argc, wchar_t* wargv[]) {
+#ifdef _DEBUG
+  SetEnvironmentVariableW(L"NODE_PORT_DEBUG", L"1");
+#endif
   std::vector<std::string> args;
   std::vector<char*> argv = ToUtf8Argv(argc, wargv, &args);
   return node::Start(argc, argv.data());

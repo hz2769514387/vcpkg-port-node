@@ -3,6 +3,11 @@ name: ci release
 # release 口径**只手工触发**（默认的 push 跑 debug）：release 是交付口径、由人决定什么时候测。
 # 六个平台全部硬门（allow_failure: false，2026-10-14 用户拍板：开发期红了就修）。
 # x64-osx 走 macos-15（arm64 镜像 + Rosetta 跑 x86_64 产物；macos-13 Intel 资源紧张已弃用）。
+#
+# ★ 2026-10-14 重构：六腿全部改用 **vcpkg 自带标准 triplet 的 release-only 变体**
+#   （*-release， triplet 里带 VCPKG_BUILD_TYPE release ⇒ port 只编 Release，依赖也只编
+#   release，省一半构建时间）。消费端 Release 构建。动态 CRT（/MD）口径的 CI 覆盖
+#   列为后续项（欠账清单 R4/R8），本机已验证机制（build.ninja 全部 /MD）。
 on:
   workflow_dispatch:
 
@@ -23,42 +28,42 @@ jobs:
         include:
           - os: ubuntu-latest
             preset: linux
-            triplet: x64-linux
+            triplet: x64-linux-release
             label: x64-linux (release)
             vcpkg_conc: "4"
             allow_failure: "false"
             expect_arch: ""
           - os: ubuntu-24.04-arm
             preset: linux-arm64
-            triplet: arm64-linux
+            triplet: arm64-linux-release
             label: arm64-linux (release)
             vcpkg_conc: "4"
             allow_failure: "false"
             expect_arch: ""
           - os: windows-latest
-            preset: windows-clang-cl
-            triplet: x64-windows-static-clang
+            preset: windows
+            triplet: x64-windows-static-release
             label: x64-windows (release)
             vcpkg_conc: "4"
             allow_failure: "false"
             expect_arch: x64
           - os: windows-11-arm
-            preset: windows-clang-cl-arm64
-            triplet: arm64-windows-static-clang
+            preset: windows-arm64
+            triplet: arm64-windows-static-release
             label: arm64-windows (release)
             vcpkg_conc: "4"
             allow_failure: "false"
             expect_arch: ARM64
           - os: macos-latest
             preset: macos
-            triplet: arm64-osx
+            triplet: arm64-osx-release
             label: arm64-osx (release)
             vcpkg_conc: "2"
             allow_failure: "false"
             expect_arch: ""
           - os: macos-15
             preset: macos-x64
-            triplet: x64-osx
+            triplet: x64-osx-release
             label: x64-osx (release)
             vcpkg_conc: "2"
             allow_failure: "false"

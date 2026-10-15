@@ -1,0 +1,30 @@
+diff --git a/tools/gyp/pylib/gyp/msvs_emulation.py b/tools/gyp/pylib/gyp/msvs_emulation.py
+--- a/tools/gyp/pylib/gyp/msvs_emulation.py
++++ b/tools/gyp/pylib/gyp/msvs_emulation.py
+@@ -137,7 +137,7 @@ def _FindDirectXInstallation():
+         # Setup params to pass to and attempt to launch reg.exe.
+         cmd = ["reg.exe", "query", r"HKLM\Software\Microsoft\DirectX", "/s"]
+         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+-        stdout = p.communicate()[0].decode("utf-8")
++        stdout = p.communicate()[0].decode("utf-8", errors="replace")
+         for line in stdout.splitlines():
+             if "InstallPath" in line:
+                 dxsdk_dir = line.split("    ")[3] + "\\"
+@@ -1189,7 +1189,7 @@ def GenerateEnvironmentFiles(
+         popen = subprocess.Popen(
+             args, shell=True, stdout=subprocess.PIPE, stderr=subprocess.STDOUT
+         )
+-        variables = popen.communicate()[0].decode("utf-8")
++        variables = popen.communicate()[0].decode("utf-8", errors="replace")
+         if popen.returncode != 0:
+             raise Exception('"%s" failed with error %d' % (args, popen.returncode))
+         env = _ExtractImportantEnvironment(variables)
+@@ -1212,7 +1212,7 @@ def GenerateEnvironmentFiles(
+             ("&&", "for", "%i", "in", "(cl.exe)", "do", "@echo", "LOC:%~$PATH:i")
+         )
+         popen = subprocess.Popen(args, shell=True, stdout=subprocess.PIPE)
+-        output = popen.communicate()[0].decode("utf-8")
++        output = popen.communicate()[0].decode("utf-8", errors="replace")
+         cl_paths[arch] = _ExtractCLPath(output)
+     return cl_paths
+ 

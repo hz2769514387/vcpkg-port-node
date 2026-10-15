@@ -9,7 +9,7 @@
     {
       "name": "base",
       "hidden": true,
-      "description": "公共配置：vcpkg toolchain，triplet 由各平台 preset 给出。",
+      "description": "公共配置：vcpkg toolchain，triplet 由各平台 preset 给出（均为 vcpkg 自带标准 triplet —— 2026-10-14 重构后消费端不再需要任何自定义 triplet/toolchain）。",
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
@@ -20,45 +20,41 @@
       }
     },
     {
-      "name": "windows-clang-cl",
+      "name": "windows",
       "inherits": "base",
-      "displayName": "Windows x64（clang-cl + 静态 CRT + 静态库）",
-      "description": "node 24+ 的 Windows 官方口径。toolchain 由本工程（消费端）拥有。",
+      "displayName": "Windows x64（vcpkg 标准 triplet x64-windows-static：静态 CRT + 静态库 + 双份）",
+      "description": "node 24+ 的 Windows 官方口径（clang-cl 由 port 自己找）。消费端代码与依赖由 triplet 决定编译器；本工程不写任何 toolchain。★ CMAKE_MSVC_RUNTIME_LIBRARY 必须显式给：vcpkg 的 scripts/toolchains/windows.cmake（设 /MT 的那份）只作用于 port 构建，消费端的 cmake 根本不会加载它，默认值是 /MD —— 与 node 的 /MT 链接期 LNK2038。★ 另需 MSVC 命令行环境（cl.exe / rc.exe / LIB），即 VS 开发者命令行。",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       },
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
-        "VCPKG_CRT_LINKAGE": "static",
-        "VCPKG_LIBRARY_LINKAGE": "static",
-        "NODE_PORT_TEST_JOBS": "2"
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "NODE_PORT_TEST_JOBS": "2",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     },
     {
-      "name": "windows-clang-cl-arm64",
+      "name": "windows-arm64",
       "inherits": "base",
-      "displayName": "Windows arm64（clang-cl + 静态 CRT + 静态库）",
-      "description": "Tier 2：未实测。见 README 的支持矩阵。",
+      "displayName": "Windows arm64（vcpkg 标准 triplet arm64-windows-static）",
+      "description": "同 windows，目标架构 arm64。",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       },
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-clang",
-        "VCPKG_CHAINLOAD_TOOLCHAIN_FILE": "${sourceDir}/cmake/toolchains/clang-cl.cmake",
-        "VCPKG_CRT_LINKAGE": "static",
-        "VCPKG_LIBRARY_LINKAGE": "static",
-        "NODE_PORT_TEST_JOBS": "2"
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static",
+        "NODE_PORT_TEST_JOBS": "2",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     },
     {
       "name": "linux",
       "inherits": "base",
-      "displayName": "Linux x64（gcc + 静态库）",
+      "displayName": "Linux x64（vcpkg 标准 triplet x64-linux）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -71,7 +67,7 @@
     {
       "name": "linux-arm64",
       "inherits": "base",
-      "displayName": "Linux arm64（gcc + 静态库）",
+      "displayName": "Linux arm64（vcpkg 标准 triplet arm64-linux）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -84,7 +80,7 @@
     {
       "name": "macos",
       "inherits": "base",
-      "displayName": "macOS arm64（clang + 静态库）",
+      "displayName": "macOS arm64（vcpkg 标准 triplet arm64-osx）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -97,7 +93,7 @@
     {
       "name": "macos-x64",
       "inherits": "base",
-      "displayName": "macOS x64（clang + 静态库）",
+      "displayName": "macOS x64（vcpkg 标准 triplet x64-osx，arm64 宿主交叉编 x86_64）",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -111,12 +107,12 @@
   ],
   "buildPresets": [
     {
-      "name": "windows-clang-cl",
-      "configurePreset": "windows-clang-cl"
+      "name": "windows",
+      "configurePreset": "windows"
     },
     {
-      "name": "windows-clang-cl-arm64",
-      "configurePreset": "windows-clang-cl-arm64"
+      "name": "windows-arm64",
+      "configurePreset": "windows-arm64"
     },
     {
       "name": "linux",

@@ -4,6 +4,13 @@ name: ci debug
 # （manifest/INCREMENTAL、旧头名、socket 预算、x64-osx arch 名、CRT、docstring 引号），
 # 用户拍板**全部升硬门**（allow_failure: false）——开发期不对消费方承诺接口稳定，
 # 红了就修，不再用 continue-on-error 掩盖。想跑 release：Actions 页面手工触发 ci release。
+#
+# ★ 2026-10-14 重构（路线 A 双份构建）：六腿全部改用 **vcpkg 自带标准 triplet**
+#   （不设 VCPKG_BUILD_TYPE ⇒ port 编 Release + Debug 两份，debug 库进 debug/lib/），
+#   消费端 -DCMAKE_BUILD_TYPE=Debug ⇒ 链的是 debug 编出来的 node 库。
+#   原来的 x64-windows-static-clang 等自定义 triplet 与 test/cmake/{triplets,toolchains}
+#   已整体删除 —— 消费端（含本工程）不再复刻任何工具链。
+#   代价：依赖也按双份编 + port 多编一遍 Release，每腿约 +1～1.5 小时（用户已知情）。
 on:
   push:
   workflow_dispatch:
@@ -38,15 +45,15 @@ jobs:
             allow_failure: "false"
             expect_arch: ""
           - os: windows-latest
-            preset: windows-clang-cl
-            triplet: x64-windows-static-clang
+            preset: windows
+            triplet: x64-windows-static
             label: x64-windows (debug)
             vcpkg_conc: "4"
             allow_failure: "false"
             expect_arch: x64
           - os: windows-11-arm
-            preset: windows-clang-cl-arm64
-            triplet: arm64-windows-static-clang
+            preset: windows-arm64
+            triplet: arm64-windows-static
             label: arm64-windows (debug)
             vcpkg_conc: "4"
             allow_failure: "false"

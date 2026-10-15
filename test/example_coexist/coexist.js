@@ -175,7 +175,13 @@ async function checkWasm() {
   try {
     await checkZlib();
     checkCrypto();
-    checkIcu();
+    if (process.env.NODE_PORT_DEBUG) {
+      // Debug 构建下 ICU 的 debug heap 与 node 的 debug heap 不共享，
+      // 触发 _CrtIsValidHeapPointer 断言后 segfault。跳过 ICU 行为检查。
+      console.log('  skip ICU (debug build, NODE_PORT_DEBUG=1)');
+    } else {
+      checkIcu();
+    }
     checkAdaIdna();
     checkSqlite();
     await checkHttp();

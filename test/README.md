@@ -14,8 +14,8 @@
 ```
 test/
 ├── vcpkg.json                 # 依赖：node[test-suite,tools] + 一批"共存候选"库（显式声明）
-├── vcpkg-configuration.json   # overlay-ports -> ../ports；overlay-triplets -> cmake/triplets
-├── CMakePresets.json          # 六个平台的构建入口
+├── vcpkg-configuration.json   # overlay-ports -> ../ports（2026-10-14 起不再有 overlay-triplets）
+├── CMakePresets.json          # 六个平台的构建入口（triplet 均为 vcpkg 自带标准 triplet）
 ├── CMakeLists.txt             # 主项目：find_package(unofficial-node)、enable_testing()、编排子目录
 │
 ├── example_embed/             # 【示例】把 node 嵌进自己的可执行（自带 2 条测试）
@@ -32,7 +32,8 @@ test/
 ├── test_symbols/              # 【内部测试】符号审计（重复强符号）+ 它的 symbol_check.js
 ├── test_tools/                # 【内部测试】tools feature 的 npm/npx/corepack 冒烟
 │
-└── cmake/                     # 共享：本工程（消费端）自己拥有的 triplet / toolchain / 跳过清单
+└── cmake/                     # 共享：官方套件跳过清单（node-suite-skips*.txt）。
+                                # 2026-10-14 重构后不再有 triplets/ 与 toolchains/。
 ```
 
 ### 两组目录的区分（按前缀）
@@ -41,7 +42,7 @@ test/
 |---|---|---|
 | `example_*` | **消费方** | 每个示例只演示**一种**使用场景；**必须自带测试**（示例要真能跑通，也顺带给消费方做个"项目该有测试"的样子）。以后可以加更多示例，一个场景一个目录 |
 | `test_*` | **本仓库自己** | 验证这个 port 有没有做对；每个目录都有自己的 `CMakeLists.txt`（一眼看得出它是 ctest 目标），里面若要有脚本，脚本也放本目录 |
-| `cmake/` | 共享 | triplet / toolchain / 跳过清单，不属于上面两组 |
+| `cmake/` | 共享 | 官方套件跳过清单，不属于上面两组 |
 
 两条纪律：**不重复**（示例演示"怎么用"，内部测试核对"对不对"，同一件事只在一处做）；
 **不耦合**（任何 `example_*` / `test_*` 单独删掉，其它任何一个都照跑 —— 例如 coexist 的两条 JS
@@ -183,27 +184,41 @@ test ──(overlay-ports)──> ports/node
 ```
 
 * `ports/node/` 自包含：不含 triplet / toolchain，也不引用 port 目录外的任何文件。
-* triplet / toolchain 属于**消费端**，放在本工程 `cmake/` 下；Windows 需要 clang-cl 时，
-  triplet 用 vcpkg 标准变量 `VCPKG_CHAINLOAD_TOOLCHAIN_FILE` 把工具链**交接**给 port。
+* 2026-10-14 重构：**本工程不再拥有任何 triplet / toolchain** —— 六腿全部用 vcpkg 自带
+  标准 triplet；Windows 的 clang-cl 与 MSVC 命令行环境由 port 自己准备
+  （`ports/node/scripts/node-msvc-env.cmake` + `vcpkg_find_acquire_program(CLANG)`）。
+  消费方（含本工程）的负担 = 一个标准 triplet 名。
+  ★ 但 Windows 上还有**两件属于"任何 CMake 工程都要做"、本 port 替不掉**的事
+    （2026-10-15 实测，两条都是配置期就红、报错点离真因很远）：
+      1) **MSVC 命令行环境**：vcpkg 只给 **port 构建**摆环境，消费端的 cmake 跑在裸 shell
+         里就没有 `cl.exe` / `rc.exe` / `LIB`，编译器探测挂在
+         `RC Pass 1: command "rc /fo …" failed … no such file or directory`。
+         → 在 VS 开发者命令行里跑（CI 见 platform.yml 的 vcvarsall 包装）。
+      2) **`CMAKE_MSVC_RUNTIME_LIBRARY`**：设 `/MT` 的那份 vcpkg 脚本
+         （`scripts/toolchains/windows.cmake`）**只作用于 port 构建**，消费端根本不会加载它
+         ⇒ 默认值是 `/MD`，与 node 的 `/MT` 在链接期 LNK2038。
+         → preset 里显式给 `MultiThreaded$<$<CONFIG:Debug>:Debug>`。
+  这两条都不是"node port 的私货"，换成任何一个 `x64-windows-static` 的 port 都一样。
 * 官方套件这类"消费端需要的内容"，走 port 的**安装产物**（`share/`）输出，而不是让
   消费端去 port 源码目录里拿。
 
-## 平台口径（六个 triplet，CI 六个全跑）
+## 平台口径（六个标准 triplet，CI 六个全跑）
 
-| preset | triplet | 编译器 | CI |
+| preset | triplet（ci-debug 用双份 / ci-release 用 -release） | 编译器 | CI |
 |---|---|---|---|
-| `windows-clang-cl` | `x64-windows-static-clang` | clang-cl + 静态 CRT | 硬门 |
-| `linux` | `x64-linux` | gcc，静态库 | 硬门 |
-| `linux-arm64` | `arm64-linux` | gcc，静态库 | 硬门 |
-| `windows-clang-cl-arm64` | `arm64-windows-static-clang` | clang-cl + 静态 CRT | 硬门 |
-| `macos` | `arm64-osx` | clang，静态库 | 硬门 |
-| `macos-x64` | `x64-osx` | clang，静态库 | 硬门（macos-15 arm64 镜像 + Rosetta 跑 x86_64 产物） |
+| `windows` | `x64-windows-static` / `x64-windows-static-release` | 依赖与消费端代码 cl.exe，node clang-cl，静态 CRT | 硬门 |
+| `linux` | `x64-linux` / `x64-linux-release` | gcc，静态库 | 硬门 |
+| `linux-arm64` | `arm64-linux` / `arm64-linux-release` | gcc，静态库 | 硬门 |
+| `windows-arm64` | `arm64-windows-static` / `arm64-windows-static-release` | 同上（arm64） | 硬门 |
+| `macos` | `arm64-osx` / `arm64-osx-release` | clang，静态库 | 硬门 |
+| `macos-x64` | `x64-osx` / `x64-osx-release` | clang，静态库 | 硬门（macos-15 arm64 镜像 + Rosetta 跑 x86_64 产物） |
 
 2026-10-14 起**六个平台全部硬门**（allow_failure: false）：debug 首跑（run #38）六腿全红，
 失败清单逐条修完后用户拍板升硬门 —— 开发期不对消费方承诺接口稳定，红了就修。
 `macos-x64` 的交叉口径（三处配套，缺一不可）：
-  * triplet `VCPKG_OSX_ARCHITECTURES x86_64`（clang 只认这个名，写 `x64` 会
-    `invalid arch name`；vcpkg 把它原样转成 `-DCMAKE_OSX_ARCHITECTURES` 给 port 构建）；
+  * vcpkg 自带 `x64-osx` triplet 里就有 `VCPKG_OSX_ARCHITECTURES x86_64`
+    （clang 只认这个名，写 `x64` 会 `invalid arch name`；vcpkg 把它原样转成
+    `-DCMAKE_OSX_ARCHITECTURES` 给 port 构建）—— 重构后直接用标准的，不用自己写；
   * preset `CMAKE_OSX_ARCHITECTURES=x86_64`（vcpkg 不会把 triplet 的这个值透传给
     消费端自己的目标，arm64 宿主上不设就会用 arm64 代码链 x86_64 库）；
   * portfile 收到交叉组合时给 configure.py 传 `--dest-cpu=x64 --no-cross-compiling`
@@ -213,5 +228,9 @@ test ──(overlay-ports)──> ports/node
   macos-15 是 arm64 镜像，编出来的 x86_64 工具与测试经 Rosetta 2 运行
   （platform.yml 有守卫步骤确保装着）。
 
-全部 release-only（triplet 里 `VCPKG_BUILD_TYPE release`；消费端 Debug 构建也要用
-release CRT，见根 `README.md` 与 `ports/node/usage`）。分层含义见仓库根 `README.md`。
+构建口径（2026-10-14 重构，路线 A 双份构建）：ci-debug 六腿用**双份** triplet
+（不设 `VCPKG_BUILD_TYPE` ⇒ port 编 Release + Debug 两份、debug 库进 `debug/lib/），
+消费端 `-DCMAKE_BUILD_TYPE=Debug` ⇒ 链 debug 库，CRT 天然一致、不需要任何覆写；
+ci-release 六腿用 `*-release` triplet（只编 Release，省一半构建时间）。
+动态 CRT（/MD）口径也已支持（`VCPKG_CRT_LINKAGE=dynamic`，port 给 configure.py 传
+force_dynamic_crt 通路），CI 覆盖列为后续项。分层含义见仓库根 `README.md`。

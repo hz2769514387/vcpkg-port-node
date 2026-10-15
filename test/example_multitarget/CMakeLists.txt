@@ -33,7 +33,7 @@ find_package(fmt CONFIG REQUIRED)
 add_library(node_engine STATIC engine/engine.cpp)
 target_include_directories(node_engine PUBLIC ${CMAKE_CURRENT_SOURCE_DIR}/engine)
 target_link_libraries(node_engine PRIVATE unofficial::node::node)
-target_compile_features(node_engine PRIVATE cxx_std_20)
+# C++20 由 unofficial::node::node 的 INTERFACE 声明（port 侧 cxx_std_20），这里不写。
 if(MSVC)
   target_compile_options(node_engine PRIVATE /utf-8)  # 本层源码注释是中文
 endif()
@@ -44,30 +44,16 @@ target_link_libraries(layered_app PRIVATE node_engine)
 if(MSVC)
   target_compile_options(layered_app PRIVATE /utf-8)
 endif()
-# Windows：可执行必须自己嵌 node 的平台兼容性清单（变量由 node 的消费配置
-# 导出）。静态库层带不过去这个链接选项，所以每个最终可执行都要来一遍。
-# /INCREMENTAL:NO 的原因见 example_embed/CMakeLists.txt：Debug 下 vs_link_exe 的
-# 增量路径会往链接命令尾部追加裸 /MANIFEST，顶掉 /MANIFESTINPUT 的嵌入模式。
-if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-  target_link_options(layered_app PRIVATE
-    "/MANIFEST:EMBED"
-    "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
-    "/INCREMENTAL:NO")
-endif()
+# Windows 的清单/栈/compiler-rt 由 unofficial::node::node 的 INTERFACE 自动带上
 
 # ---- 第二层 B：直接链 node + fmt 的可执行 ------------------------------------
 add_executable(direct_cli cli/main.cpp)
 target_link_libraries(direct_cli PRIVATE unofficial::node::node fmt::fmt)
-target_compile_features(direct_cli PRIVATE cxx_std_20)
+# C++20 由 unofficial::node::node 的 INTERFACE 声明（port 侧 cxx_std_20），这里不写。
 if(MSVC)
   target_compile_options(direct_cli PRIVATE /utf-8)
 endif()
-if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-  target_link_options(direct_cli PRIVATE
-    "/MANIFEST:EMBED"
-    "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
-    "/INCREMENTAL:NO")
-endif()
+# 同上：清单/栈/compiler-rt 由 node 的 INTERFACE 自动带上，这里什么都不写。
 
 # ---- 示例自带的测试 ----------------------------------------------------------
 # 两个目标跑同一个脚本（脚本不关心谁调的 node），断言各自拿到自己的标记。

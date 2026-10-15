@@ -1,10 +1,10 @@
 {
   "name": "node",
   "version": "24.21.0",
-  "port-version": 14,
+  "port-version": 16,
   "description": [
     "把 Node.js v24.21.0 整棵源码树（含 V8 与 V8 内嵌第三方）用官方 gyp → ninja 编成可链接的 node 静态库，并安装头文件与 CMake 消费配置。Node 自身依赖的官方 port 在此声明，消费方经传递依赖自动获得。",
-    "限制（先读再决定怎么用）：(1) 内嵌的是 Node 自带的 V8，不是 vcpkg 的 v8 端口；(2) 只交付静态库，请求动态库会被 vcpkg 直接拒绝；(3) Windows 必须用 clang-cl 口径的 triplet；(4) 同一个可执行里不能再链 vcpkg 的 abseil / highway —— V8 用的是它们的内部符号，两份实现会重复定义（详见 share/node/usage）。"
+    "限制与契约（先读再决定怎么用）：(1) 内嵌的是 Node 自带的 V8，不是 vcpkg 的 v8 端口；(2) 只实现静态库形态，请求 VCPKG_LIBRARY_LINKAGE=dynamic 会被 vcpkg 直接拒绝；(3) Windows 上 node 必须由 clang-cl 编译（node 24+ 官方口径）——编译器与 MSVC 命令行环境由本 port 自行准备，消费方用标准 triplet 即可，无需复刻任何工具链；(4) 构建口径跟随 triplet：VCPKG_BUILD_TYPE 未设（双份 triplet）时编 Release+Debug 两份、debug 库按 vcpkg 惯例进 debug/lib，VCPKG_CRT_LINKAGE 决定静态 CRT（/MT）还是动态 CRT（/MD）；(5) V8 必须用它自带的 abseil/highway 头与库；同进程再链一份 vcpkg 的 abseil 在链接层是安全的（两侧符号名不相交，实测求交为 0），代价是进程里有两份 abseil 运行时（详见 share/node/usage）；(6) 消费端需要 C++20 —— 由本 port 在 INTERFACE 上声明 cxx_std_20（MSVC 另自动加 /Zc:__cplusplus），你不用写；Windows 上还有两件属于任何 CMake 工程的事：需要 MSVC 命令行环境、且用静态 CRT triplet 时要自己设 CMAKE_MSVC_RUNTIME_LIBRARY（见 share/node/usage）。"
   ],
   "license": "MIT",
   "supports": "windows | linux | osx",

@@ -1,9 +1,10 @@
 node 提供 node v24.21.0 整棵树的静态库构建产物：
 
-  * 头文件：<prefix>/include/node/（node 嵌入头）与 <prefix>/include/（v8 公开头）
+  * 头文件：<prefix>/include/node/（node 嵌入头）与 <prefix>/include/node-v8/（v8 公开头）
   * 静态库：<prefix>/lib/（libnode、node_base、v8_*，以及 vcpkg 提供的 abseil / highway /
-    v8_zlib 和 node 自带的 uvwasi / merve / nbytes / ncrypto / crdtp）
-  * 消费配置：<prefix>/share/node/node-config.cmake
+    v8_zlib 和 node 自带的 uvwasi / merve / nbytes / ncrypto / crdtp）；
+    双份构建时 debug 口径的库在 <prefix>/debug/lib/
+  * 消费配置：<prefix>/share/unofficial-node/unofficial-node-config.cmake
 
 用法（CMake）：
 
@@ -12,11 +13,30 @@ node 提供 node v24.21.0 整棵树的静态库构建产物：
 
 `unofficial::node::node` 已经把 node 的全部实现与第三方依赖接好，并带好 include 目录。
 
-几点说明：
+## 用之前只需知道两件事
+
+  1) **用标准 triplet 就行**。Windows 上 node 必须由 clang-cl 编译（node 24+ 官方口径），
+     但编译器与 MSVC 命令行环境由**本 port 自己**准备（port 内自带 VS/SDK 探测与
+     clang-cl 发现逻辑），你不需要写 triplet / toolchain / chainload。
+     参考写法在本仓库的 test/（那只是示例，不是必抄手册）。
+  2) **构建口径跟随你的 triplet**：
+       * `VCPKG_BUILD_TYPE` 不设（vcpkg 默认，双份 triplet 如 x64-windows-static）：
+         编 Release + Debug 两份，debug 库进 debug/lib/。消费方 Debug 构建拿到的是
+         debug 编出来的 node 库，CRT 天然一致，不需要任何额外设置。
+       * `VCPKG_BUILD_TYPE=release`（如 x64-windows-static-release）：只编 Release，
+         消费方 Release 构建可用；Windows 上若消费方编 Debug 会得到一条清楚的
+         配置期报错（提示换双份 triplet），而不是链接期 LNK2038。
+       * `VCPKG_BUILD_TYPE=debug` 不被支持（debug-only 会让一批上游 port 的构建坏掉），
+         要 debug 请用双份 triplet。
+       * `VCPKG_CRT_LINKAGE` static ⇒ 静态 CRT（/MT、/MTd）；dynamic ⇒ 动态 CRT
+         （/MD、/MDd）。两者都支持，跟随 triplet。
+
+其它说明：
 
   * 静态库文件名遵循 node 自己 gyp 的命名规则：POSIX 上是 libnode.a / libnode_base.a，
     Windows 上是 libnode.lib / node_base.lib（消费配置已经按平台算好，你不用管）。
-  * 这是**静态库**交付：请求 VCPKG_LIBRARY_LINKAGE=dynamic 会被 vcpkg 直接报错。
+  * 这是**静态库**交付：请求 VCPKG_LIBRARY_LINKAGE=dynamic 会被 vcpkg 直接报错
+    （本 port 只实现静态形态；动态交付是另一套口径，属未实现）。
   * node 与 v8 用到的第三方（openssl / zlib / libuv / icu / sqlite3 / brotli / zstd /
     simdjson / simdutf / ada / ngtcp2 / nghttp2 / c-ares / llhttp / hdr-histogram /
     abseil / highway）全部由 vcpkg 提供，作为传递依赖自动带上；不需要你手工 find_package。
@@ -28,39 +48,48 @@ node 提供 node v24.21.0 整棵树的静态库构建产物：
     （node 的 gyp 静态库之间有环，单趟扫描的链接器必须重扫；等价于 --start-group/
     --end-group），因此**消费端的 CMake 需要 ≥ 3.24**。Windows / macOS 上是平铺列表
     （link.exe 自己会反复扫描；ld64 没有 rescan 构造），没有这个版本要求。
+  * ★ C++20 由本 port 在 `unofficial::node::node` 的 INTERFACE 上声明
+    （`INTERFACE_COMPILE_FEATURES cxx_std_20`）。node/v8 的头文件硬性要求 C++20
+    （`v8config.h` 里 `#if __cplusplus <= 201703L → #error`），所以你**不用**自己写
+    `target_compile_features(... cxx_std_20)`。MSVC（cl.exe）还会自动带上
+    `/Zc:__cplusplus` —— cl.exe 默认把 `__cplusplus` 报成 199711L，不带上这条
+    v8config.h 的检查必然红（clang-cl 没这个毛病，所以只对 cl.exe 加）。
+
+其它说明（Windows 专属，属于"任何 CMake 工程都要做"、本 port 替不掉的两件事）：
+
+  * **MSVC 命令行环境**：vcpkg 只给 **port 构建**摆 MSVC 环境，你的 cmake 若在裸 shell
+    里跑就没有 `cl.exe` / `rc.exe` / `LIB` / `INCLUDE`，编译器探测会挂在
+    `RC Pass 1: command "rc /fo …" failed … no such file or directory`。
+    → 在 VS 开发者命令行（或任何已 `vcvarsall` 过的 shell）里配置与构建。
+  * **`CMAKE_MSVC_RUNTIME_LIBRARY` 要你自己给**：设 `/MT` 的那份 vcpkg 脚本
+    （`scripts/toolchains/windows.cmake`）**只作用于 port 构建**，消费端的 cmake 不会加载它
+    ⇒ 默认值是 `/MD`，与 node 的 `/MT` 在链接期喷一整屏 LNK2038
+    （`mismatch detected for 'RuntimeLibrary'`）。用静态 CRT triplet 时请设：
+        `set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded$<$<CONFIG:Debug>:Debug>")`
+    （用了 `*-static-md` 这类动态 CRT triplet 就别设 —— 默认 /MD 正好一致。）
+    忘了设会在 `find_package` 处直接得到一条 FATAL，写着该设成什么。
+
   * ★ 分层集成：把 `unofficial::node::node` **PRIVATE** 链进你自己的静态库、再由可执行
     链那个静态库，是完全支持的形态（传递依赖会一路带到最终可执行）。node 只出现在
     最底层，上层零感知。完整可抄的工程形态见本仓库 test/example_multitarget/。
 
-Windows 上两件必须做的事（都是 2026-10-14 debug 首跑实测的坑）：
+## Windows：两件"本来要你抄、现在自动带上"的事
 
-  1) **目标要嵌 node 的平台兼容性清单**，否则进程一启动就退出码 216。清单由消费配置
-     导出（变量 `node_NODE_SOURCE_MANIFEST`），标准片段：
+  1) **平台兼容性清单**：缺了它进程一启动就退出码 216。消费配置已把
+     `/MANIFEST:EMBED` + `/MANIFESTINPUT:` + `/INCREMENTAL:NO` 挂进
+     `unofficial::node::node` 的链接选项（`/INCREMENTAL:NO` 防 vs_link_exe 的增量
+     两遍链接把嵌入模式顶掉）。你的可执行只要链了 node 就自动带上，不用写任何片段。
+  2) **栈大小**：node 自己的可执行用 8 MiB 栈（V8 / inspector 有路径要用），
+     而 MSVC 链接器默认只给 1 MiB。消费配置已把 `/STACK:` 导进链接选项。
 
-        if(WIN32 AND DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS "${node_NODE_SOURCE_MANIFEST}")
-          target_link_options(<你的目标> PRIVATE
-            "/MANIFEST:EMBED"
-            "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
-            "/INCREMENTAL:NO")   # ← 不能省，见下
-        endif()
+## 关于 abseil / highway 两份并存
 
-     `/INCREMENTAL:NO` 不能省：Debug 构建默认带 `/INCREMENTAL`，cmake 的 vs_link_exe
-     会走增量两遍链接、在命令尾部追加裸 `/MANIFEST /MANIFESTFILE:`，把 `/MANIFESTINPUT:`
-     的嵌入模式顶掉（lld-link: `/manifestinput: requires /manifest:embed`）。关掉增量
-     即回到非增量路径（Release 一直在走的那条）。
-
-  2) **Debug 构建也必须用 release 静态 CRT**。本 port 的依赖被 triplet 钉死 release-only
-     （`VCPKG_BUILD_TYPE release`——一批上游 port 的 debug-only 构建是坏的），而
-     CMake/vcpkg 的默认值带 CONFIG genex，Debug 配置下会给消费方切成 `/MTd`，于是链接期
-     直接红：`lld-link: error: /failifmismatch: mismatch detected for
-     '_ITERATOR_DEBUG_LEVEL'`（libcpmtd 的值 2 vs node 库的 0）。在主 CMakeLists 里
-     （任何 add_subdirectory 之前）加一行即可：
-
-        if(MSVC)
-          set(CMAKE_MSVC_RUNTIME_LIBRARY "MultiThreaded")
-        endif()
-
-     语义：依赖 release-only ⇒ 消费方任何构建类型（Debug 也不例外）都用 release CRT。
+  V8 用的是它**自带**那份 abseil / highway（Chromium 副本，无内联命名空间），
+  必须用自带的头/库编（换成 vcpkg 那份会在链接期 LNK2019）。但这不等于
+  "同一个可执行不能再链 vcpkg 的 abseil"：两侧符号名不相交（vcpkg 那份带
+  `lts_20260107` 内联命名空间，实测两侧 absl 符号求交为 0），**链接层是安全的**，
+  代价是进程里有两份 abseil 运行时。真正要避免的是"替换"（让 V8 用 vcpkg 的头），
+  那才会 LNK2019。
 
 嵌入场景的退出码约定（与"node 就是整个进程"时不同）：
 
@@ -73,7 +102,7 @@ Windows 上两件必须做的事（都是 2026-10-14 debug 首跑实测的坑）
 
   * `tools`：额外安装 node 可执行与 npm / npx / corepack 到 <prefix>/tools/node/
     （官方发行版那样的布局：可执行 + node_modules/{npm,corepack} + 垫片，
-    垫片有 POSIX sh 与 Windows .cmd 两套，只用相对路径定位）。
+    垫片有 POSIX sh 与 Windows .cmd 两套，只用相对路径定位；双份构建时取 Release 那份）。
     消费配置会导出这些变量：`node_EXECUTABLE`、`node_TOOLS_DIR`、`node_NPM`、
     `node_NPX`、`node_COREPACK`。
   * `test-suite`：额外安装 node 官方测试套件（test/ + tools/test.py）到
@@ -83,4 +112,5 @@ Windows 上两件必须做的事（都是 2026-10-14 debug 首跑实测的坑）
                --test-root=<node_TEST_SUITE_DIR>/test parallel
 
 注意：本 port **不输出** triplet / toolchain —— 那是消费端自己的构建配置
-（vcpkg 里 port 不应自带 triplet）。需要参考写法可以看本仓库的 test/cmake/。
+（vcpkg 里 port 不应自带 triplet）；好在用本 port 也**不需要**任何自定义
+triplet / toolchain，标准 triplet 即可。需要参考写法可以看本仓库的 test/cmake/。

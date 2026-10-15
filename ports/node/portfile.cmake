@@ -8,64 +8,63 @@
 #
 # 三平台统一：`gyp -f ninja` → `ninja -C out/Release libnode`。
 #
-# ★ 本 port 是**自包含**的：目录里只有 portfile / vcpkg.json / patches / usage，
+# ★ 本 port 是**自包含**的：目录里只有 portfile / vcpkg.json / patches / scripts / usage，
 #   不引用 port 目录外的任何文件，也不自带 triplet / toolchain（那是消费端的构建配置）。
-#   Windows 需要 clang-cl 时，走 vcpkg 标准变量 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 从 triplet
-#   交接过来 —— 于是换成使用者自己的 clang-cl triplet 也能工作。
 #
-# 口径要点：
-#   * Windows **必须用 clang-cl**（node 24+ 的官方口径，vcbuild.bat 强制 ClangCL），
+# 口径要点（2026-10-14 重构后的对外契约）：
+#   * **消费方用标准 triplet 就行**：Windows 的 MSVC 命令行环境（INCLUDE/LIB/PATH）与
+#     clang-cl 的发现都由**本 port 自己**完成（scripts/node-msvc-env.cmake +
+#     vcpkg_find_acquire_program(CLANG)），不再要求消费方复刻任何工具链/triplet。
+#     本机实测（干净 shell + 标准 triplet）：vcpkg 会给**依赖**摆好 MSVC 环境
+#     （c-ares/openssl 双份都编过）；port 自己的 gyp 构建经 scripts/node-msvc-env.cmake
+#     同样自摆。参考写法仍在 `test/`（它只是示例，不再是"必抄手册"）。
+#   * Windows **必须用 clang-cl 编 node**（node 24+ 的官方口径，vcbuild.bat 强制），
 #     这也是 ninja 生成器能编过 node 的 DevTools 协议模板的前提。
 #   * 依赖全部走 vcpkg（`--shared-*`），不编 node 内嵌副本；ICU 走 system-icu。
-#   * 交付物是**静态库**：请求动态库时报错（结构性不可能，而非"没测过"）。
+#   * **构建口径跟随 triplet**：`VCPKG_BUILD_TYPE` 未设（双份 triplet）⇒ Release + Debug
+#     都编，debug 库按 vcpkg 惯例进 `debug/lib`；设 `release` ⇒ 只编 Release；
+#     设 `debug` ⇒ 直接 FATAL（debug-only 会让 brotli 等上游 port 的 vcpkg_copy_tools
+#     布局 BUILD_FAILED，且 release 消费方无库可链）。消费方 Debug/Release 都原生可用。
+#   * **CRT 跟随 triplet**：`VCPKG_CRT_LINKAGE` static ⇒ /MT(/MTd)，dynamic ⇒ /MD(/MDd)。
+#     node 上游只通过 `--shared` 支持动态 CRT（那会同时把库变成 DLL），我们补上
+#     force_dynamic_crt 通路（见下面 CRT 段）让静态库 + 动态 CRT 也能编。
+#   * 交付物是**静态库**：请求动态库时报错（本 port 只实现静态形态；动态交付需要另一套
+#     triplet/口径，属"未实现"而非"不可能"——Debian/conda 的 --shared 先例存在）。
 #   * 交叉编译走 node 自己的机制（`--dest-cpu` + `--no-cross-compiling`），
-#     目前覆盖 macOS（arm64 宿主 × x64-osx；工具/测试经 Rosetta 运行）——
-#     详见下面 0.5 段。Linux/Windows 的交叉未覆盖（矩阵里也没有）。
+#     目前覆盖 macOS（arm64 宿主 × x64-osx；工具/测试经 Rosetta 运行）—— 详见 0.5 段。
 
 vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
 
 # ---------------------------------------------------------------------------
-# debug 口径：**从未实测过**，所以这里明说，而不是沉默。
+# 构建计划：按 VCPKG_BUILD_TYPE 决定编哪几份（vcpkg 正统做法，与 ace/activemq-cpp 等
+# 官方双份 port 同款判据）。这里**不设** = 双份（release + debug），是 vcpkg 的默认。
 #
-# 事实（欠账 §1）：CI 全部 triplet 都是 VCPKG_BUILD_TYPE=release，debug 从未被编译过。
-# 路线 B 的补丁（PCH、`/std:` 分语言发出、rsp 文本处理）在 debug 下都没验证过，
-# V8 的 debug 构建体积/时长约翻倍 + 内存占用显著上升。
-#
-# 为什么只 WARNING 不 FATAL_ERROR：我们**确实不知道**它能否建起来 ——
-# 断言"一定失败"是过度声称，而阻塞一个也许能成功的用法更糟。
-# 等哪天真跑通了（或真确认不行），再把这里换成对应的结论。
-#
-# ★ 来源：1013 评审报告 G6。这条我接受一半 —— 接受"必须显式声明"，
-#   不接受"直接报错"（依据不足）。
-if("$ENV{NODE_PORT_BUILD_TYPE}" STREQUAL "debug")
-    message(WARNING
-        "node port 的 **debug 口径从未实测**（CI 只跑 release，见欠账清单 §1）。\n"
-        "  V8 的 debug 构建体积/时长约翻倍、内存占用显著上升，且路线 B 的几个补丁\n"
-        "  （PCH、/std: 分语言发出、rsp 文本处理）在 debug 下没有验证过。\n"
-        "  能建起来的话欢迎反馈；建不起来也属预期。要避开：用设了 VCPKG_BUILD_TYPE=release\n"
-        "  的 triplet（本仓库的消费端示例工程里，cmake/triplets/ 下有一份可抄的参考）。")
-endif()
-
+# 为什么 debug-only 直接 FATAL 而不是"那就只编 debug"：
+#   ① 依赖侧：VCPKG_BUILD_TYPE=debug 是 debug-**only**，vcpkg 会把可执行类产物放进
+#      debug/tools/，而 brotli 等上游 port 的 vcpkg_copy_tools 在 tools/ 找 ⇒
+#      BUILD_FAILED（2026-10-14 arm64-linux 实测）。这类上游 port 不止一个。
+#   ② 消费侧：debug-only 安装没有 release 库，Release 消费方无库可链。
+#   要 debug 的正确姿势是**不设** VCPKG_BUILD_TYPE 的双份 triplet。
 # ---------------------------------------------------------------------------
-# ---------------------------------------------------------------------------
-# node 自己的构建口径（Release / Debug）。
-#
-# ★ 只看 **NODE_PORT_BUILD_TYPE**（环境变量），不看 VCPKG_BUILD_TYPE：
-#   VCPKG_BUILD_TYPE 管的是**依赖**的口径，而依赖必须一直是 release ——
-#   试过让依赖跟一起进 debug（`VCPKG_BUILD_TYPE=debug`），brotli 直接 BUILD_FAILED：
-#   它的 portfile 用 vcpkg_copy_tools，而 debug-only 时 vcpkg 把可执行放进 debug/tools/，
-#   于是 "SEARCH_DIR .../tools/brotli must be a directory"（2026-10-14 实测，arm64-linux）。
-#   这类上游 port 不只一个。所以：**依赖 release + node 自己 debug**，
-#   两边用不同的开关，node 的库仍装进 `lib/`（单口径端口的常规布局），
-#   Windows 上都是 `/MT`，不会撞运行时库。
-#   要编 debug：ci-debug.yml 与本机的 `NODE_PORT_BUILD_TYPE=debug` 就是这个开关。
-# ---------------------------------------------------------------------------
-if("$ENV{NODE_PORT_BUILD_TYPE}" STREQUAL "debug")
-    set(_node_cfg "Debug")
-    set(_node_cfg_arg "--debug")
+set(_node_configs "")
+if(NOT DEFINED VCPKG_BUILD_TYPE OR VCPKG_BUILD_TYPE STREQUAL "")
+    set(_node_configs Release Debug)
+    message(STATUS "node port: VCPKG_BUILD_TYPE 未设 ⇒ 双份构建（Release → lib/，Debug → debug/lib/）")
+elseif(VCPKG_BUILD_TYPE STREQUAL "release")
+    set(_node_configs Release)
+    message(STATUS "node port: VCPKG_BUILD_TYPE=release ⇒ 只编 Release（lib/）")
+elseif(VCPKG_BUILD_TYPE STREQUAL "debug")
+    message(FATAL_ERROR
+        "node port 不支持 debug-only triplet（VCPKG_BUILD_TYPE=debug）：\n"
+        "  1) 依赖侧：debug-only 布局会让 brotli 等上游 port 的 vcpkg_copy_tools 直接\n"
+        "     BUILD_FAILED（2026-10-14 arm64-linux 实测：SEARCH_DIR .../tools/brotli must be a directory）；\n"
+        "  2) 消费侧：debug-only 安装没有 release 库，Release 消费方无库可链。\n"
+        "  要 debug 的正确姿势：用**不设** VCPKG_BUILD_TYPE 的双份 triplet\n"
+        "  （如 vcpkg 自带的 x64-windows-static / x64-linux），本 port 会编两份并按\n"
+        "  vcpkg 惯例装进 lib/ 与 debug/lib/，消费方 Debug/Release 都原生可用。")
 else()
-    set(_node_cfg "Release")
-    set(_node_cfg_arg "")
+    message(FATAL_ERROR
+        "node port: 认不出的 VCPKG_BUILD_TYPE='${VCPKG_BUILD_TYPE}'（只认 release / debug / 不设）。")
 endif()
 
 vcpkg_download_distfile(NODE_ARCHIVE
@@ -104,6 +103,12 @@ vcpkg_extract_source_archive(SOURCE_PATH
         # 时才打印退出码 ⇒ 日志里没有任何可判读的线索（run #29~#31 实测）。
         # 它只影响 test-suite feature 里那份测试驱动，与库本体无关。
         "${CMAKE_CURRENT_LIST_DIR}/patches/0018-test-py-print-exit-code.patch"
+        # gyp 的 msvs_emulation 还有三处 decode("utf-8")（reg.exe 查询、`cmd /c set`
+        # 环境快照、where cl.exe）—— 0005 只修了 win_tool.py 的。中文 Windows 上
+        # PATH 里一个非 ASCII 目录（本机实测：`微信web开发者工具` 的 GBK 字节 0xd0）
+        # 就让 GenerateEnvironmentFiles 当场 UnicodeDecodeError，而这是**每一次**
+        # Windows 构建都会走的路。同类问题、同款修法（errors="replace"）。
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0019-gyp-msvs-emulation-utf8-decode.patch"
 )
 
 # 构建期工具（都用 vcpkg 自带的，不要求系统装）。
@@ -111,39 +116,133 @@ vcpkg_find_acquire_program(PYTHON3)
 vcpkg_find_acquire_program(NINJA)
 
 # ---------------------------------------------------------------------------
-# 编译环境：三平台一律 clang（工程约定）。
-#   * Windows：clang-cl。**编译器路径由 triplet 经 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 交接**，
-#     port 里因此不需要也不携带任何 toolchain 文件。同时，triplet 已经在 portfile 之前
-#     被 vcpkg include 过（scripts/ports.cmake:176），INCLUDE/LIB/PATH 也已就位。
+# 编译环境。
+#   * Windows：clang-cl（node 24+ 官方口径）。**编译器与 MSVC 命令行环境都由本 port
+#     自己摆**（2026-10-14 重构：原来靠消费端 triplet 交接，见 scripts/node-msvc-env.cmake
+#     头部说明）。使用者因此可以用标准 triplet，不需要复刻任何工具链。
 #   * Linux / macOS：用系统 cc / c++。
 # configure.py 通过 CC/CXX 环境变量决定 make_global_settings，进而决定 gyp 的 cl 规则。
 # ---------------------------------------------------------------------------
 set(_node_cc "")
 set(_node_cxx "")
 set(_node_clang_cl_arg "")
+set(_node_rt_builtins_lib "")   # Windows：clang 的 compiler-rt 内建库（要装进产物里）
+set(_node_dynamic_crt 0)        # Windows：CRT 口径（1 = /MD）
 
 if(VCPKG_TARGET_IS_WINDOWS)
-    # chainload toolchain 是 vcpkg 的标准交接机制：triplet 声明它，vcpkg 把它交给 port。
-    # 我们的 triplet 交来的那一份会发布 NODE_PORT_LLVM_BIN / NODE_PORT_VS_INSTALL_ROOT，
-    # 并把 MSVC 命令行环境配好。
-    if(DEFINED VCPKG_CHAINLOAD_TOOLCHAIN_FILE AND NOT VCPKG_CHAINLOAD_TOOLCHAIN_FILE STREQUAL "")
-        include("${VCPKG_CHAINLOAD_TOOLCHAIN_FILE}")
-    endif()
+    # port 自己把 MSVC 命令行环境摆好：nmake/PATH、INCLUDE/LIB（MSVC + SDK）、
+    # rc.exe/mt.exe 就位，并发布 NODE_PORT_VS_INSTALL_ROOT / NODE_PORT_TARGET_ARCH。
+    # 依赖侧不需要这些（vcpkg 自己给依赖摆），这是给**本 port 的 gyp/ninja 构建**用的。
+    include("${CMAKE_CURRENT_LIST_DIR}/scripts/node-msvc-env.cmake")
 
-    if(DEFINED NODE_PORT_LLVM_BIN AND NOT NODE_PORT_LLVM_BIN STREQUAL "")
+    # ---- clang-cl 发现（七级回退）---------------------------------------------
+    # ① NODE_PORT_LLVM_BIN（显式覆盖，CI 用它钉 runner 上的 VS LLVM 布局）
+    # ② NODE_PORT_LLVM_ROOT（指向 LLVM 安装根，含 x64/bin 或 bin/）
+    # ③ VS 自带 LLVM，**按宿主架构挑**（node-msvc-env.cmake 已解析出
+    #    NODE_PORT_VS_INSTALL_ROOT 与 NODE_PORT_HOST_ARCH）：VS 会同时装
+    #    x64 与 ARM64 两套（Llvm/x64、Llvm/ARM64），必须按宿主挑。
+    # ④ 独立 LLVM 发行版（LLVM_ROOT / LLVMInstallDir / Program Files 下两个固定位置）
+    # ⑤ vcpkg_find_acquire_program(CLANG) —— vcpkg 自带的编译器获取器（openssl/nettle/
+    #    libass/libxt/gmp/vcpkg-make 六个官方 port 在用），必要时下载 LLVM。
+    #    ★ 它在 Windows 上**写死搜 x64**（VCINSTALLDIR/Tools/Llvm/x64/bin），
+    #    arm64 宿主上会拿错 ⇒ 所以它排在③之后，只当前面全落空时兜底。
+    #    它找到的是 `clang`（gcc 驱动），与 clang-cl.exe 同目录 ⇒ 取其目录拼。
+    # ⑥ $ENV{CC} 匹配 clang-cl → ⑦ find_program(clang-cl)
+    set(_node_clang_cl "")
+    if(DEFINED NODE_PORT_LLVM_BIN AND NOT NODE_PORT_LLVM_BIN STREQUAL ""
+       AND EXISTS "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
         set(_node_clang_cl "${NODE_PORT_LLVM_BIN}/clang-cl.exe")
-    elseif(DEFINED ENV{CC} AND "$ENV{CC}" MATCHES "clang-cl")
+    endif()
+    if(_node_clang_cl STREQUAL "" AND DEFINED NODE_PORT_LLVM_ROOT AND NOT NODE_PORT_LLVM_ROOT STREQUAL "")
+        foreach(_node_llvm_cand "${NODE_PORT_LLVM_ROOT}/x64/bin/clang-cl.exe"
+                                 "${NODE_PORT_LLVM_ROOT}/bin/clang-cl.exe")
+            if(EXISTS "${_node_llvm_cand}")
+                set(_node_clang_cl "${_node_llvm_cand}")
+                break()
+            endif()
+        endforeach()
+        unset(_node_llvm_cand)
+    endif()
+    if(_node_clang_cl STREQUAL "" AND DEFINED NODE_PORT_VS_INSTALL_ROOT
+       AND NOT NODE_PORT_VS_INSTALL_ROOT STREQUAL "")
+        # 宿主架构优先，再 x64，再 ARM64（找到后统一过架构核对）。
+        set(_node_llvm_arch_order "")
+        if(DEFINED NODE_PORT_HOST_ARCH)
+            list(APPEND _node_llvm_arch_order "${NODE_PORT_HOST_ARCH}")
+        endif()
+        list(APPEND _node_llvm_arch_order x64 ARM64)
+        foreach(_node_llvm_arch IN LISTS _node_llvm_arch_order)
+            if(EXISTS "${NODE_PORT_VS_INSTALL_ROOT}/VC/Tools/Llvm/${_node_llvm_arch}/bin/clang-cl.exe")
+                set(_node_clang_cl
+                    "${NODE_PORT_VS_INSTALL_ROOT}/VC/Tools/Llvm/${_node_llvm_arch}/bin/clang-cl.exe")
+                break()
+            endif()
+        endforeach()
+        unset(_node_llvm_arch_order)
+        unset(_node_llvm_arch)
+    endif()
+    if(_node_clang_cl STREQUAL "")
+        foreach(_node_llvm_cand
+            "$ENV{LLVM_ROOT}/bin/clang-cl.exe"
+            "$ENV{LLVMInstallDir}/bin/clang-cl.exe"
+            "C:/Program Files/LLVM/bin/clang-cl.exe"
+            "C:/Program Files (x86)/LLVM/bin/clang-cl.exe")
+            if(EXISTS "${_node_llvm_cand}")
+                set(_node_clang_cl "${_node_llvm_cand}")
+                break()
+            endif()
+        endforeach()
+        unset(_node_llvm_cand)
+    endif()
+    if(_node_clang_cl STREQUAL "")
+        # vcpkg_find_acquire_program 只在没有显式覆盖时才调用（它可能触发下载）。
+        vcpkg_find_acquire_program(CLANG)
+        if(DEFINED CLANG AND NOT CLANG STREQUAL "")
+            get_filename_component(_node_clang_bin "${CLANG}" DIRECTORY)
+            if(EXISTS "${_node_clang_bin}/clang-cl.exe")
+                set(_node_clang_cl "${_node_clang_bin}/clang-cl.exe")
+            endif()
+            unset(_node_clang_bin)
+        endif()
+    endif()
+    if(_node_clang_cl STREQUAL "" AND DEFINED ENV{CC} AND "$ENV{CC}" MATCHES "clang-cl")
         set(_node_clang_cl "$ENV{CC}")
-    else()
+    endif()
+    if(_node_clang_cl STREQUAL "")
         find_program(_node_clang_cl NAMES clang-cl)
     endif()
     if(NOT _node_clang_cl)
         message(FATAL_ERROR
             "Windows 上构建本 port 需要 clang-cl（node 24+ 官方口径）。\n"
-            "请用一个把 clang-cl 交接给 port 的 triplet：本仓库的消费端示例工程里，\n"
-            "`cmake/triplets/` 下的 x64-windows-static-clang.cmake 就是这么做的\n"
-            "（它设置 VCPKG_CHAINLOAD_TOOLCHAIN_FILE 指向 clang-cl.cmake）。")
+            "本 port 会按以下顺序自己找：NODE_PORT_LLVM_BIN → NODE_PORT_LLVM_ROOT →\n"
+            "VS 自带 LLVM（按宿主架构）→ 独立 LLVM → vcpkg_find_acquire_program(CLANG)\n"
+            "（必要时下载）→ $ENV{CC} → PATH。全都没命中。请装 Visual Studio 的\n"
+            "「C++ Clang 编译器」组件（或独立 LLVM），或把 NODE_PORT_LLVM_ROOT 指向\n"
+            "LLVM 安装根目录。注意：只装「Clang 工具」是只有 clang-format/clang-tidy 的，\n"
+            "没有 clang-cl。")
     endif()
+    # ★ 按宿主架构核对：VS 会同时装 x64 与 ARM64 两套 LLVM（Llvm/x64、Llvm/ARM64），
+    #   在 x64 宿主上拿到 ARM64 那份 ⇒ 一执行就是 WinError 216（"%1 与你运行的 Windows
+    #   版本不兼容"），而报错点在 configure.py 的宏探测里、离真因极远（探针实测）。
+    #   反过来 arm64 宿主上拿到 x64 那份更糟：能跑（仿真）但会编出 x64 的 node 库，
+    #   直到链接期才 machine type 冲突（run #29 同款）。所以两个方向都拦。
+    #   host 架构由 scripts/node-msvc-env.cmake 解析（NODE_PORT_HOST_ARCH）。
+    if(DEFINED NODE_PORT_HOST_ARCH AND EXISTS "${_node_clang_cl}")
+        get_filename_component(_node_clang_cl_parent "${_node_clang_cl}" DIRECTORY)
+        get_filename_component(_node_clang_cl_llvm_arch "${_node_clang_cl_parent}" DIRECTORY)
+        get_filename_component(_node_clang_cl_llvm_arch "${_node_clang_cl_llvm_arch}" NAME)
+        if(_node_clang_cl_llvm_arch MATCHES "^(x64|ARM64|arm64)$"
+           AND NOT _node_clang_cl_llvm_arch STREQUAL "${NODE_PORT_HOST_ARCH}")
+            message(FATAL_ERROR
+                "找到的 clang-cl 是 ${_node_clang_cl_llvm_arch} 架构（${_node_clang_cl}），"
+                "但本机宿主架构是 ${NODE_PORT_HOST_ARCH} ⇒ 编译产物架构会错。\n"
+                "VS 同时装了两套 LLVM 时按目录名挑会挑错。请设置 NODE_PORT_LLVM_ROOT\n"
+                "指向 ${NODE_PORT_HOST_ARCH} 那一套（<VS>/VC/Tools/Llvm/${NODE_PORT_HOST_ARCH}）。")
+        endif()
+        unset(_node_clang_cl_parent)
+        unset(_node_clang_cl_llvm_arch)
+    endif()
+    message(STATUS "node port: clang-cl = ${_node_clang_cl}")
 
     set(_node_cc "${_node_clang_cl}")
     set(_node_cxx "${_node_clang_cl}")
@@ -160,10 +259,10 @@ if(VCPKG_TARGET_IS_WINDOWS)
     vcpkg_find_acquire_program(PKGCONFIG)
     set(ENV{PKG_CONFIG} "${PKGCONFIG}")
 
-    # vcpkg 依赖的头文件和库文件加入 INCLUDE/LIB：gyp 的非 v8 目标（如 js2c）
-    # 也需要 simdutf.h，链接器需要 simdutf.lib —— 不加这里，每个目标都要单独配路径。
+    # vcpkg 依赖的头文件加入 INCLUDE：gyp 的非 v8 目标（如 js2c）也需要 simdutf.h
+    # —— 不加这里，每个目标都要单独配路径。（头文件两边共用 release 侧 include/。）
+    # （MSVC/SDK 的 INCLUDE/LIB 已由 scripts/node-msvc-env.cmake 摆好。）
     set(ENV{INCLUDE} "${CURRENT_INSTALLED_DIR}/include;$ENV{INCLUDE}")
-    set(ENV{LIB} "${CURRENT_INSTALLED_DIR}/lib;$ENV{LIB}")
 
     # --clang-cl=<ver> 让 configure.py 设 clang=1，这使 v8.gyp 的 asm_to_inline_asm
     # action 把 embedded.S 转成 embedded.cc（否则 embedded blob 符号丢失，链接失败）。
@@ -192,6 +291,55 @@ if(VCPKG_TARGET_IS_WINDOWS)
     endif()
     set(ENV{NODE_PORT_CLANG_TARGET} "${_node_llvm_arch}-pc-windows-msvc")
     set(ENV{NODE_PORT_CLANG_RT_BUILTINS_NAME} "clang_rt.builtins-${_node_rt_arch}")
+
+    # ---- CRT 口径：跟随 VCPKG_CRT_LINKAGE --------------------------------------
+    # node 上游只有 `--shared` 一条路能切动态 CRT（那会把库也变成 DLL），静态库交付下
+    # 想要 /MD 必须自己补通路。本机实测的两件套（2026-10-14，探针：common.gypi 打条件 +
+    # 环境变量 ⇒ 77 个编译单位全部从 /MT 翻到 /MD）：
+    #   ① configure.py 的 force_dynamic_crt 赋值改成"或读环境变量"（下面 replace_string）；
+    #   ② common.gypi 的两处 MSVC_runtimeType 条件加上 force_dynamic_crt != 1
+    #      （v8 侧 toolchain.gypi 本来就认 force_dynamic_crt，不用改）。
+    # 静态 CRT（默认）时环境变量不设，两处 replace 的语义与上游完全一致（0 即假）。
+    if(VCPKG_CRT_LINKAGE STREQUAL "dynamic")
+        set(_node_dynamic_crt 1)
+        set(ENV{NODE_PORT_FORCE_DYNAMIC_CRT} "1")
+        message(STATUS "node port: VCPKG_CRT_LINKAGE=dynamic ⇒ node 按动态 CRT（/MD、/MDd）编")
+    else()
+        message(STATUS "node port: VCPKG_CRT_LINKAGE=${VCPKG_CRT_LINKAGE} ⇒ node 按静态 CRT（/MT、/MTd）编")
+    endif()
+
+    # ---- compiler-rt 内建库：编出来、装进产物 ------------------------------------
+    # node 的 clang-cl 产物引用 __cpu_model（__builtin_cpu_supports），而消费端链接
+    # （不管 cl.exe 还是 lld-link）都不会自动带上 clang 的 compiler-rt —— 驱动那套
+    # 自动挂载只在 clang 驱动直链时成立。原来靠消费端工具链把绝对路径塞进 cache 变量
+    # （NODE_PORT_CLANG_RT_BUILTINS），那正是被本次重构干掉的 543 行之一。
+    # 现在由 port 把 clang_rt.builtins-<arch>.lib 装进 <prefix>/lib（与 debug/lib），
+    # 导出配置按绝对路径链 —— 消费端机器上没有匹配的 LLVM（含二进制缓存还原场景）
+    # 也能链。文件数百 KB，按架构各一份，互不冲突（没有同名 vcpkg port）。
+    execute_process(
+        COMMAND "${_node_cc}" --print-resource-dir
+        OUTPUT_VARIABLE _node_clang_resource_dir
+        ERROR_QUIET
+        OUTPUT_STRIP_TRAILING_WHITESPACE)
+    if(NOT _node_clang_resource_dir STREQUAL "")
+        file(TO_CMAKE_PATH "${_node_clang_resource_dir}" _node_clang_resource_dir)
+        set(_node_rt_cand
+            "${_node_clang_resource_dir}/lib/windows/clang_rt.builtins-${_node_rt_arch}.lib")
+        if(EXISTS "${_node_rt_cand}")
+            set(_node_rt_builtins_lib "${_node_rt_cand}")
+            message(STATUS "node port: compiler-rt 内建库 ${_node_rt_cand}")
+        else()
+            message(FATAL_ERROR
+                "在 clang 资源目录里找不到 compiler-rt 内建库：\n"
+                "  ${_node_rt_cand}\n"
+                "（--print-resource-dir = ${_node_clang_resource_dir}）。\n"
+                "缺它消费端链接必挂 __cpu_model。请检查 clang-cl 安装是否完整。")
+        endif()
+    else()
+        message(FATAL_ERROR "clang-cl --print-resource-dir 没有输出（${_node_cc}）")
+    endif()
+    unset(_node_clang_resource_dir)
+    unset(_node_rt_cand)
 else()
     find_program(_node_c_prog NAMES cc gcc)
     find_program(_node_cxx_prog NAMES c++ g++ clang++)
@@ -203,15 +351,19 @@ endif()
 # shlex 会吃反斜杠：CC/CXX 与 PKG_CONFIG 一律用正斜杠（Windows 上尤其重要）。
 set(ENV{CC} "${_node_cc}")
 set(ENV{CXX} "${_node_cxx}")
-set(ENV{PKG_CONFIG_PATH} "${CURRENT_INSTALLED_DIR}/lib/pkgconfig")
+# ★ PKG_CONFIG_PATH 不在这里设 —— 构建循环里按口径切（ICU 走 pkg-config，
+#   debug 构建必须用 debug 侧的 pkgconfig，见循环内注释）。
 
 # ---------------------------------------------------------------------------
 # prepare_shared：把 vcpkg 依赖以 --shared-<lib> 的形式喂给 configure.py。
 # 库名必须写 vcpkg 包里真实的库文件名（不含扩展名），Windows 静态口径有若干差异
 # （zlib → zs；brotli 去 lib 前缀；openssl 保留 lib 前缀）。
+#
+# ★ 双份构建时 Debug 那份要链**依赖的 debug 库**（${CURRENT_INSTALLED_DIR}/debug/lib），
+#   否则 _ITERATOR_DEBUG_LEVEL 对不上（依赖 debug 库是 /MTd 或 /MDd）。
+#   头文件两边共用 release 侧的 include/（vcpkg 双份布局里 debug/ 只有 lib）。
 # ---------------------------------------------------------------------------
 set(_inc "${CURRENT_INSTALLED_DIR}/include")
-set(_lib "${CURRENT_INSTALLED_DIR}/lib")
 
 # 每一条的 --shared-*-includes 都是 ${_inc}：vcpkg 把所有包的头都装进同一个
 # <prefix>/include，单个包没有自己的独立 include 目录（manifest 模式下
@@ -222,50 +374,44 @@ set(_lib "${CURRENT_INSTALLED_DIR}/lib")
 # --shared-*-includes 抢不到前排；gyp 对 include_dirs 去重只保留首次出现，
 # 一旦 ${_inc} 先出现就永远赢。v8 自带 abseil / highway 的"排到最前"改由
 # patches/0015 在 configure.py 末尾整体前插，并用下面的红线断言钉住。
-macro(_node_shared _opt _pkg _libnames)
-    list(APPEND _node_shared_args
-        "--shared-${_opt}"
-        "--shared-${_opt}-includes=${_inc}"
-        "--shared-${_opt}-libpath=${_lib}"
-        "--shared-${_opt}-libname=${_libnames}")
-endmacro()
-
-set(_node_shared_args "")
-
-# Windows static-clang 和 Linux/macOS 的静态库名不同：
-#   * Windows：zlib→zs, openssl→libcrypto,libssl, libuv→libuv
-#   * Linux/macOS：zlib→z, openssl→crypto,ssl, libuv→uv
-# hdr_histogram 在所有平台都装 hdr_histogram_static。
-# 其余依赖库名两平台一致。
-if(VCPKG_TARGET_IS_WINDOWS)
-    set(_zlib_lib      "zs")
-    set(_openssl_lib   "libcrypto,libssl")
-    set(_libuv_lib     "libuv")
-else()
-    set(_zlib_lib      "z")
-    set(_openssl_lib   "crypto,ssl")
-    set(_libuv_lib     "uv")
-endif()
-set(_hdrhist_lib   "hdr_histogram_static")
-
-# 14 条共享依赖一律用 ${_inc}。v8 自带 abseil / highway 的头文件必须排在 ${_inc}
-# **之前**（否则 v8 的 absl/*.cc 会编到 vcpkg 那份同名不同版本的 absl/*.h 上，
-# run #17 的 x64-linux / arm64-linux 就是这么死的），这个前插由 patches/0015
-# 完成，紧跟在 configure 之后有红线断言检查它真的生效了。
-_node_shared(openssl       openssl     "${_openssl_lib}")
-_node_shared(zlib          zlib        "${_zlib_lib}")
-_node_shared(libuv         libuv       "${_libuv_lib}")
-_node_shared(cares         c-ares      "cares")
-_node_shared(brotli        brotli      "brotlidec,brotlienc,brotlicommon")
-_node_shared(nghttp2       nghttp2     "nghttp2")
-_node_shared(ngtcp2        ngtcp2      "ngtcp2")
-_node_shared(http-parser   llhttp      "llhttp")
-_node_shared(zstd          zstd        "zstd")
-_node_shared(simdjson      simdjson    "simdjson")
-_node_shared(simdutf       simdutf     "simdutf")
-_node_shared(sqlite        sqlite3     "sqlite3")
-_node_shared(ada           ada-url     "ada")
-_node_shared(hdr-histogram hdr-histogram "${_hdrhist_lib}")
+function(_node_shared_args _out _libdir)
+    if(VCPKG_TARGET_IS_WINDOWS)
+        set(_zlib_lib      "zs")
+        set(_openssl_lib   "libcrypto,libssl")
+        set(_libuv_lib     "libuv")
+    else()
+        set(_zlib_lib      "z")
+        set(_openssl_lib   "crypto,ssl")
+        set(_libuv_lib     "uv")
+    endif()
+    set(_hdrhist_lib   "hdr_histogram_static")
+    set(_args "")
+    foreach(_node_spec
+        "openssl|${_openssl_lib}"
+        "zlib|${_zlib_lib}"
+        "libuv|${_libuv_lib}"
+        "cares|cares"
+        "brotli|brotlidec,brotlienc,brotlicommon"
+        "nghttp2|nghttp2"
+        "ngtcp2|ngtcp2"
+        "http-parser|llhttp"
+        "zstd|zstd"
+        "simdjson|simdjson"
+        "simdutf|simdutf"
+        "sqlite|sqlite3"
+        "ada|ada"
+        "hdr-histogram|${_hdrhist_lib}")
+        string(REPLACE "|" ";" _node_pair "${_node_spec}")
+        list(GET _node_pair 0 _node_opt)
+        list(GET _node_pair 1 _node_libnames)
+        list(APPEND _args
+            "--shared-${_node_opt}"
+            "--shared-${_node_opt}-includes=${_inc}"
+            "--shared-${_node_opt}-libpath=${_libdir}"
+            "--shared-${_node_opt}-libname=${_node_libnames}")
+    endforeach()
+    set(${_out} "${_args}" PARENT_SCOPE)
+endfunction()
 
 # ---------------------------------------------------------------------------
 # 0) Windows：node.gyp 的 /WHOLEARCHIVE 路径是照 **msvs 生成器** 写的
@@ -277,11 +423,10 @@ _node_shared(hdr-histogram hdr-histogram "${_hdrhist_lib}")
 #    Linux 那侧本来就写的是 <(obj_dir)/...，macOS 的 static_library 在 output root，
 #    只有 Windows 这一条对不上，所以只改 Windows。
 #
-#    ★ 必须在 **configure.py 之前** 改：改的是 gyp 的**输入**，而 ninja 文件是
+#    ★ 必须在 **configure.py 之前**改：改的是 gyp 的**输入**，而 ninja 文件是
 #    configure.py 内部调 gyp 生成的；放在后面改，gyp 早就把老路径写进
 #    node.exe.rsp 了（试过一次，替换确实生效、链接照样失败）。
 #    用 vcpkg_replace_string 而不是补丁：两处字符串各自唯一，不怕上游改行号。
-# ---------------------------------------------------------------------------
 if(VCPKG_TARGET_IS_WINDOWS)
     vcpkg_replace_string("${SOURCE_PATH}/node.gyp"
         "/WHOLEARCHIVE:<(PRODUCT_DIR)/lib/<(STATIC_LIB_PREFIX)node_base<(STATIC_LIB_SUFFIX)"
@@ -321,6 +466,28 @@ if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
     vcpkg_replace_string("${SOURCE_PATH}/common.gypi"
         "'msvs_configuration_platform': 'arm64'"
         "'msvs_configuration_platform': 'ARM64'")
+endif()
+
+# ---------------------------------------------------------------------------
+# ★ CRT 通路（见上面 CRT 段的两件套，本机实测过）：
+#   ① configure.py：force_dynamic_crt 改为"或读环境变量 NODE_PORT_FORCE_DYNAMIC_CRT"；
+#   ② common.gypi：两处 MSVC_runtimeType 条件从只看 node_shared 改成
+#      "node_shared != true 且 force_dynamic_crt != 1"。
+#   静态 CRT 时环境变量不设、条件语义与上游逐字等价（force_dynamic_crt=0 即假）。
+#   两条都做 anchored replace：上游改了写法会当场红，不会静默失效。
+#   上游化候选：node 官方只认 --shared 才切动态 CRT，这个补丁是"静态库 + 动态 CRT"
+#   的最小通路（Electron 把 use_system_* 上游化的同款思路）。
+vcpkg_replace_string("${SOURCE_PATH}/configure.py"
+    "o['variables']['force_dynamic_crt'] = 1 if options.shared else 0"
+    "o['variables']['force_dynamic_crt'] = 1 if (options.shared or os.environ.get('NODE_PORT_FORCE_DYNAMIC_CRT') == '1') else 0")
+if(VCPKG_TARGET_IS_WINDOWS)
+    # 两处条件各用不同的尾锚（MSVC_runtimeType 的值不同），所以两条 replace 互不干扰。
+    vcpkg_replace_string("${SOURCE_PATH}/common.gypi"
+        "['node_shared != \"true\"', {\n              'MSVC_runtimeType': 1,    # MultiThreadedDebug (/MTd)"
+        "['node_shared != \"true\" and force_dynamic_crt != 1', {\n              'MSVC_runtimeType': 1,    # MultiThreadedDebug (/MTd)")
+    vcpkg_replace_string("${SOURCE_PATH}/common.gypi"
+        "['node_shared != \"true\"', {\n              'MSVC_runtimeType': 0    # MultiThreaded (/MT)"
+        "['node_shared != \"true\" and force_dynamic_crt != 1', {\n              'MSVC_runtimeType': 0    # MultiThreaded (/MT)")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -439,57 +606,83 @@ if(VCPKG_TARGET_IS_OSX)
 endif()
 
 # ---------------------------------------------------------------------------
-# 1) configure.py：生成 config.gypi + 内部调 gyp 生成 ninja 构建文件。
+# 1) 构建循环：每个口径跑一遍 configure.py → gyp → ninja。
 #    --ninja → configure.py 传 `-f ninja-<flavor>`（Windows 上是 ninja-win）。这是合法
 #    写法：gyp 的 Load() 里有 `if "-" in format: format, flavor = format.split("-", 1)`，
 #    会把它拆成 format=ninja + flavor=win（见 tools/gyp/pylib/gyp/__init__.py）。
 #    -DVCPKG_SIMDUTF_INCLUDE 供 patches/0011 的 v8 simdutf 目标使用。
-# ---------------------------------------------------------------------------
-vcpkg_execute_required_process(
-    COMMAND "${PYTHON3}" configure.py
-        --ninja
-        ${_node_cfg_arg}
-        ${_node_clang_cl_arg}
-        ${_node_dest_cpu_args}
-        --with-intl=system-icu
-        ${_node_shared_args}
-        "-DVCPKG_SIMDUTF_INCLUDE=${_inc}"
-    WORKING_DIRECTORY "${SOURCE_PATH}"
-    LOGNAME configure
-)
-
-# ---------------------------------------------------------------------------
-# 1b) 红线裁判：config.gypi 的 target_defaults.include_dirs 前两条必须是
-#     v8 自带的 abseil-cpp 与 highway/src。判定逻辑单独放在 scripts/ 下，
-#     这样"故意弄坏一次"的正反两个方向都能真跑（见 .tmp/gen 的验证脚本），
-#     而不是只写在注释里说"应该如此"。
-# ---------------------------------------------------------------------------
-include("${CMAKE_CURRENT_LIST_DIR}/scripts/redline-include-order.cmake")
-
-# ---------------------------------------------------------------------------
-# 2) ninja 构建可链接库 `libnode`（gyp 目标名，见 node.gyp 的 node_lib_target_name）。
+#
 #    并发度跟随 vcpkg（VCPKG_CONCURRENCY，来自 VCPKG_MAX_CONCURRENCY）：ninja 默认是
 #    "核数+2"，在 3 核 / 7 GB 的 macOS arm64 runner 上会同时跑 5 个重型 V8 编译单元，
 #    容易 OOM。vcpkg 自带的 vcpkg_build_ninja 反而不传 -j，所以这里显式传。
+#
+#    node 可执行（tools feature）只从 **Release** 编：它是给人跑 node/npm 用的，
+#    调试版可执行没有消费场景；debug-only triplet 已在上面 FATAL，所以 Release 一定在。
 # ---------------------------------------------------------------------------
 set(_node_ninja_jobs "")
 if(DEFINED VCPKG_CONCURRENCY AND NOT VCPKG_CONCURRENCY STREQUAL "")
     set(_node_ninja_jobs "-j${VCPKG_CONCURRENCY}")
 endif()
 
-set(_node_ninja_targets libnode)
-if("tools" IN_LIST FEATURES)
-    list(APPEND _node_ninja_targets node)  # tools 要 node.exe
-endif()
+set(_node_installed_libs "")
 
-vcpkg_execute_required_process(
-    COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/${_node_cfg}" ${_node_ninja_jobs} ${_node_ninja_targets}
-    WORKING_DIRECTORY "${SOURCE_PATH}"
-    LOGNAME build
-)
+foreach(_node_cfg IN LISTS _node_configs)
+    if(_node_cfg STREQUAL "Debug")
+        set(_node_cfg_arg "--debug")
+        set(_node_lib_dir "${CURRENT_INSTALLED_DIR}/debug/lib")
+        # ★ ICU 不走 --shared-*（node 24 没有 --shared-icu），它走
+        #   `--with-intl=system-icu` + **pkg-config**。所以每个口径必须把
+        #   PKG_CONFIG_PATH 也切到对应侧，否则 debug 构建会经 pkg-config 链到
+        #   **release** 的 icuuc.lib ⇒ LNK2038（_ITERATOR_DEBUG_LEVEL 0 vs 2，
+        #   RuntimeLibrary MT_StaticRelease vs MTd_StaticDebug）。
+        #   这是双份构建第一次真编 debug 才暴露的潜伏 bug（旧的私有开关
+        #   NODE_PORT_BUILD_TYPE 不进 ABI 哈希，"debug 腿"其实复用了 release 产物）。
+        set(ENV{PKG_CONFIG_PATH} "${CURRENT_INSTALLED_DIR}/debug/lib/pkgconfig")
+        # 同理，LIB 搜索路径也要切到 debug 侧：gyp 有目标按名字链依赖库
+        # （原 portfile 在这里挂过 release 的 lib），debug 构建不该看见 release 库。
+        set(ENV{LIB} "${_node_lib_dir};$ENV{LIB}")
+    else()
+        set(_node_cfg_arg "")
+        set(_node_lib_dir "${CURRENT_INSTALLED_DIR}/lib")
+        set(ENV{PKG_CONFIG_PATH} "${CURRENT_INSTALLED_DIR}/lib/pkgconfig")
+        set(ENV{LIB} "${_node_lib_dir};$ENV{LIB}")
+    endif()
+
+    _node_shared_args(_node_shared_args "${_node_lib_dir}")
+
+    vcpkg_execute_required_process(
+        COMMAND "${PYTHON3}" configure.py
+            --ninja
+            ${_node_cfg_arg}
+            ${_node_clang_cl_arg}
+            ${_node_dest_cpu_args}
+            --with-intl=system-icu
+            ${_node_shared_args}
+            "-DVCPKG_SIMDUTF_INCLUDE=${_inc}"
+        WORKING_DIRECTORY "${SOURCE_PATH}"
+        LOGNAME "configure-${_node_cfg}"
+    )
+
+    # 红线裁判：config.gypi 的 target_defaults.include_dirs 前两条必须是
+    # v8 自带的 abseil-cpp 与 highway/src。判定逻辑单独放在 scripts/ 下，
+    # 这样"故意弄坏一次"的正反两个方向都能真跑（见 .tmp/gen 的验证脚本），
+    # 而不是只写在注释里说"应该如此"。每个口径都查（便宜，且防第二遍 configure 退化）。
+    include("${CMAKE_CURRENT_LIST_DIR}/scripts/redline-include-order.cmake")
+
+    set(_node_ninja_targets libnode)
+    if(_node_cfg STREQUAL "Release" AND "tools" IN_LIST FEATURES)
+        list(APPEND _node_ninja_targets node)  # tools 要 node.exe
+    endif()
+
+    vcpkg_execute_required_process(
+        COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/${_node_cfg}" ${_node_ninja_jobs} ${_node_ninja_targets}
+        WORKING_DIRECTORY "${SOURCE_PATH}"
+        LOGNAME "build-${_node_cfg}"
+    )
+endforeach()
 
 # ---------------------------------------------------------------------------
-# 3) 安装：头文件 + 全部 gyp 静态库 + 手写 CMake 消费配置。
+# 2) 安装：头文件 + 各口径 gyp 静态库 + compiler-rt 内建库 + 手写 CMake 消费配置。
 # ---------------------------------------------------------------------------
 file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${CURRENT_PACKAGES_DIR}/include/node"
     FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp")
@@ -515,11 +708,11 @@ if(VCPKG_TARGET_IS_WINDOWS)
 else()
     set(_node_lib_suffix ".a")
 endif()
-file(GLOB_RECURSE _node_archives "${SOURCE_PATH}/out/${_node_cfg}/obj/*${_node_lib_suffix}")
+file(GLOB_RECURSE _node_archives "${SOURCE_PATH}/out/Release/obj/*${_node_lib_suffix}")
 # macOS：gyp 把 static_library 直接放在 out/Release 根下（ninja.py 的 type_in_output_root
 # 含 static_library），不在 obj/ 里。不补这一条，装出来的包没有 libnode.a，
 # 消费端 ninja 报 "libnode.a ... missing and no known rule to make it"。
-file(GLOB _node_archives_root "${SOURCE_PATH}/out/${_node_cfg}/*${_node_lib_suffix}")
+file(GLOB _node_archives_root "${SOURCE_PATH}/out/Release/*${_node_lib_suffix}")
 list(APPEND _node_archives ${_node_archives_root})
 # ★ 与 vcpkg 其他端口**同名符号**的库，必须装进 lib/manual-link/，由消费配置用
 #   绝对路径引用 —— 不能让链接器在全局 lib 目录里自己搜到它们（评审 B1 的要求）。
@@ -528,33 +721,56 @@ list(APPEND _node_archives ${_node_archives_root})
 #   zlib 撞）；crdtp（DevTools 协议，名字太泛）。其余（libnode / node_base / v8_* /
 #   uvwasi / merve / nbytes / ncrypto / node_mksnapshot）是本端口独有名字，留在 lib/。
 set(_node_manual_link_archives abseil highway v8_zlib crdtp)
-foreach(_a IN LISTS _node_archives)
-    get_filename_component(_node_archive_stem "${_a}" NAME_WE)
-    if(NOT VCPKG_TARGET_IS_WINDOWS)
-        # POSIX 上是 libabseil.a 这种，去掉前缀才能对上 gyp 的目标名。
-        string(REGEX REPLACE "^lib" "" _node_archive_stem "${_node_archive_stem}")
-    endif()
-    if(_node_archive_stem IN_LIST _node_manual_link_archives)
-        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib/manual-link")
-    else()
-        file(INSTALL "${_a}" DESTINATION "${CURRENT_PACKAGES_DIR}/lib")
-    endif()
-endforeach()
-unset(_node_archive_stem)
 
-# 记下"本 port 到底装了哪些库"（只要文件名），写进消费配置给符号审计用。
-#
-# 为什么必须显式给：manifest 模式下 <prefix>/lib 是**整个工程共用**的目录，里面还
-# 混着使用者自己声明的库（本仓库的 test 工程就声明了 gtest / fmt / ...）。审计如果
-# 把整个目录当成"node 的库"，再拿去和 vcpkg 的 packages 目录比，就成了"自己比自己"
-# —— 每次都报一堆 gtest.lib vs gtest/gtest.lib 这种假阳性，闸门等于常红、没人再看。
-set(_node_installed_libs "")
-foreach(_a IN LISTS _node_archives)
-    get_filename_component(_node_lib_name "${_a}" NAME)
-    list(APPEND _node_installed_libs "${_node_lib_name}")
+foreach(_node_cfg IN LISTS _node_configs)
+    if(_node_cfg STREQUAL "Debug")
+        set(_node_out_dir "${SOURCE_PATH}/out/Debug")
+        set(_node_pkg_lib_dir "${CURRENT_PACKAGES_DIR}/debug/lib")
+    else()
+        set(_node_out_dir "${SOURCE_PATH}/out/Release")
+        set(_node_pkg_lib_dir "${CURRENT_PACKAGES_DIR}/lib")
+    endif()
+
+    file(GLOB_RECURSE _node_cfg_archives "${_node_out_dir}/obj/*${_node_lib_suffix}")
+    file(GLOB _node_cfg_archives_root "${_node_out_dir}/*${_node_lib_suffix}")
+    list(APPEND _node_cfg_archives ${_node_cfg_archives_root})
+
+    foreach(_a IN LISTS _node_cfg_archives)
+        get_filename_component(_node_archive_stem "${_a}" NAME_WE)
+        if(NOT VCPKG_TARGET_IS_WINDOWS)
+            # POSIX 上是 libabseil.a 这种，去掉前缀才能对上 gyp 的目标名。
+            string(REGEX REPLACE "^lib" "" _node_archive_stem "${_node_archive_stem}")
+        endif()
+        if(_node_archive_stem IN_LIST _node_manual_link_archives)
+            file(INSTALL "${_a}" DESTINATION "${_node_pkg_lib_dir}/manual-link")
+        else()
+            file(INSTALL "${_a}" DESTINATION "${_node_pkg_lib_dir}")
+        endif()
+    endforeach()
+    unset(_node_archive_stem)
+    unset(_node_cfg_archives)
+    unset(_node_cfg_archives_root)
+
+    # compiler-rt 内建库跟着每个口径各装一份（同名同内容，但 lib/ 与 debug/lib
+    # 是两个目录；导出配置按口径选）。它没有同名 vcpkg port，不进 manual-link。
+    if(_node_rt_builtins_lib)
+        file(INSTALL "${_node_rt_builtins_lib}" DESTINATION "${_node_pkg_lib_dir}")
+    endif()
+
+    # 记下"本 port 到底装了哪些库"（只要文件名），写进消费配置给符号审计用。
+    # 只从 Release 记（各口径文件名相同；且 release-only 安装时它就是全部）。
+    if(_node_cfg STREQUAL "Release")
+        set(_node_installed_libs "")
+        foreach(_a IN LISTS _node_archives)
+            get_filename_component(_node_lib_name "${_a}" NAME)
+            list(APPEND _node_installed_libs "${_node_lib_name}")
+        endforeach()
+        list(REMOVE_DUPLICATES _node_installed_libs)
+        unset(_node_lib_name)
+    endif()
 endforeach()
-list(REMOVE_DUPLICATES _node_installed_libs)
-unset(_node_lib_name)
+unset(_node_out_dir)
+unset(_node_pkg_lib_dir)
 
 # Windows 平台兼容性清单：消费方也要嵌（缺了一跑退出码 216）。
 if(VCPKG_TARGET_IS_WINDOWS)
@@ -637,7 +853,7 @@ if("test-suite" IN_LIST FEATURES)
     foreach(_node_dep IN ITEMS npm corepack acorn undici)
         if(EXISTS "${SOURCE_PATH}/deps/${_node_dep}")
             # file(INSTALL <dir> DEST) 把 <dir> 本体拷进 DEST → DEST/<dir>/...
-            # 所以 DEST 给 .../deps 而不是 .../deps/<dir>（后者会出 deps/npm/npm/）。
+            # 所以 DEST 给 .../deps 而不是 .../deps/<dep>（后者会出 deps/npm/npm/）。
             file(INSTALL "${SOURCE_PATH}/deps/${_node_dep}"
                 DESTINATION "${_node_suite}/deps"
                 USE_SOURCE_PERMISSIONS)
@@ -658,19 +874,22 @@ endif()
 #   * 可执行文件 → tools/<port>/  —— **不是** share/。share/ 放 cmake 配置、usage、数据；
 #   * 由 <port>-config.cmake 导出变量给使用者 —— directx-dxc 导 DIRECTX_DXC_TOOL 就是这个套路，
 #     使用者因此不用去猜路径；
-#   * triplet / toolchain **不输出** —— 那是消费端的构建配置（本 port 目录里也没有，
-#     使用者在自己的工程里放 triplet，本仓库 test/ 下的 cmake/ 子目录里有一份可抄的参考）。
+#   * triplet / toolchain **不输出** —— 那是消费端的构建配置（2026-10-14 重构后 port 自己
+#     会摆 MSVC 环境，消费端用标准 triplet 即可；参考写法在本仓库的示例工程里，只是示例）。
 #
 # 布局照 node 官方发行版：可执行 + node_modules/{npm,corepack} + 垫片。
 # 垫片两套都装（POSIX sh 与 Windows .cmd）—— 这样 cmd / PowerShell / Git-Bash / 跨平台
 # 脚本都能用；它们只用相对路径定位（%~dp0 / $0），不依赖 PATH 上的 node/npm。
+#
+# ★ 双份构建时可执行只取 **Release** 那份（给人跑 node/npm 用，调试版没有消费场景；
+#   debug-only triplet 已在开头 FATAL，所以 Release 一定在）。
 if("tools" IN_LIST FEATURES)
     set(_node_tools "${CURRENT_PACKAGES_DIR}/tools/${PORT}")
 
     if(VCPKG_TARGET_IS_WINDOWS)
-        file(INSTALL "${SOURCE_PATH}/out/${_node_cfg}/node.exe" DESTINATION "${_node_tools}")
+        file(INSTALL "${SOURCE_PATH}/out/Release/node.exe" DESTINATION "${_node_tools}")
     else()
-        file(INSTALL "${SOURCE_PATH}/out/${_node_cfg}/node" DESTINATION "${_node_tools}"
+        file(INSTALL "${SOURCE_PATH}/out/Release/node" DESTINATION "${_node_tools}"
             FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                             GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
     endif()
@@ -692,8 +911,9 @@ if("tools" IN_LIST FEATURES)
             DESTINATION "${_node_tools}" RENAME "${_node_shim}.cmd")
     endforeach()
 
-    # 说明：node.exe 用静态 CRT，正常没有需要一起带的 DLL；将来若切动态 CRT，
-    # 这里要按 vcpkg 惯例补 vcpkg_copy_tool_dependencies。
+    # 说明：node.exe 用静态 CRT 时正常没有需要一起带的 DLL；/MD 口径下
+    # vcruntime 不在 vcpkg 产物里，消费端按自己的部署常规处理（与 vcpkg 其他
+    # /MD 可执行一致）。
 endif()
 
 # ---- 手写消费配置（不用 install(EXPORT)：库是 gyp 产物、不是 CMake 目标）--------
@@ -746,8 +966,66 @@ string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
     "set(_node_lib \"\${_node_prefix}/lib\")\n"
     # 本 port 装进 <prefix>/lib 的库文件名清单。符号审计靠它把"node 的库"和
-    # "使用者自己装的库"分开（<prefix>/lib 是共用的，见上面那段说明）。
+    # "使用者自己装的库"分开（<prefix>/lib 是共用的，见安装阶段那段说明）。
     "set(node_INSTALLED_LIBRARIES \"${_node_installed_libs}\")\n")
+
+# ★ release-only 安装 + Windows Debug 消费方 ⇒ 配置期就红，别等链接期 LNK2038。
+#   双份安装（debug/lib 存在）时 Debug 消费方拿的是 /MTd（或 /MDd）的 node 库，
+#   与自己 /MTd 的代码天然一致 —— 这正是路线 A（双份构建）消灭的那条约束。
+#   Linux/macOS 没有双 CRT 概念，release-only 安装给 Debug 用是 vcpkg `-release`
+#   triplet 的既有行为（CMake 自动回落到 IMPORTED_LOCATION），不拦。
+if(VCPKG_TARGET_IS_WINDOWS)
+    string(APPEND _cfg
+        "if(CMAKE_BUILD_TYPE STREQUAL \"Debug\" AND NOT EXISTS \"\${_node_prefix}/debug/lib\")\n"
+        "  message(FATAL_ERROR\n"
+        "    \"本 node 安装是 release-only（triplet 设了 VCPKG_BUILD_TYPE=release），没有 debug 库。\\n\"\n"
+        "    \"Windows 上 Debug 消费方（/MTd 或 /MDd）无法链接 release（/MT 或 /MD）编出来的 node 库。\\n\"\n"
+        "    \"两个选择：\\n\"\n"
+        "    \"  1) 换用不设 VCPKG_BUILD_TYPE 的双份 triplet（如 x64-windows-static），\\n\"\n"
+        "    \"     port 会编两份并装进 lib/ 与 debug/lib/；\\n\"\n"
+        "    \"  2) 把消费方改成 Release 构建。\")\n"
+        "endif()\n")
+endif()
+
+# ★ Windows：消费端的 CRT 选择 **vcpkg 不会替它做** —— 这里在配置期就挡住。
+#   设 /MT 的那份脚本（scripts/toolchains/windows.cmake）只作用于 **port 构建**：
+#   vcpkg 把它当 chainload toolchain 传给 port 的 cmake，而消费端的 cmake 走的是
+#   CMAKE_TOOLCHAIN_FILE=vcpkg.cmake，**不会加载它**（本机实测：CMAKE_MSVC_RUNTIME_LIBRARY
+#   根本不在消费端的 CMakeCache 里）⇒ CMake 给默认值 /MD，与 node 的 /MT 在链接期
+#   喷一整屏 LNK2038「MT_StaticRelease 不匹配 MD_DynamicRelease」（2026-10-15）。
+#   这条闸门不替消费端做决定，只把"你还没决定"这件事在配置期说出来并给出确切修法
+#   —— 省掉一轮 CI（单腿 1～1.5h）。
+if(VCPKG_TARGET_IS_WINDOWS)
+    if(VCPKG_CRT_LINKAGE STREQUAL "static")
+        string(APPEND _cfg
+            "if(MSVC AND (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY"
+            " OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL \"\""
+            " OR CMAKE_MSVC_RUNTIME_LIBRARY MATCHES \"DLL\"))\n"
+            "  message(FATAL_ERROR\n"
+            "    \"本 node 安装是**静态** CRT（/MT）编的，而消费端会按 CMake 默认值用动态 CRT（/MD）：\\n\"\n"
+            "    \"    CMAKE_MSVC_RUNTIME_LIBRARY = '\${CMAKE_MSVC_RUNTIME_LIBRARY}'（未设置 = 默认 /MD）\\n\"\n"
+            "    \"vcpkg 那份设 /MT 的脚本（scripts/toolchains/windows.cmake）**只作用于 port 构建**，\\n\"\n"
+            "    \"消费端的 cmake 不会加载它 ⇒ 这个值必须由消费端自己给：\\n\"\n"
+            "    \"\\n\"\n"
+            "    \"    set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded)\\n\"\n"
+            "    \"    双份安装想让 Debug 也一致：\\n\"\n"
+            "    \"    set(CMAKE_MSVC_RUNTIME_LIBRARY \\\"MultiThreaded$<$<CONFIG:Debug>:Debug>\\\")\\n\"\n"
+            "    \"\\n\"\n"
+            "    \"不给的话，链接期是一整屏 LNK2038：mismatch detected for 'RuntimeLibrary' ——\\n\"\n"
+            "    \"    MT_StaticRelease 不匹配 MD_DynamicRelease。\")\n"
+            "endif()\n")
+    else()
+        string(APPEND _cfg
+            "if(MSVC AND DEFINED CMAKE_MSVC_RUNTIME_LIBRARY"
+            " AND NOT CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL \"\""
+            " AND NOT CMAKE_MSVC_RUNTIME_LIBRARY MATCHES \"DLL\")\n"
+            "  message(FATAL_ERROR\n"
+            "    \"本 node 安装是**动态** CRT（/MD）编的（triplet: ${VCPKG_TARGET_TRIPLET}），\\n\"\n"
+            "    \"而消费端被设成了静态 CRT：'\${CMAKE_MSVC_RUNTIME_LIBRARY}'。两边必须一致 ——\\n\"\n"
+            "    \"放开这个变量（让它回到默认的 /MD），或改用静态 CRT 的 triplet 装 node。\")\n"
+            "endif()\n")
+    endif()
+endif()
 
 # tools feature 的输出位置也要导出 —— 光把文件装出去、不给变量，使用者只能自己去猜
 # 路径（而 vcpkg 的规矩正是"由 config 导出变量"，见 directx-dxc 的 DIRECTX_DXC_TOOL）。
@@ -785,7 +1063,7 @@ set(_node_all_archives
 set(_node_archive_links "")
 foreach(_a IN LISTS _node_all_archives)
     _node_archive_filename("${_a}" _node_file)
-    # ★ 与 vcpkg 同端口名冲突的那几个装在 lib/manual-link/ 下（见安装阶段那段），
+    # ★ 与 vcpkg 同端口名冲突的那几个装在 lib/manual-link/ 下（见安装阶段），
     #   所以这里要用**绝对路径**指过去，不能让链接器在 <prefix>/lib 里搜。
     set(_node_archive_subdir "")
     if(_a IN_LIST _node_manual_link_archives)
@@ -795,8 +1073,16 @@ foreach(_a IN LISTS _node_all_archives)
         "if(NOT TARGET unofficial::node::${_a})\n"
         "  add_library(unofficial::node::${_a} STATIC IMPORTED)\n"
         "  set_target_properties(unofficial::node::${_a} PROPERTIES IMPORTED_LOCATION"
-        " \"\${_node_lib}/${_node_archive_subdir}${_node_file}\")\n"
-        "endif()\n")
+        " \"\${_node_lib}/${_node_archive_subdir}${_node_file}\")\n")
+    # 双份安装才给 debug 侧；release-only 安装**不能**给（路径不存在，CMake 不会
+    # 回落、而是拿这个不存在的文件去链 ⇒ Linux/macOS 上 release-only + Debug
+    # 消费方本来能用的场景会被打破）。缺了 CMake 自动回落到 IMPORTED_LOCATION。
+    if("Debug" IN_LIST _node_configs)
+        string(APPEND _cfg
+            "  set_target_properties(unofficial::node::${_a} PROPERTIES IMPORTED_LOCATION_DEBUG"
+            " \"\${_node_prefix}/debug/lib/${_node_archive_subdir}${_node_file}\")\n")
+    endif()
+    string(APPEND _cfg "endif()\n")
     string(APPEND _node_archive_links " unofficial::node::${_a}")
 endforeach()
 unset(_node_file)
@@ -815,12 +1101,45 @@ string(APPEND _cfg
     # 于是 node.h 里的 `#include <v8.h>` 照样成立。
     " INTERFACE_INCLUDE_DIRECTORIES"
     " \"\${_node_prefix}/include;\${_node_prefix}/include/node;\${_node_prefix}/include/node-v8\")\n")
+# ---------------------------------------------------------------------------
+# 语言层要求：**由本 port 在 INTERFACE 上声明**，消费端一行都不用写。
+#   ① C++20 —— v8config.h 第一行实质内容就是
+#        `#if __cplusplus <= 201703L  →  #error "C++20 or later required."`
+#      CMake 默认是 C++14/17，谁都不写就必红。
+#   ② MSVC 的 /Zc:__cplusplus —— cl.exe **默认把 __cplusplus 报成 199711L**
+#      （哪怕已经开了 /std:c++20），于是上面那条检查必然红；clang-cl 没这个毛病，
+#      所以只对 cl.exe 加。
+#   2026-10-15 实测：消费端从 clang-cl 换成 triplet 原生的 cl.exe 之后，第一个红就是
+#     v8config.h(13): fatal error C1189: #error: "C++20 or later required."
+#   （加了 /Zc:__cplusplus 才过）。这不是"替消费端做决定"：这是 node/v8 头文件的硬要求，
+#   不声明就等于让每个使用者自己去撞一遍。
+#   用 set_property 写属性而不是 target_compile_features：后者在 IMPORTED 目标上
+#   的可用性随 CMake 版本摇摆，INTERFACE_COMPILE_FEATURES 属性本身是稳定的。
+# ---------------------------------------------------------------------------
+string(APPEND _cfg
+    "set_property(TARGET unofficial::node::node PROPERTY INTERFACE_COMPILE_FEATURES cxx_std_20)\n")
+if(VCPKG_TARGET_IS_WINDOWS)
+    string(APPEND _cfg
+        "if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES \"Clang\")\n"
+        "  target_compile_options(unofficial::node::node INTERFACE \"/Zc:__cplusplus\")\n"
+        "endif()\n")
+endif()
 # nghttp2 没有 CMake config 文件，手动建 imported target。
+# debug 侧的库名按平台算（Windows: nghttp2.lib；POSIX: libnghttp2.a）——
+# 双份安装才给，缺了 CMake 自动回落到 IMPORTED_LOCATION。
 string(APPEND _cfg
     "find_library(_nghttp2_lib nghttp2 HINTS \${_node_lib} REQUIRED)\n"
     "if(NOT TARGET unofficial::node::nghttp2)\n"
     "  add_library(unofficial::node::nghttp2 STATIC IMPORTED)\n"
-    "  set_target_properties(unofficial::node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n"
+    "  set_target_properties(unofficial::node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n")
+if("Debug" IN_LIST _node_configs)
+    _node_archive_filename("nghttp2" _node_nghttp2_file)
+    string(APPEND _cfg
+        "  set_target_properties(unofficial::node::nghttp2 PROPERTIES IMPORTED_LOCATION_DEBUG"
+        " \"\${_node_prefix}/debug/lib/${_node_nghttp2_file}\")\n")
+    unset(_node_nghttp2_file)
+endif()
+string(APPEND _cfg
     "endif()\n")
 # ---------------------------------------------------------------------------
 # ★ 静态库之间的"环"怎么表达 —— 三个平台三条路，每条都有实测或上游原文依据。
@@ -896,21 +1215,27 @@ if(VCPKG_TARGET_IS_OSX)
         "target_link_libraries(unofficial::node::node INTERFACE"
         " \"-framework CoreFoundation\" \"-framework Security\")\n")
 endif()
-# Windows 额外系统库：
+# Windows 额外系统库与链接设置：
 #   * winmm：V8 的 timeGetTime。
-#   * compiler-rt 内建库：hdr_histogram（以及别的 clang 编出来的 C 代码）用
-#     __builtin_cpu_supports 时引用 __cpu_model，而 CMake 对 MSVC 前端的链接规则是
-#     直接调 lld-link，绕过了 clang 驱动 —— 内建库不会自动带上。
-#     名字**按架构取**（x64 → x86_64，arm64 → aarch64）；若消费端的 chainload toolchain
-#     已经算出了绝对路径（NODE_PORT_CLANG_RT_BUILTINS），优先用它。
+#   * compiler-rt 内建库：node 的 clang-cl 产物引用 __cpu_model，而消费端的链接
+#     （cl.exe 的 link.exe 或 CMake 对 MSVC 前端的 lld-link 直链）都不会自动带上
+#     clang 的 compiler-rt —— 原来靠消费端工具链算绝对路径（NODE_PORT_CLANG_RT_BUILTINS），
+#     现在由 port 装进 lib/（与 debug/lib），配置按口径选绝对路径。
 if(VCPKG_TARGET_IS_WINDOWS)
-    string(APPEND _cfg "set(_node_rt_builtins \"clang_rt.builtins-${_node_rt_arch}\")\n")
     string(APPEND _cfg
-        "if(DEFINED NODE_PORT_CLANG_RT_BUILTINS AND EXISTS \"\${NODE_PORT_CLANG_RT_BUILTINS}\")\n"
-        "  set(_node_rt_builtins \"\${NODE_PORT_CLANG_RT_BUILTINS}\")\n"
+        "if(NOT TARGET unofficial::node::clang_rt_builtins)\n"
+        "  add_library(unofficial::node::clang_rt_builtins STATIC IMPORTED)\n"
+        "  set_target_properties(unofficial::node::clang_rt_builtins PROPERTIES\n"
+        "    IMPORTED_LOCATION \"\${_node_lib}/clang_rt.builtins-${_node_rt_arch}.lib\")\n")
+    if("Debug" IN_LIST _node_configs)
+        string(APPEND _cfg
+            "  set_target_properties(unofficial::node::clang_rt_builtins PROPERTIES\n"
+            "    IMPORTED_LOCATION_DEBUG \"\${_node_prefix}/debug/lib/clang_rt.builtins-${_node_rt_arch}.lib\")\n")
+    endif()
+    string(APPEND _cfg
         "endif()\n")
     string(APPEND _cfg
-        "target_link_libraries(unofficial::node::node INTERFACE winmm \${_node_rt_builtins})\n")
+        "target_link_libraries(unofficial::node::node INTERFACE winmm unofficial::node::clang_rt_builtins)\n")
 
     # ---------------------------------------------------------------------------
     # ★ 栈大小：**必须**导给消费端，否则使用者的可执行只有 1 MiB 栈。
@@ -959,6 +1284,32 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "# 0xC00000FD(STATUS_STACK_OVERFLOW) 挂掉（V8 / inspector 有路径要用更大的栈）。\n"
         "# target_link_options 需要 CMake ≥ 3.13。\n"
         "target_link_options(unofficial::node::node INTERFACE \"/STACK:${_node_stack_reserve}\")\n")
+
+    # ---------------------------------------------------------------------------
+    # ★ Windows 平台兼容性清单 + 增量链接：由配置**自动带上**（2026-10-14 重构，
+    #   原来是 usage 里让用户手抄的三行片段 —— 与 /STACK: 同性质，都是"消费端可执行
+    #   必须带的链接设置"，没理由一条自动一条手动）。
+    #
+    # 为什么必须嵌：缺了它进程一启动就退出码 216（实测）。
+    # 为什么必须 /INCREMENTAL:NO：Debug 构建默认带 /INCREMENTAL，cmake 的 vs_link_exe
+    #   会走增量两遍链接、在命令尾部追加裸 `/MANIFEST /MANIFESTFILE:`，把
+    #   `/MANIFESTINPUT:` 的嵌入模式顶掉（lld-link: `/manifestinput: requires
+    #   /manifest:embed`）；关掉增量即回到非增量路径（Release 一直在走的那条）。
+    #   静态库消费者不受影响：CMake 的 target_link_options 只作用于可执行/共享库的
+    #   链接步（example_multitarget 的静态库引擎实测链接通过）。
+    # ---------------------------------------------------------------------------
+    # 变量先设（下面那段 target_link_options 读它）。
+    string(APPEND _cfg
+        "set(node_NODE_SOURCE_MANIFEST \"\${_node_prefix}/share/node/node.exe.extra.manifest\")\n")
+    string(APPEND _cfg
+        "# Windows 平台兼容性清单：消费端可执行必须嵌它，否则一启动就退出码 216。\n"
+        "# /INCREMENTAL:NO 防止 vs_link_exe 的增量两遍链接把嵌入模式顶掉。\n"
+        "if(DEFINED node_NODE_SOURCE_MANIFEST AND EXISTS \"\${node_NODE_SOURCE_MANIFEST}\")\n"
+        "  target_link_options(unofficial::node::node INTERFACE\n"
+        "    \"/MANIFEST:EMBED\"\n"
+        "    \"/MANIFESTINPUT:\${node_NODE_SOURCE_MANIFEST}\"\n"
+        "    \"/INCREMENTAL:NO\")\n"
+        "endif()\n")
 endif()
 # 装了 test-suite feature 就导出官方套件的根目录（tools/test.py 以它的父目录为 workspace）。
 # ★ 本文件现在装在 share/unofficial-node/（目录名必须与**包名**一致，find_package(unofficial-node)
@@ -967,13 +1318,6 @@ string(APPEND _cfg
     "if(EXISTS \"\${CMAKE_CURRENT_LIST_DIR}/../node/test-suite/tools/test.py\")\n"
     "  set(node_TEST_SUITE_DIR \"\${CMAKE_CURRENT_LIST_DIR}/../node/test-suite\")\n"
     "endif()\n")
-# Windows 平台兼容性清单：消费端的目标必须嵌它，否则进程一启动就退出码 216（实测）。
-# ★ 这个变量此前**根本没导出** ⇒ test/app 里 `if(DEFINED node_NODE_SOURCE_MANIFEST)` 一直为假、
-#   清单从来没被嵌上（与欠账 §5l「tools feature 只装文件没导变量」是同一类静默失效）。
-if(VCPKG_TARGET_IS_WINDOWS)
-    string(APPEND _cfg
-        "set(node_NODE_SOURCE_MANIFEST \"\${_node_prefix}/share/node/node.exe.extra.manifest\")\n")
-endif()
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config.cmake" "${_cfg}")
 
 # ---------------------------------------------------------------------------
