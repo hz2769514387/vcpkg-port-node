@@ -72,12 +72,12 @@ Versions measured from the Node.js v26.11.1 source tree. "vcpkg" is release 2026
 | LIEF | 1.0.0 | 0.17.6 | `--shared-lief` | vcpkg behind a major → issue #4 |
 | libffi | 3.8.0 | 3.7.1 | `--shared-ffi` | vcpkg behind → overlay |
 | perfetto | 58.2 | 53.0 | `--shared-perfetto` | vcpkg far behind; shared with V8 → decide with issue #1 |
-| zlib | 1.3.2.1-motley (Chromium fork) | 1.3.2 (madler) | `--shared-zlib` | different source → overlay (issue #3) |
+| zlib | 1.3.2.1-motley (Chromium fork) | 1.3.2 (madler) | `--shared-zlib` | different source → overlay port, built and measured: [zlib-fork.md](zlib-fork.md) |
 | googletest | Chromium fork 1.8.0.git-9518a57 | 1.17.0 | `--shared-gtest` | test only → see §4 |
 | V8: abseil | Chromium fork, rev `6d8e1a5c…` | 20260107.1 | `--shared-abseil` | different fork → issue #1 |
 | V8: highway | Chromium fork, rev `8295336d…` | 1.4.0 | `--shared-highway` | different fork → issue #1 |
 | V8: simdutf | 7.7.0 (single header) | 8.2.0 | `--shared-simdutf` | vcpkg ahead → issue #2 |
-| V8: zlib | 1.3.2 | 1.3.2 | via `node_shared_zlib` | V8's own copy; must be gone (issue #3) |
+| V8: zlib | 1.3.2 | 1.3.2 | via `node_shared_zlib` | V8's own copy; must be gone ([zlib-fork.md](zlib-fork.md)) |
 | uvwasi | 0.0.23 | — | `--shared-uvwasi` | no port → vendor |
 | nbytes | 0.1.4 | — | `--shared-nbytes` | no port → vendor |
 | merve | no version recorded | — | `--shared-merve` | no port → vendor |

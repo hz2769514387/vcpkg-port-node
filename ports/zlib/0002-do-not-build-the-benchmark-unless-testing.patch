@@ -1,0 +1,24 @@
+diff --git a/CMakeLists.txt b/CMakeLists.txt
+index 87d6613..d832f92 100644
+--- a/CMakeLists.txt
++++ b/CMakeLists.txt
+@@ -441,8 +441,17 @@ endif(ZLIB_INSTALL)
+ #============================================================================
+ enable_language(CXX)
+ set(CMAKE_CXX_STANDARD 14) # workaround for older compilers (e.g. g++ 5.4).
+-add_executable(zlib_bench contrib/bench/zlib_bench.cc)
+-target_link_libraries(zlib_bench zlib)
++# Added by this port's patch set.
++#
++# The benchmark links the shared library *by name*, so a static-only build - which is how
++# vcpkg builds this port - ends up with a target that does not exist, no include directories
++# on the command line, and a compile failure in zlib_bench.cc. Chromium drives this file from
++# GN, where the shared library is always there; a distribution-style build has to survive the
++# static configuration, so build the benchmark only when it can work.
++if(ZLIB_BUILD_SHARED AND ZLIB_BUILD_TESTING)
++    add_executable(zlib_bench contrib/bench/zlib_bench.cc)
++    target_link_libraries(zlib_bench zlib)
++endif()
+ 
+ #============================================================================
+ # Unit Tests
