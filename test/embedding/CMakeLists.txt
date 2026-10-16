@@ -50,15 +50,7 @@ find_package(absl CONFIG REQUIRED)
 find_package(hwy CONFIG REQUIRED)
 find_package(simdutf CONFIG REQUIRED)
 find_package(OpenSSL REQUIRED)
-find_package(ZLIB CONFIG REQUIRED)
-
-# Same normalization the port's own consumer config performs: vcpkg's zlib exports
-# ZLIB::ZLIBSTATIC, and ZLIB::ZLIB only exists when the vcpkg toolchain's wrapper answers
-# the lookup. Pick whichever is there.
-if(NOT TARGET ZLIB::ZLIB AND TARGET ZLIB::ZLIBSTATIC)
-  add_library(ZLIB::ZLIB INTERFACE IMPORTED)
-  set_target_properties(ZLIB::ZLIB PROPERTIES INTERFACE_LINK_LIBRARIES ZLIB::ZLIBSTATIC)
-endif()
+# ZLIB::ZLIB is normalized in the project's top-level CMakeLists, for every consumer at once.
 
 add_executable(coexist_consumer coexist_main.cpp)
 target_link_libraries(coexist_consumer PRIVATE

@@ -88,9 +88,23 @@ find_package(Python3 COMPONENTS Interpreter)
 
 enable_testing()
 
+# zlib, once, for every consumer in this project.
+#
+# vcpkg's zlib exports ZLIB::ZLIBSTATIC, and ZLIB::ZLIB only exists when the vcpkg toolchain's
+# wrapper answers the lookup - so a test project that asks for the built-in name has to normalize
+# it, exactly as the port's own consumer config does. Done here rather than in each
+# subdirectory: imported targets are directory-scoped, so a subdirectory that did it for itself
+# would not be visible to the next one.
+find_package(ZLIB CONFIG REQUIRED)
+if(NOT TARGET ZLIB::ZLIB AND TARGET ZLIB::ZLIBSTATIC)
+  add_library(ZLIB::ZLIB INTERFACE IMPORTED)
+  set_target_properties(ZLIB::ZLIB PROPERTIES INTERFACE_LINK_LIBRARIES ZLIB::ZLIBSTATIC)
+endif()
+
 add_subdirectory(embedder)
 add_subdirectory(embedding)
 add_subdirectory(smoke)
+add_subdirectory(zlib)
 add_subdirectory(official_suite)
 
 message(STATUS "node consumer test project")

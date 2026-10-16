@@ -87,7 +87,9 @@ definitions and the process runs - the port does not rely on this measurement st
 after each configuration builds, `scripts/check_no_vendored_build.py` reads the generated build
 graph and fails the build if any source under a vendored copy is still compiled. It is cheap
 (one pass over the ninja files, well under a second) and it is the check that would have caught
-`simdutf.gyp` arriving through `ada.gyp` before a consumer did.
+`simdutf.gyp` arriving through `ada.gyp` before a consumer did. The set it reads covers every
+library this port externalizes, V8's own zlib directory included; the one deliberate exception
+is Chromium's `compression_utils_portable`, the wrapper V8 calls rather than the library.
 
 ## 4. Platform quirks and fixes the port carries
 

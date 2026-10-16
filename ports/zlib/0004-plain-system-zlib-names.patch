@@ -1,0 +1,30 @@
+diff --git a/zconf.h b/zconf.h
+index 8541c5e..e1522f5 100644
+--- a/zconf.h
++++ b/zconf.h
+@@ -9,16 +9,16 @@
+ #define ZCONF_H
+ 
+ /*
+- * This library is also built as a part of AOSP, which does not need to include
+- * chromeconf.h. This config does not want chromeconf.h, so it can set this
+- * macro to opt out. While this works today, there's no guarantee that building
+- * zlib outside of Chromium keeps working in the future.
++ * Added by this port's patch set: the chromeconf.h include that was here is gone.
++ *
++ * chromeconf.h renames every zlib symbol to a Cr_z_ prefix for Chromium's component build, and
++ * the fork's zconf.h pulled it in unconditionally. A library a package manager installs has to
++ * export the plain names - deflate, adler32, inflate - because that is what every consumer
++ * calls, including Node.js's own V8 wiring in this repository (patch 0012 defines
++ * CHROMIUM_ZLIB_NO_CHROMECONF for exactly that reason). The fork's own escape hatch was that
++ * define, but a header pair that only works if every consumer remembers to define something is
++ * not installable; the names have to be plain in the artifact itself.
+  */
+-#if !defined(CHROMIUM_ZLIB_NO_CHROMECONF)
+-/* This include does prefixing as below, but with an updated set of names.  Also
+- * sets up export macros in component builds. */
+-#include "chromeconf.h"
+-#endif
+ 
+ /*
+  * If you *really* need a unique prefix for all types and library functions,

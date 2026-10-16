@@ -25,6 +25,7 @@ vcpkg_from_git(
         0001-no-version-script-on-ohos.patch
         0002-do-not-build-the-benchmark-unless-testing.patch
         0003-simd-settings-node-uses.patch
+        0004-plain-system-zlib-names.patch
 )
 
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" ZLIB_BUILD_SHARED)
@@ -47,26 +48,6 @@ vcpkg_cmake_install()
 vcpkg_copy_pdbs()
 vcpkg_cmake_config_fixup(CONFIG_PATH "lib/cmake/zlib")
 vcpkg_fixup_pkgconfig()
-
-# ---------------------------------------------------------------------------
-# chromeconf.h has to be installed, although no CMake install rule mentions it.
-#
-# The fork's zconf.h - which is a public header, and which zlib.h includes - pulls it in
-# unless CHROMIUM_ZLIB_NO_CHROMECONF is defined:
-#
-#     #if !defined(CHROMIUM_ZLIB_NO_CHROMECONF)
-#     #include "chromeconf.h"
-#     #endif
-#
-# Inside Chromium that resolves, because the zlib source directory is on the include path of
-# everything that uses it. In an installed tree it does not, and a consumer's `#include
-# <zlib.h>` fails on a missing header. Installing it is the smallest deviation from what the
-# fork does: the library is built with it (`Cr_z_`-prefixed internals), so shipping it keeps
-# the headers and the archive telling the same story. The alternative - defining
-# CHROMIUM_ZLIB_NO_CHROMECONF everywhere - would make the library and its own headers disagree
-# about internal names, which is exactly the kind of thing that stays quiet until it does not.
-# ---------------------------------------------------------------------------
-file(INSTALL "${SOURCE_PATH}/chromeconf.h" DESTINATION "${CURRENT_PACKAGES_DIR}/include")
 
 if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_LIBRARY_LINKAGE STREQUAL "static")
     vcpkg_replace_string("${CURRENT_PACKAGES_DIR}/lib/pkgconfig/zlib.pc" " -lz" " -lzs")

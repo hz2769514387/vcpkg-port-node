@@ -76,19 +76,32 @@ Derived from the pinned baseline's `zlib` portfile so that the layout consumers 
 (static/dynamic, debug suffixes, pkg-config, the exported `ZLIB::ZLIBSTATIC` config) is
 unchanged: the overlay's installed file list is identical to the registry port's.
 
-Three patches, each for a reason that is written in it:
+Four patches, each for a reason that is written in it:
 
 | Patch | Why |
 |---|---|
 | `0001-no-version-script-on-ohos.patch` | Carried over from the baseline unchanged - re-validated against the fork rather than copied blind: it applies as-is. |
 | `0002-do-not-build-the-benchmark-unless-testing.patch` | The fork's benchmark target links the *shared* library by name, so a static-only build gets a target that does not exist and no include directories. Chromium builds this tree from GN, where the shared library is always there; a distribution-style build has to survive the static configuration. |
 | `0003-simd-settings-node-uses.patch` | Makes the SIMD branch work on Windows and uses Node.js's define set: `AMD64` is accepted, `X86_WINDOWS` is defined there, the crc32 SIMD stays off, and `-pthread` is not passed to a compiler that has no such flag. |
+| `0004-plain-system-zlib-names.patch` | Removes the unconditional `chromeconf.h` include from the public `zconf.h`, so the library is built - and its headers read - with the plain symbol names (`deflate`, `inflate`, `adler32`, ...). See below. |
 
-One thing the build does not do by itself: `chromeconf.h` is installed although no CMake install
-rule mentions it. The fork's public `zconf.h` includes it unless `CHROMIUM_ZLIB_NO_CHROMECONF`
-is defined, and inside Chromium that resolves because the source directory is on the include
-path. In an installed tree it does not, and every consumer's `#include <zlib.h>` would fail on a
-missing header.
+### 3.1 Why plain names, not the `Cr_z_` prefix
+
+`chromeconf.h` renames every zlib symbol to a `Cr_z_` prefix. Inside Chromium that is load
+balancing for the component build: the prefixed symbols cannot collide with a system zlib in
+the same process. A package manager's zlib is in the opposite position - it *is* the system
+zlib, and the 248 registry ports that link `zlib` all call the plain names, as does V8's own
+wiring in this repository (`ports/node/patches/0012` compiles V8 against the external zlib
+and deliberately defines `CHROMIUM_ZLIB_NO_CHROMECONF` so V8 calls the plain names).
+
+An earlier iteration of this port kept the include and installed `chromeconf.h` beside
+`zconf.h`, shipping a `Cr_z_`-prefixed library. That library cannot be linked by anything
+that calls zlib by its normal names - demonstrated, not assumed: building node against it
+failed in `mksnapshot.exe` with `LNK2019` on `adler32`, `deflate`, `inflate`, ... A header
+pair that only works when every consumer remembers to define
+`CHROMIUM_ZLIB_NO_CHROMECONF` is not installable, so the prefix has to go in the artifact
+itself, which is what patch 0004 does. The fork's own escape-hatch define still exists in
+V8's patch; against the patched header it is a no-op safeguard rather than a requirement.
 
 The port also asserts what it built: after install it reads `ZLIB_VERSION` out of the installed
 `zlib.h` and fails unless the string contains `motley`. A port that quietly built madler's zlib
@@ -101,6 +114,8 @@ would say so.
 not a cache restore). Port build: 10 s; `zlibVersion()` in a consumer that links it:
 `1.3.2.1-motley`; a compress/uncompress round trip over 44 bytes returns the input and
 `crc32 = c81637a1`.
+
+### 4.1 Throughput
 
 Throughput, same benchmark source and the same compiler flags, 32 MiB of compressible data,
 four passes per call, medians of three runs:
@@ -118,6 +133,34 @@ level - expected, since Node.js keeps crc32 without SIMD and madler's scalar adl
 fast on this data. All four checksums are identical between the libraries, which is the part
 that says the two agree on results and not only on speed.
 
+### 4.2 One input, both paths (criterion 4)
+
+The benchmark says the fork is fast; it does not say the fork and node's compression path are
+the same library, and a version string cannot say that either - two zlibs in one process can
+report the same version. `test/zlib/` closes that: 256 KiB of deterministic input goes through
+zlib's C API (`compress2`, level 6) and through node's `zlib.deflateSync` (level 6), and each
+side inflates what the other produced. The runtime is `test/embedder`, the runtime a host
+application links - not the port's own `node.exe`.
+
+Measured, `x64-windows-static`:
+
+| | |
+|---|---|
+| C API | `1.3.2.1-motley`, 262144 -> 169304 bytes, `crc32 = c8d24a46` |
+| runtime (`process.versions.zlib`) | `1.3.2.1-motley` |
+| runtime inflates the C API's output | byte-identical to the input |
+| C API inflates the runtime's output | size matches, byte-identical to the input |
+| crc32, computed by both | `c8d24a46` |
+| the two deflate outputs | byte-identical (169304 bytes each) |
+
+The deflate outputs being byte-identical is stronger than the check requires - sharing a library
+is not the same as sharing a code path - so `zlib_paths.js` reports it as a note rather than
+failing on it. What the check asserts is the part that would break if the overlay stopped being
+used: both sides name the fork, each side recovers the other's output, and the checksums agree.
+`test/embedding/coexist` covers the other half of the criterion - node and the other
+externalized libraries (abseil, highway, simdutf, OpenSSL, zlib) linked into one process, each
+called.
+
 ## 5. Blast radius
 
 The registry has 248 ports that depend on `zlib`, and an overlay replaces the library for all of
@@ -128,18 +171,41 @@ them, not only for node. Two consequences, both accepted deliberately:
 * Those consumers get the fork - a library with different source, more optimizations and a
   `motley` version string - without having asked for it.
 
-The mitigation is that the fork is *tested as a general-purpose zlib*, not only as node's:
-`test/embedding/coexist` links a consumer against the port and the other externalized libraries
-in one process. What is still missing is the comparison the issue asks for: pushing the same
-input through node's compression path and through a second zlib-dependent consumer in one
-process, to show both see the same results.
+The mitigation is that the fork is *tested as a general-purpose zlib*, not only as node's. Two
+consumer-side tests stand in for the graph: `test/embedding/coexist` links node together with
+the other externalized libraries and calls each in one process, and `test/zlib/` pushes the
+same input through node's compression path and through the C API and checks both directions
+(section 4.2). Neither enumerates the 248 ports; what they establish is that the fork behaves
+as a zlib for consumers that are not node, which is the property the graph relies on.
 
-## 6. Not done yet
+## 6. Node.js on the overlay, and only one zlib
 
-* Node.js itself has not been rebuilt against this overlay, so `--shared-zlib` with the fork, the
-  absence of V8's vendored zlib target, and the official suite's zlib cases are still open.
-  `ports/node/scripts/check_no_vendored_build.py` is the check that will answer the middle part.
+Node.js builds against this port and the process holds one zlib, not two. `config.gypi` records
+`node_shared_zlib: "true"`, so node's own `deps/zlib` is not compiled - the check below is what
+turns that flag into a fact.
+
+V8 vendors the same fork under `deps/v8/third_party/zlib`, and its `v8_zlib` target built all of
+it before this port existed. Patch `0012` removes the implementation sources from that target,
+leaving only `compression_utils_portable.cc` - Chromium's wrapper, which V8's own code calls and
+which is not the library - and defines `CHROMIUM_ZLIB_NO_CHROMECONF` so V8 calls the plain
+symbol names. `v8_zlib.ninja` confirms the result: one compile step, the wrapper, a 23 KiB
+archive.
+
+The port does not take that on trust. After each configuration builds,
+`ports/node/scripts/check_no_vendored_build.py` reads gyp's ninja output and fails the build if
+any source under `deps/zlib` or `deps/v8/third_party/zlib` is compiled; the wrapper under the
+latter's `google/` is the one deliberate exception, because it is the adapter, not the library.
+The check knows the three shapes a source takes in gyp's ninja output - including the
+`    cxx ..\..\<src>` shape that `v8_zlib.ninja` itself uses, which a check that only knew the
+long-form continuation line would read past.
+
+The official suite's zlib cases pass unchanged: 92 of 92, across `parallel/test-zlib*`,
+`sequential/test-zlib-crc32-fast-api`, `pummel/test-zlib-zip-slow` and
+`pummel/test-heapdump-zlib`, with no new skip entry.
+
+## 7. Not done yet
+
 * Only `x64-windows-static` has been built. Linux and macOS are untested, and the arm64 branch of
   the SIMD block has not been exercised.
-* The cross-check of criterion 4 (same input through node's path and through another
-  zlib-dependent consumer in one process) and the dynamic-linkage configuration are open.
+* The dynamic-linkage configuration - `zlib` built as a DLL and node linking that - is untested;
+  everything measured above is the static configuration.
