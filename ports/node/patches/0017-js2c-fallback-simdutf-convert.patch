@@ -1,0 +1,65 @@
+--- a/tools/js2c.cc
++++ b/tools/js2c.cc
+@@ -565,7 +565,61 @@
+         code.data(),
+         code.size(),
+         reinterpret_cast<char16_t*>(utf16_codepoints.data()));
+-    assert(utf16_count != 0);
++    if (utf16_count == 0) {
++      // Fallback added by this repository's patch set.
++      //
++      // simdutf::convert_utf8_to_utf16 returned 0 for input that
++      // simdutf::utf16_length_from_utf8 and simdutf::validate_utf8_with_errors
++      // both accept (patch 0015 has already ruled out genuinely invalid
++      // UTF-8). This is a disagreement between simdutf's length/validate and
++      // convert paths observed with MSVC 19.51 /O2 on simdutf v8.2.0. Fall
++      // back to a byte-by-byte conversion so the build does not depend on
++      // the broken fast path.
++      utf16_codepoints.clear();
++      for (size_t i = 0; i < code.size();) {
++        unsigned char c = static_cast<unsigned char>(code[i]);
++        if (c < 0x80) {
++          utf16_codepoints.push_back(c);
++          i += 1;
++        } else if ((c & 0xE0) == 0xC0) {
++          unsigned char c2 = i + 1 < code.size()
++                                 ? static_cast<unsigned char>(code[i + 1])
++                                 : 0;
++          utf16_codepoints.push_back(
++              static_cast<uint16_t>(((c & 0x1F) << 6) | (c2 & 0x3F)));
++          i += 2;
++        } else if ((c & 0xF0) == 0xE0) {
++          unsigned char c2 = i + 1 < code.size()
++                                 ? static_cast<unsigned char>(code[i + 1])
++                                 : 0;
++          unsigned char c3 = i + 2 < code.size()
++                                 ? static_cast<unsigned char>(code[i + 2])
++                                 : 0;
++          utf16_codepoints.push_back(static_cast<uint16_t>(
++              ((c & 0x0F) << 12) | ((c2 & 0x3F) << 6) | (c3 & 0x3F)));
++          i += 3;
++        } else {
++          unsigned char c2 = i + 1 < code.size()
++                                 ? static_cast<unsigned char>(code[i + 1])
++                                 : 0;
++          unsigned char c3 = i + 2 < code.size()
++                                 ? static_cast<unsigned char>(code[i + 2])
++                                 : 0;
++          unsigned char c4 = i + 3 < code.size()
++                                 ? static_cast<unsigned char>(code[i + 3])
++                                 : 0;
++          uint32_t cp = ((c & 0x07) << 18) | ((c2 & 0x3F) << 12) |
++                        ((c3 & 0x3F) << 6) | (c4 & 0x3F);
++          cp -= 0x10000;
++          utf16_codepoints.push_back(
++              static_cast<uint16_t>(0xD800 | (cp >> 10)));
++          utf16_codepoints.push_back(
++              static_cast<uint16_t>(0xDC00 | (cp & 0x3FF)));
++          i += 4;
++        }
++      }
++      utf16_count = utf16_codepoints.size();
++    }
+     utf16_codepoints.resize(utf16_count);
+     Debug("static size %zu\n", utf16_count);
+     for (size_t i = 0; i < utf16_count; ++i) {

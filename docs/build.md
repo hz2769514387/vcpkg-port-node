@@ -306,8 +306,23 @@ patch touches them, so the message names neither the file nor the reason. Patch
 `0015-js2c-report-unusable-input.patch` turns it into a build error that reports the file and
 the first bad byte offset, and separately reports the case where the input is valid yet
 simdutf still reports a zero length (which would mean the linked simdutf disagrees with the
-headers it was compiled against). The investigation is tracked in an issue; the cause is not
-yet known.
+headers it was compiled against).
+
+The diagnostic confirmed the second case: the input (`deps/acorn/acorn/dist/acorn.js`,
+245 232 bytes) is valid UTF-8, `simdutf::utf16_length_from_utf8` returns 245 204, and
+`simdutf::validate_utf8_with_errors` reports no error — yet
+`simdutf::convert_utf8_to_utf16` returns 0. The three functions disagree on the same
+input. The CI runner uses MSVC 14.51 (Visual Studio 18); a local build with MSVC 14.44
+(Visual Studio 2022) on the identical source and options does not reproduce the defect.
+The cause is a code-generation issue in simdutf v8.2.0's `convert_utf8_to_utf16` fast
+path under MSVC 14.51 `/O2`.
+
+Patch `0017-js2c-fallback-simdutf-convert.patch` replaces the `assert(utf16_count != 0)`
+with a fallback: when `convert_utf8_to_utf16` returns 0, js2c decodes the input
+byte-by-byte into UTF-16. The fallback is only reached on the broken fast path, so it
+costs nothing where simdutf works correctly; where it does not, the build produces the
+same embedded JS it would have produced with a working simdutf. Patch 0015 is kept: it
+names the file and shape in the log, which is how the root cause was identified.
 
 ### 7.3 Debug builds were drowning in Torque's source positions
 
