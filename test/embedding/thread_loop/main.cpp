@@ -104,9 +104,12 @@ int main(int argc, char* argv[]) {
   }
   runtime.join();
 
-  platform.reset();
+  // Dispose V8 and the platform before releasing the platform object:
+  // V8::DisposePlatform touches the platform, so resetting the unique_ptr
+  // first leaves it with a dangling pointer and segfaults.
   v8::V8::Dispose();
   v8::V8::DisposePlatform();
+  platform.reset();
   node::TearDownOncePerProcess();
 
   std::printf("host: %lu ticks while the runtime ran on its own thread\n",
