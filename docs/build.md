@@ -82,6 +82,13 @@ dependency edges that disappear are the ones to look at, not the file list:
 `v8.gyp` gates thirteen blocks on `node_shared_abseil=="false"`, so this is a real,
 upstream-supported switch, not a coincidence of one target.
 
+Since the failure mode here is invisible downstream - the linker silently picks one of two
+definitions and the process runs - the port does not rely on this measurement staying true:
+after each configuration builds, `scripts/check_no_vendored_build.py` reads the generated build
+graph and fails the build if any source under a vendored copy is still compiled. It is cheap
+(one pass over the ninja files, well under a second) and it is the check that would have caught
+`simdutf.gyp` arriving through `ada.gyp` before a consumer did.
+
 ## 4. Platform quirks and fixes the port carries
 
 Everything here is measured, and every one of them is a gyp or upstream integration issue

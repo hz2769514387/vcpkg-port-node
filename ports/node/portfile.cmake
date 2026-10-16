@@ -568,6 +568,24 @@ foreach(_node_cfg IN LISTS _node_configs)
         WORKING_DIRECTORY "${SOURCE_PATH}"
         LOGNAME "build-${_node_cfg}"
     )
+
+    # -----------------------------------------------------------------------
+    # Ask the generated build graph whether any library this port externalizes
+    # is *also* compiled from its vendored copy.
+    #
+    # The --shared-* switches remove dependency edges, but a target that pulls a
+    # vendored gyp in unconditionally still compiles it - simdutf.gyp arrives
+    # through ada.gyp that way, which is what patch 0011 had to gate. Nothing
+    # downstream reports the result: the linker silently picks one definition and
+    # the consumer finds out later, as an unexplained duplicate symbol. The graph
+    # states every source it compiles, so one pass over it is the whole check.
+    # -----------------------------------------------------------------------
+    vcpkg_execute_required_process(
+        COMMAND "${PYTHON3}" "${CMAKE_CURRENT_LIST_DIR}/scripts/check_no_vendored_build.py"
+                --build-dir "${SOURCE_PATH}/out/${_node_cfg}"
+        WORKING_DIRECTORY "${SOURCE_PATH}"
+        LOGNAME "vendored-check-${_node_cfg}"
+    )
 endforeach()
 
 # ---------------------------------------------------------------------------
