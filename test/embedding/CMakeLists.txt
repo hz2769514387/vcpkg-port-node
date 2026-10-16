@@ -73,3 +73,31 @@ target_compile_features(coexist_consumer PRIVATE cxx_std_20)
 add_test(NAME embedding.coexist
   COMMAND coexist_consumer "${_embedding}/exit_ok.js")
 set_tests_properties(embedding.coexist PROPERTIES TIMEOUT 180 LABELS "smoke")
+
+# --- a library that hides the port, and two applications on top of it -----------
+add_subdirectory(layered)
+
+add_test(NAME embedding.layered.app COMMAND layered_app "${_embedding}/exit_ok.js")
+add_test(NAME embedding.layered.cli COMMAND layered_cli "${_embedding}/exit_ok.js")
+set_tests_properties(
+  embedding.layered.app
+  embedding.layered.cli
+  PROPERTIES TIMEOUT 180 LABELS "smoke")
+
+# --- the runtime on a thread the host owns -------------------------------------
+# The interesting assertion is not that the script ran - it is that the host's own loop kept
+# running while it did, which is what the tick count in the output proves.
+add_executable(thread_loop thread_loop/main.cpp)
+target_compile_features(thread_loop PRIVATE cxx_std_20)
+target_link_libraries(thread_loop PRIVATE unofficial::node::node)
+
+find_package(Threads REQUIRED)
+target_link_libraries(thread_loop PRIVATE Threads::Threads)
+
+add_test(NAME embedding.thread_loop
+  COMMAND thread_loop "${_embedding}/thread_loop/loop.js")
+set_tests_properties(embedding.thread_loop PROPERTIES
+  PASS_REGULAR_EXPRESSION "host: [1-9][0-9]* ticks"
+  FAIL_REGULAR_EXPRESSION "thread_loop:"
+  TIMEOUT 180
+  LABELS "smoke")

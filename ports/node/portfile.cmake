@@ -322,8 +322,11 @@ set(ENV{CXX} "${_node_cxx}")
 #
 # The ninja generator reads LDFLAGS / LDFLAGS_host from the environment when gyp
 # runs, which is inside configure.py, so setting them here is enough.
+#
+# VCPKG_TARGET_IS_OSX rather than APPLE: in port script mode a bare APPLE is
+# ambiguous about target versus host, and vcpkg says so on every configure.
 # ---------------------------------------------------------------------------
-if(APPLE)
+if(VCPKG_TARGET_IS_OSX)
     set(ENV{LDFLAGS} "-framework CoreFoundation -framework Security")
     set(ENV{LDFLAGS_host} "-framework CoreFoundation -framework Security")
 endif()

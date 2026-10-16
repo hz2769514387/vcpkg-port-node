@@ -13,7 +13,7 @@ It is never installed anywhere and it is not an example to copy into another bui
 | Path | What it verifies |
 |---|---|
 | `embedder/` | `unofficial::node::node` links into a consumer executable that behaves like `node.exe`. Doubles as the example everyone asks for, and as the shell the official suite runs against. |
-| `embedding/` | What embedding has to support beyond that: exit-code semantics, `worker_threads`, spawning a child process, and linking the port next to the very libraries it externalizes. |
+| `embedding/` | What embedding has to support beyond that: exit-code semantics, `worker_threads`, spawning a child process, linking the port next to the very libraries it externalizes, a library that hides the port behind a PRIVATE link, and driving the runtime on a thread the host owns. |
 | `smoke/` | Seconds. Node.js identity, and whether each externalized dependency really came from vcpkg. Runs on every push. |
 | `official_suite/` | Node.js's own suite, through its own driver, labelled `node-suite`. Minutes to an hour. |
 | `cmake/` | The suite driver and its skip lists. |
