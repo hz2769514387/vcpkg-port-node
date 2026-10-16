@@ -79,6 +79,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0012-v8-use-vcpkg-zlib-target.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0013-v8-compiler-add-descriptor-array-inl.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0014-crates-target-arch.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0015-js2c-report-unusable-input.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
@@ -308,6 +309,23 @@ endif()
 # shlex eats backslashes: CC/CXX and PKG_CONFIG use forward slashes.
 set(ENV{CC} "${_node_cc}")
 set(ENV{CXX} "${_node_cxx}")
+
+# ---------------------------------------------------------------------------
+# Apple: system frameworks the static archives drag in.
+#
+# abseil's time_zone reaches CoreFoundation (cctz), and Node.js's own certificate
+# gathering reaches Security. Upstream states both in node.gyp's `libraries` for
+# its own build, but the way a consumer links this port is through the exported
+# CMake config, which is a different link line - so they have to be stated here
+# too, for the port's own host tools (LDFLAGS) and for consumers (the config).
+#
+# The ninja generator reads LDFLAGS / LDFLAGS_host from the environment when gyp
+# runs, which is inside configure.py, so setting them here is enough.
+# ---------------------------------------------------------------------------
+if(APPLE)
+    set(ENV{LDFLAGS} "-framework CoreFoundation -framework Security")
+    set(ENV{LDFLAGS_host} "-framework CoreFoundation -framework Security")
+endif()
 
 # ---------------------------------------------------------------------------
 # The Node.js crates target is built from Rust. The port only needs cargo on

@@ -1,0 +1,77 @@
+diff --git a/tools/js2c.cc b/tools/js2c.cc
+index 97e2aa5..f7c11a6 100644
+--- a/tools/js2c.cc
++++ b/tools/js2c.cc
+@@ -680,9 +680,52 @@ Fragment GetDefinition(const std::string& var, const std::vector<char>& code) {
+ 
+   // Simplification did not turn the code into 1-byte string. Just
+   // use the original.
++  //
++  // Diagnostic added by this repository's patch set: GetDefinitionImpl derives the
++  // output size from simdutf and asserts when the result is zero, which conflates
++  // "this input is not valid UTF-8" with "the simdutf linked into this tool is not
++  // the one it was compiled against". InputIsEmbeddable has already ruled out the
++  // first case for every file that reaches here, so this message means the second.
++  if (simdutf::utf16_length_from_utf8(code.data(), code.size()) == 0) {
++    fprintf(stderr,
++            "js2c: '%s' is valid UTF-8, yet simdutf reports a UTF-16 length of zero - "
++            "the simdutf linked into this tool does not agree with the headers it was "
++            "compiled against\n",
++            var.c_str());
++  }
+   return GetDefinitionImpl<uint16_t>(code, var, CodeType::kTwoByte);
+ }
+ 
++// Added by this repository's patch set.
++//
++// Upstream's answer to an input it cannot embed is `assert(utf16_count != 0)`
++// inside GetDefinitionImpl - correct, but it names neither the file nor the
++// reason, and only three files in the whole tree reach that path
++// (lib/internal/cli_table.js, lib/internal/timers.js and
++// deps/acorn/acorn/dist/acorn.js). When one of them arrives invalid, that is an
++// hour of guessing. Name the file and the offset instead, and fail the build as
++// a normal error.
++bool InputIsEmbeddable(const std::string& filename, const std::vector<char>& code) {
++  if (code.empty()) {
++    fprintf(stderr,
++            "js2c: %s is empty, and an empty file cannot be embedded\n",
++            filename.c_str());
++    return false;
++  }
++  simdutf::result check =
++      simdutf::validate_utf8_with_errors(code.data(), code.size());
++  if (check.error) {
++    size_t offset = check.count;
++    unsigned char byte =
++        offset < code.size() ? static_cast<unsigned char>(code[offset]) : 0;
++    fprintf(stderr,
++            "js2c: %s is not valid UTF-8 (byte 0x%02X at offset %zu of %zu)\n",
++            filename.c_str(), byte, offset, code.size());
++    return false;
++  }
++  return true;
++}
++
+ int AddModule(const std::string& filename,
+               Fragments* definitions,
+               Fragments* initializers,
+@@ -698,6 +741,9 @@ int AddModule(const std::string& filename,
+   if (error != 0) {
+     return error;
+   }
++  if (!InputIsEmbeddable(filename, code)) {
++    return 1;
++  }
+   std::string file_id = GetFileId(filename);
+   std::string var = GetVariableName(file_id);
+ 
+@@ -831,6 +877,9 @@ int AddGypi(const std::string& var,
+   if (error != 0) {
+     return error;
+   }
++  if (!InputIsEmbeddable(filename, code)) {
++    return 1;
++  }
+   assert(var == "config");
+ 
+   std::vector<char> transformed = JSONify(code);
