@@ -250,16 +250,52 @@ adds the corresponding `#cmakedefine` entries to `sqlite3-vcpkg-config.h.in`
 so they are visible to `sqlite3.c` at compile time. All other files are
 identical to the vcpkg 2026.07.29 `sqlite3` port.
 
-### 6.4 Test-suite results
+### 6.4 Test suite
 
-The official test-suite passes with 4960 / 4990 tests (99.4 %) on
-`x64-windows-static` Release (measured: 2026-10-16). All 30 failures are
-environment-specific or upstream test bugs on Windows; none are caused by the
-port. See [test-suite-results.md](test-suite-results.md) for the full
-breakdown.
+The official suite runs on every push through the consumer test project; how it is run, how
+to read a result, and the discipline for what may be allowed to fail are in
+[node-suite.md](node-suite.md). Result numbers are deliberately not recorded here — they
+belong to the run that produced them, and a number in a document goes stale while still
+looking authoritative.
 
-| Category | Count | Cause |
-|---|---|---|
-| Windows symlink EPERM | 28 | No `SeCreateSymbolicLinkPrivilege` |
-| CRLF in tsc output | 1 | `test-snapshot-typescript` — upstream Windows bug |
-| FORCE_COLOR / NO_COLOR | 1 | `test-runner-reporters` — env interaction |
+The one fact worth keeping next to the build notes: the first full run on
+`x64-windows-static` passed all but 30 of 4990 cases, and every one of those 30 was either
+an environment permission (symlinks) or an upstream Windows bug, none of them the port.
+
+## 7. What the first CI run found
+
+The first real CI run (2026-10-16) did what a local build could not: it ran the port on
+machines this project does not own. Two defects surfaced, both of them places where the port
+had been relying on something it never stated.
+
+### 7.1 Apple: the frameworks the static archives drag in
+
+The macOS leg failed inside the port build, linking a host tool:
+
+```
+Undefined symbols for architecture arm64:
+  "_CFRelease", "_CFStringGetCString", "_CFTimeZoneCopyDefault", ...
+  referenced from absl::lts_20260107::time_internal::cctz::local_time_zone() in libabsl_time_zone.a
+```
+
+abseil's `time_zone` reaches CoreFoundation, and Node.js's own certificate gathering reaches
+Security. Upstream states both in `node.gyp`'s `libraries` for the executable it builds, but
+the port builds several host tools (js2c, mksnapshot, torque) through the same gyp files, and
+nothing told them about frameworks. Fix: the portfile exports `LDFLAGS` and `LDFLAGS_host`
+with `-framework CoreFoundation -framework Security` on Apple, which gyp's ninja generator
+reads when it runs (inside `configure.py`). The exported consumer config already carried the
+same two frameworks.
+
+### 7.2 Windows: js2c's uninformative assertion
+
+The Windows leg failed in the `node_js2c` action with
+`Assertion failed: utf16_count != 0, file ..\..\tools\js2c.cc, line 568` — which is reached
+only when a file handed to the generator is empty or not valid UTF-8. Only three files in the
+whole input set take that path (`lib/internal/cli_table.js`, `lib/internal/timers.js`,
+`deps/acorn/acorn/dist/acorn.js`), all three are valid UTF-8 in the source tarball, and no
+patch touches them, so the message names neither the file nor the reason. Patch
+`0015-js2c-report-unusable-input.patch` turns it into a build error that reports the file and
+the first bad byte offset, and separately reports the case where the input is valid yet
+simdutf still reports a zero length (which would mean the linked simdutf disagrees with the
+headers it was compiled against). The investigation is tracked in an issue; the cause is not
+yet known.

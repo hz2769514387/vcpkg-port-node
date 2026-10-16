@@ -45,7 +45,7 @@ before the build.
 | `ubuntu-latest` | `linux` | `x64-linux` | experimental (`continue-on-error`) |
 | `macos-latest` | `macos` | `arm64-osx` | experimental (`continue-on-error`) |
 
-Only Windows has ever been built end to end ([build.md](build.md), [test-suite-results.md](test-suite-results.md)).
+Only Windows has ever been built end to end ([build.md](build.md), [node-suite.md](node-suite.md)).
 The other two are in the matrix rather than absent because the port claims to support them:
 leaving them red-but-non-blocking is how the claim stays honest instead of aspirational. They
 stop being experimental when a full build plus a suite run passes on them.
@@ -77,10 +77,19 @@ a permission, not a platform property.
 
 ## 5. Caching
 
-`VCPKG_BINARY_SOURCES` defaults to `clear;x-gha,readwrite`, so the dependencies (OpenSSL, ICU,
-…) are reused between runs. The port's own package is several gigabytes compressed, which is
-a large share of the repository's 10 GB cache budget; if cache eviction starts hurting, pass
-a different value through the `vcpkg-binary-sources` input of `build-test.yml`.
+`VCPKG_BINARY_SOURCES` is `clear;files,<workspace>/vcpkg-archives,readwrite`, and an
+`actions/cache` step persists that directory between runs. The key covers the runner, the
+pinned vcpkg commit and the contents of `ports/` plus the test manifest, because any of those
+changing changes the ABI of what gets built.
+
+The obvious choice - the `x-gha` provider, which is what GitHub Actions caching used to mean
+for vcpkg - was **removed from vcpkg**, and this repository's first CI run proved the failure
+mode: `clear;x-gha,readwrite` prints a warning and then builds every dependency from source on
+every run, because `clear` also removed the default files provider and the replacement never
+loaded. The warning is easy to miss and costs an hour per platform, so the provider is stated
+explicitly here. If a cache-backed source is ever wanted again, the supported options are a
+NuGet feed (needs a token) or a files provider persisted by `actions/cache`, which is what this
+is.
 
 ## 6. Release watch
 

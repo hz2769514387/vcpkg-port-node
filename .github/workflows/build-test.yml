@@ -33,11 +33,6 @@ on:
         required: false
         type: string
         default: -LE node-suite
-      vcpkg-binary-sources:
-        description: VCPKG_BINARY_SOURCES. Defaults to the GitHub Actions binary cache.
-        required: false
-        type: string
-        default: clear;x-gha,readwrite
       experimental:
         description: "Mark the platform as unverified: failures are reported but do not fail the run."
         required: false
@@ -57,7 +52,12 @@ jobs:
     continue-on-error: ${{ inputs.experimental }}
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      VCPKG_BINARY_SOURCES: ${{ inputs.vcpkg-binary-sources }}
+      # The GitHub Actions binary cache provider (x-gha) was removed from vcpkg, and
+      # `clear;x-gha,readwrite` therefore silently disables caching entirely - it prints a
+      # warning and builds every dependency from source on every run. The supported
+      # replacement without new secrets is a plain files provider, persisted by the cache
+      # step below.
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-archives,readwrite
       VCPKG_MAX_CONCURRENCY: 3
       # English diagnostics from MSVC's tools: gyp decodes their output as UTF-8, and a
       # localized message turns a real link failure into a UnicodeDecodeError (docs/build.md).
@@ -75,6 +75,17 @@ jobs:
           echo "- ctest: ${{ inputs.ctest-options }}"
           echo ""
           echo "Free space before:"; df -h . || true
+
+      - name: Restore the vcpkg binary cache
+        uses: actions/cache@v4
+        with:
+          path: ${{ github.workspace }}/vcpkg-archives
+          # The key covers the vcpkg commit and the contents of ports/ plus the test
+          # manifest: any of those changing changes the ABI of what gets built, so a stale
+          # entry would restore the wrong binaries.
+          key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ hashFiles('ports/**', 'test/vcpkg.json') }}
+          restore-keys: |
+            vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-
 
       - name: Check out the pinned vcpkg
         shell: bash

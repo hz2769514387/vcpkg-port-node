@@ -24,7 +24,7 @@ versioned with the code and reviewed in pull requests.
 | [dependency-disposition.md](dependency-disposition.md) | Per-dependency verdict for the Node.js v26 line: externalized, overlay-pinned, or vendored — with the measurements behind each | active |
 | [build.md](build.md) | How the port builds Node.js (gyp → ninja): the externalization mechanism, the platform quirks, and the fixes the port must carry | active |
 | [ci.md](ci.md) | Workflows, the platform matrix, what each gate decides, caching, the release watcher | active |
-| [test-suite-results.md](test-suite-results.md) | Results of running Node.js's own suite against the port-built executable, with every skip explained | active |
+| [node-suite.md](node-suite.md) | How Node.js's own test suite is run, how to read a result, and what may be allowed to fail | active |
 
 ## Where work items live
 
