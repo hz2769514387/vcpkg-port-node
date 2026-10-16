@@ -37,7 +37,7 @@ jobs:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
-      runner: windows-latest
+      runner: windows-2022
       preset: windows
       triplet: x64-windows-static
       ctest-options: -LE node-suite
