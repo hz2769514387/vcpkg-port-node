@@ -299,3 +299,27 @@ the first bad byte offset, and separately reports the case where the input is va
 simdutf still reports a zero length (which would mean the linked simdutf disagrees with the
 headers it was compiled against). The investigation is tracked in an issue; the cause is not
 yet known.
+
+### 7.3 Debug builds were drowning in Torque's source positions
+
+A Debug build's log is an order of magnitude larger than a Release one - 16 MB against 232 KB
+on the same machine - and the reason is not warnings about our code. Only the Debug
+configuration emits source positions, and Torque writes them as
+`ca_.SetSourcePosition("..\..\deps\v8/src/builtins/aggregate-error.tq", 21)` - an absolute
+Windows path inside a C string literal, with native separators. `\.` and `\d` are not escape
+sequences, so the compiler emits one warning per occurrence: 59,692 of them in a single Debug
+build, out of 60,032 warning lines in total.
+
+Two consequences, not one. The obvious one is the noise: a real warning has to be found among
+sixty thousand fake ones, which is how the 39 `-Wmacro-redefined` warnings from V8's own
+bigint headers stay invisible. The less obvious one is that the generated string is silently
+mangled - `\v` in `deps\v8` is a vertical tab - so the source positions carried in the Debug
+library point at a path that does not exist.
+
+Upstream never sees this because its Windows build goes through MSBuild, which hands Torque
+forward slashes; the ninja generator hands it native ones. Patch
+`0016-torque-normalize-source-position-paths.patch` normalizes the separators in
+`CSAGenerator::EmitSourcePosition`, the same defect class as patches 0009 and 0010. Verified
+by rebuilding the `torque` tool, regenerating one CSA file and compiling it: the emitted path
+becomes `../../deps/v8/src/builtins/aggregate-error.tq`, and that translation unit compiles
+without a single warning.

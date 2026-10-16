@@ -80,6 +80,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0013-v8-compiler-add-descriptor-array-inl.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0014-crates-target-arch.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0015-js2c-report-unusable-input.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0016-torque-normalize-source-position-paths.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
