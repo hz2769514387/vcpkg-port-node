@@ -89,6 +89,7 @@ find_package(Python3 COMPONENTS Interpreter)
 enable_testing()
 
 add_subdirectory(embedder)
+add_subdirectory(embedding)
 add_subdirectory(smoke)
 add_subdirectory(official_suite)
 
