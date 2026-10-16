@@ -1,8 +1,8 @@
 diff --git a/tools/js2c.cc b/tools/js2c.cc
-index 97e2aa5..f7c11a6 100644
+index 97e2aa5..6c90503 100644
 --- a/tools/js2c.cc
 +++ b/tools/js2c.cc
-@@ -680,9 +680,52 @@ Fragment GetDefinition(const std::string& var, const std::vector<char>& code) {
+@@ -680,9 +680,68 @@ Fragment GetDefinition(const std::string& var, const std::vector<char>& code) {
  
    // Simplification did not turn the code into 1-byte string. Just
    // use the original.
@@ -10,14 +10,26 @@ index 97e2aa5..f7c11a6 100644
 +  // Diagnostic added by this repository's patch set: GetDefinitionImpl derives the
 +  // output size from simdutf and asserts when the result is zero, which conflates
 +  // "this input is not valid UTF-8" with "the simdutf linked into this tool is not
-+  // the one it was compiled against". InputIsEmbeddable has already ruled out the
-+  // first case for every file that reaches here, so this message means the second.
-+  if (simdutf::utf16_length_from_utf8(code.data(), code.size()) == 0) {
-+    fprintf(stderr,
-+            "js2c: '%s' is valid UTF-8, yet simdutf reports a UTF-16 length of zero - "
-+            "the simdutf linked into this tool does not agree with the headers it was "
-+            "compiled against\n",
-+            var.c_str());
++  // the one it was compiled against". Report both, and report the input's size and
++  // shape, so a failure in a log can be read without a debugger.
++  {
++    size_t diagnostic_length =
++        simdutf::utf16_length_from_utf8(code.data(), code.size());
++    fprintf(stdout,
++            "js2c: two-byte input '%s' size=%zu utf16_length=%zu first=%02X%02X%02X%02X\n",
++            var.c_str(), code.size(), diagnostic_length,
++            code.size() > 0 ? static_cast<unsigned char>(code[0]) : 0,
++            code.size() > 1 ? static_cast<unsigned char>(code[1]) : 0,
++            code.size() > 2 ? static_cast<unsigned char>(code[2]) : 0,
++            code.size() > 3 ? static_cast<unsigned char>(code[3]) : 0);
++    if (diagnostic_length == 0) {
++      fprintf(stdout,
++              "js2c: '%s' is valid UTF-8, yet simdutf reports a UTF-16 length of zero - "
++              "the simdutf linked into this tool does not agree with the headers it was "
++              "compiled against\n",
++              var.c_str());
++    }
++    fflush(stdout);
 +  }
    return GetDefinitionImpl<uint16_t>(code, var, CodeType::kTwoByte);
  }
@@ -31,11 +43,14 @@ index 97e2aa5..f7c11a6 100644
 +// deps/acorn/acorn/dist/acorn.js). When one of them arrives invalid, that is an
 +// hour of guessing. Name the file and the offset instead, and fail the build as
 +// a normal error.
++//
++// Everything here writes to stdout as well as stderr: vcpkg keeps the two streams
++// in separate files, and only one of them is embedded in the failure report.
 +bool InputIsEmbeddable(const std::string& filename, const std::vector<char>& code) {
 +  if (code.empty()) {
-+    fprintf(stderr,
-+            "js2c: %s is empty, and an empty file cannot be embedded\n",
++    fprintf(stdout, "js2c: %s is empty, and an empty file cannot be embedded\n",
 +            filename.c_str());
++    fflush(stdout);
 +    return false;
 +  }
 +  simdutf::result check =
@@ -44,9 +59,10 @@ index 97e2aa5..f7c11a6 100644
 +    size_t offset = check.count;
 +    unsigned char byte =
 +        offset < code.size() ? static_cast<unsigned char>(code[offset]) : 0;
-+    fprintf(stderr,
++    fprintf(stdout,
 +            "js2c: %s is not valid UTF-8 (byte 0x%02X at offset %zu of %zu)\n",
 +            filename.c_str(), byte, offset, code.size());
++    fflush(stdout);
 +    return false;
 +  }
 +  return true;
@@ -55,7 +71,7 @@ index 97e2aa5..f7c11a6 100644
  int AddModule(const std::string& filename,
                Fragments* definitions,
                Fragments* initializers,
-@@ -698,6 +741,9 @@ int AddModule(const std::string& filename,
+@@ -698,6 +757,9 @@ int AddModule(const std::string& filename,
    if (error != 0) {
      return error;
    }
@@ -65,7 +81,7 @@ index 97e2aa5..f7c11a6 100644
    std::string file_id = GetFileId(filename);
    std::string var = GetVariableName(file_id);
  
-@@ -831,6 +877,9 @@ int AddGypi(const std::string& var,
+@@ -831,6 +893,9 @@ int AddGypi(const std::string& var,
    if (error != 0) {
      return error;
    }
@@ -75,3 +91,16 @@ index 97e2aa5..f7c11a6 100644
    assert(var == "config");
  
    std::vector<char> transformed = JSONify(code);
+@@ -882,6 +947,12 @@ int PrintUsage(const char* argv0) {
+ }
+ 
+ int Main(int argc, char* argv[]) {
++  // Added by this repository's patch set. A build log has to say whether these
++  // diagnostics are even present, or a silent log is ambiguous between "nothing was
++  // wrong" and "the code was not compiled in".
++  fprintf(stdout, "js2c: diagnostic build of tools/js2c.cc (node port patch set), %d args\n",
++          argc);
++  fflush(stdout);
+   if (argc < 3) {
+     return PrintUsage(argv[0]);
+   }

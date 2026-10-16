@@ -162,7 +162,11 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: logs-${{ inputs.preset }}-${{ github.run_id }}
+          # Both streams matter: vcpkg keeps a port's build stdout and stderr in separate
+          # files (build-<config>-out.log / -err.log), and the manifest log only embeds one
+          # of them. Without buildtrees, a diagnostic printed to the other stream is lost.
           path: |
             test/build/**/*.log
+            vcpkg/buildtrees/**/*.log
           if-no-files-found: ignore
           retention-days: 7
