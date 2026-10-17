@@ -398,49 +398,55 @@ if(VCPKG_TARGET_IS_WINDOWS)
 endif()
 
 # ---------------------------------------------------------------------------
-# Cross-compilation (macOS only): when host and target differ, declare the
-# target through Node's own mechanism. Without --dest-cpu, configure.py silently
-# uses the host architecture and only fails later, linking against the
-# target-architecture vcpkg libraries.
+# macOS: declare the target architecture through Node's own mechanism, always.
+#
+# Both flags are needed, and they only work together - checked against
+# configure.py:1977-1983 and common.gypi:782-790 of the Node.js release this port
+# builds:
+#   * --dest-cpu=<arch> is what makes common.gypi's `OS=="mac"` block set
+#     xcode_settings.ARCHS, which gyp's xcode emulation turns into `-arch <arch>`
+#     on every compile and link command. Without it configure.py uses the *host*
+#     architecture, and the build then links host-architecture objects against the
+#     libraries vcpkg installed for the target.
+#   * --no-cross-compiling keeps GYP_CROSSCOMPILE unset, so
+#     want_separate_host_toolset stays 0 and every build tool (torque, mksnapshot,
+#     js2c) is compiled as the target architecture too. Cross-compiling for real
+#     would need host-architecture libraries, which a target triplet does not
+#     install; building the tools as the target and running them under Rosetta 2 on
+#     an arm64 machine is what this port does instead. The CI leg guards for
+#     Rosetta.
+#
+# They are passed unconditionally rather than only when a host probe reports a
+# difference. That probe is a silent-failure trap: a vcpkg portfile runs under
+# `cmake -P`, where CMAKE_HOST_SYSTEM_PROCESSOR is not defined, and the variable
+# vcpkg does export (VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR) exists only once
+# the generated variable file has been asked for. When the probe comes back empty
+# the build quietly takes the native path and fails about 1900 targets later, in
+# the linker - which is what x64-osx did in run 39020793981 ("cannot determine the
+# host architecture ... Treating this as a native build"). Stating the target
+# cannot fail that way, and it is what distributions do: Debian, conda, Arch and
+# Homebrew all pass --dest-cpu on their own native builds.
+#
+# Linux and Windows are deliberately left alone: neither has a cross leg in this
+# repository's matrix, and their cross-compilation stories (a separate host
+# toolset needing host-architecture libraries, clang-cl's -m64 handling) are not
+# this macOS mechanism.
 # ---------------------------------------------------------------------------
 set(_node_dest_cpu_args "")
 if(VCPKG_TARGET_IS_OSX)
-    set(_host_raw "${VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR}")
-    if(_host_raw STREQUAL "")
-        set(_host_raw "${CMAKE_HOST_SYSTEM_PROCESSOR}")
-    endif()
-    if(_host_raw STREQUAL "")
-        find_program(_node_uname uname)
-        if(_node_uname)
-            execute_process(COMMAND "${_node_uname}" -m
-                OUTPUT_VARIABLE _host_raw ERROR_QUIET OUTPUT_QUIET)
-            string(STRIP "${_host_raw}" _host_raw)
-        endif()
-        unset(_node_uname)
-    endif()
-    set(_host_arch "")
-    if(_host_raw MATCHES "^(arm64|aarch64|ARM64)$")
-        set(_host_arch "arm64")
-    elseif(_host_raw MATCHES "^(x86_64|AMD64|[Xx]64)$")
-        set(_host_arch "x64")
-    endif()
-    if(NOT _host_arch)
-        message(WARNING
-            "node port: cannot determine the host architecture "
-            "(VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR='${VCPKG_DETECTED_CMAKE_HOST_SYSTEM_PROCESSOR}', "
-            "CMAKE_HOST_SYSTEM_PROCESSOR='${CMAKE_HOST_SYSTEM_PROCESSOR}', uname -m='${_host_raw}'). "
-            "Treating this as a native build (no --dest-cpu).")
-    elseif(NOT VCPKG_TARGET_ARCHITECTURE MATCHES "^(x86|x64|arm|arm64)$")
+    if(NOT VCPKG_TARGET_ARCHITECTURE MATCHES "^(x86|x64|arm|arm64)$")
         message(WARNING
             "node port: target architecture ${VCPKG_TARGET_ARCHITECTURE} is not one of "
-            "Node's (x86/x64/arm/arm64); skipping the cross declaration.")
-    elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "${_host_arch}")
-        message(STATUS "node port: target ${VCPKG_TARGET_ARCHITECTURE} == host, native build")
+            "Node's (x86/x64/arm/arm64); not declaring a target architecture, so "
+            "configure.py will use the host's.")
     else()
-        set(_node_dest_cpu_args "--dest-cpu=${VCPKG_TARGET_ARCHITECTURE}" "--no-cross-compiling")
+        set(_node_dest_cpu_args
+            "--dest-cpu=${VCPKG_TARGET_ARCHITECTURE}"
+            "--no-cross-compiling")
         message(STATUS
-            "node port: cross-compiling ${_host_arch} -> ${VCPKG_TARGET_ARCHITECTURE} "
-            "(--dest-cpu + --no-cross-compiling)")
+            "node port: declaring target architecture ${VCPKG_TARGET_ARCHITECTURE} "
+            "(--dest-cpu + --no-cross-compiling); the build tools are built for the "
+            "target as well")
     endif()
 endif()
 

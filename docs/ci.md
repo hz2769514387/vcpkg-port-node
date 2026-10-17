@@ -109,11 +109,11 @@ triplet column below only where CI installs vcpkg's release-only variant of the 
 | Leg | Runner | Preset | Triplet | Consumer | Blocking? |
 |---|---|---|---|---|---|
 | x64 Windows | `windows-2022` | `x64-windows-static` | `x64-windows-static-release` | Release | yes |
-| arm64 Windows | `windows-11-arm` | `arm64-windows-static` | `arm64-windows-static-release` | Release | no — fails inside the zlib overlay port |
+| arm64 Windows | `windows-11-arm` | `arm64-windows-static` | `arm64-windows-static-release` | Release | no — was failing inside the zlib overlay port; patch 0005 fixes that |
 | x64 Linux | `ubuntu-latest` | `x64-linux` | `x64-linux-release` | Release | no — passes, still `experimental` |
 | arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release | no — has never finished a build |
 | arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release | yes |
-| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — the port cannot determine the host architecture |
+| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — was failing; the port now states the target architecture |
 | all six | weekly/manual | same | stock (dual) | **Debug** | off the push path |
 
 `ci.yml` and `node-suite.yml` run the Release rows; `debug.yml` runs the last one, where no leg
@@ -134,11 +134,17 @@ Three legs have completed a build end to end: x64 Windows and arm64 macOS
 which passed 17 of 17 cases in 1h29m once the release-only triplet stopped paying for a second
 Node.js build ([issue #8](https://github.com/hz2769514387/vcpkg-port-node/issues/8)). The other
 three legs are in the matrix rather than absent because the port claims to support them, and
-leaving them red-but-non-blocking is how that claim stays honest instead of aspirational. Two
-of the three have a diagnosis rather than a mystery: arm64 Windows dies in this repository's own
-zlib overlay port (the Chromium fork's ARM SIMD path is not defined for MSVC's arm64 compiler),
-and x64 macOS fails because the port cannot determine the host architecture and so builds
-arm64 host tools that will not link against the x86_64 libraries vcpkg installed.
+leaving them red-but-non-blocking is how that claim stays honest instead of aspirational. Two of
+the three now have a cause and a fix rather than a mystery: arm64 Windows died in this
+repository's own zlib overlay port, because the fork's ARM SIMD branch only knows the POSIX
+spellings of the architecture while CMake calls it `ARM64` on Windows - and on the way it also
+needed `ARMV8_OS_WINDOWS` and no `-march`, none of which MSVC can take from the branch as written
+(`ports/zlib/0005-arm64-windows-msvc.patch`) - and x64 macOS failed because the port's
+host-architecture probe came back empty inside a portfile, which vcpkg runs with `cmake -P`, so
+the build quietly took the native path and produced arm64 host tools that cannot link the x86_64
+libraries vcpkg had installed. That probe is gone: the macOS presets state the target
+architecture outright instead of comparing it against a host. arm64 Linux is the one leg with
+neither cause nor fix yet, because its cold build has never finished.
 
 `experimental` is an input to `build-test.yml`, not `continue-on-error` on the caller, and the
 legs are separate jobs rather than a matrix. Both keywords are accepted by the workflow parser

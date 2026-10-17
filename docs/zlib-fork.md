@@ -205,7 +205,9 @@ The official suite's zlib cases pass unchanged: 92 of 92, across `parallel/test-
 
 ## 7. Not done yet
 
-* Only `x64-windows-static` has been built. Linux and macOS are untested, and the arm64 branch of
-  the SIMD block has not been exercised.
+* `x64-windows-static`, `x64-linux` and `arm64-osx` are all built by CI now, so the ARM64 SIMD
+  branch has been exercised - on macOS, where the branch sets `ARMV8_OS_MACOS`. Windows ARM64 is
+  the untested one: CMake spells the architecture `ARM64` there, upstream's branch only knows the
+  POSIX spellings, so patch 0005 rewrites that branch for MSVC and CI has not confirmed it yet.
 * The dynamic-linkage configuration - `zlib` built as a DLL and node linking that - is untested;
   everything measured above is the static configuration.

@@ -26,6 +26,7 @@ vcpkg_from_git(
         0002-do-not-build-the-benchmark-unless-testing.patch
         0003-simd-settings-node-uses.patch
         0004-plain-system-zlib-names.patch
+        0005-arm64-windows-msvc.patch
 )
 
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" ZLIB_BUILD_SHARED)
@@ -34,7 +35,10 @@ string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" ZLIB_BUILD_STATIC)
 # ENABLE_SIMD_OPTIMIZATIONS defaults to OFF in the fork's CMakeLists, so leaving it alone would
 # produce the one thing this port exists to avoid: a zlib without the CPU-dispatch code Node.js
 # runs. Patch 0003 makes the enabled path use Node.js's define set rather than Chromium's - in
-# particular it leaves the crc32 SIMD off, because Node.js leaves it off.
+# particular it leaves the crc32 SIMD off, because Node.js leaves it off. Patch 0005 does the
+# same for the ARM64 branch, which upstream only recognises under the POSIX spellings of the
+# architecture: on Windows CMake calls it ARM64, so a Windows ARM64 build used to receive no
+# SIMD defines at all and died inside the fork.
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS
