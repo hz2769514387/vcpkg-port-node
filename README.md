@@ -83,10 +83,22 @@ Two consequences worth planning for, both of them properties of the port rather 
 
 - **It builds the Node.js source tree.** The first configure of your project therefore costs
   tens of minutes, and the machine needs what the build documents: `cargo`, a Python 3, and on
-  Windows the clang-cl component of Visual Studio (the port locates clang-cl and assembles the
-  MSVC command-line environment itself, so a stock triplet is still all *you* need to select).
+  Windows the clang-cl component of Visual Studio 2022 or newer (the port locates clang-cl and
+  assembles the MSVC command-line environment itself, so a stock triplet is still all *you* need
+  to select).
 - **Nothing is shipped prebuilt.** A binary cache makes repeat builds cheap, but there is no
   artifact to download that skips the build.
+
+### Windows needs Visual Studio 2022 or newer
+
+That requirement is Node.js's, not a choice made here: Node.js has required clang-cl since v24,
+and the port states gyp's Visual Studio version itself (`GYP_MSVS_VERSION=2022`,
+`ports/node/portfile.cmake`) because gyp's own probe reads registry keys that a modern
+installation does not write. Nothing older than the Visual Studio 2022 toolset has been built or
+measured in this repository, so 2022 is the floor rather than a ceiling. The presets under
+`test/` therefore name no generator: CMake uses the newest Visual Studio on the machine, and a
+machine whose newest is 2019 fails inside the port's build, with gyp's or the compiler's
+message, instead of at generator lookup.
 
 ### Overlaying this port replaces zlib for your whole dependency graph
 
@@ -126,8 +138,9 @@ libraries by hand; the generated config is the readable description of that link
 
 Five gates, described in `docs/ci.md`: a seconds-long lint pass on every push; a release-only
 build of the port through `test/` on every push, across all six platform cells - both
-architectures on Windows, Linux and macOS - blocking on the two legs that have completed a
-build and non-blocking on the rest until each does; a weekly build of the Debug configuration,
+architectures on Windows, Linux and macOS - blocking on x64 Windows and arm64 macOS and
+non-blocking on the rest until each completes a build (x64 Linux reached that point on
+2026-10-17); a weekly build of the Debug configuration,
 which is off the push path because it costs roughly a full extra build per platform; a weekly
 run of Node.js's own test suite; and a scheduled watcher that compares the pinned Node.js
 version against `nodejs.org` and opens an issue when upstream moves, because nothing else will:

@@ -22,22 +22,27 @@ It is never installed anywhere and it is not an example to copy into another bui
 ```sh
 export VCPKG_ROOT=/path/to/bootstrapped/vcpkg     # Windows: $env:VCPKG_ROOT = ...
 
-cmake --preset windows -DCMAKE_BUILD_TYPE=Release  # or: linux, macos
-cmake --build --preset windows --config Release
-ctest --test-dir build/windows -C Release --output-on-failure
+cmake --preset x64-windows-static -DCMAKE_BUILD_TYPE=Release  # or: x64-linux, arm64-osx, ...
+cmake --build --preset x64-windows-static --config Release
+ctest --test-dir build/x64-windows-static -C Release --output-on-failure
 ```
 
-Presets exist for both architectures on each platform: `windows`, `windows-arm64`, `linux`,
-`linux-arm64`, `macos`, `macos-x64`. Each names a triplet that ships with vcpkg itself
-(`x64-windows-static`, `arm64-windows-static`, `x64-linux`, `arm64-linux`, `arm64-osx`,
-`x64-osx`) and carries no configuration, so `CMAKE_BUILD_TYPE` and `--config` decide that. With
-an unset `VCPKG_BUILD_TYPE` such a triplet makes the port build Release **and** Debug, so a
-Debug consumer is possible - configure with `-DCMAKE_BUILD_TYPE=Debug` and build with
-`--config Debug`. CI instead names vcpkg's community **release-only** triplets (`*-release`),
-whose install has no debug library; the port's exported config says so at configure time on
-Windows rather than letting the link fail with a wall of `LNK2038`.
+A preset is named after the vcpkg triplet it selects, so the name you type is the triplet you
+install: `x64-windows-static`, `arm64-windows-static`, `x64-linux`, `arm64-linux`, `arm64-osx`,
+`x64-osx` - both architectures on each platform. Each names a triplet that ships with vcpkg
+itself and carries no configuration, so `CMAKE_BUILD_TYPE` and `--config` decide that. With an
+unset `VCPKG_BUILD_TYPE` such a triplet makes the port build Release **and** Debug, so a Debug
+consumer is possible - configure with `-DCMAKE_BUILD_TYPE=Debug` and build with `--config Debug`.
+CI instead names vcpkg's community **release-only** triplets (`*-release`), whose install has no
+debug library; the port's exported config says so at configure time on Windows rather than
+letting the link fail with a wall of `LNK2038`.
 
-`macos-x64` is the one cross build: it sets `CMAKE_OSX_ARCHITECTURES=x86_64` so that an arm64
+On Windows the presets name no generator, so CMake uses the newest Visual Studio installed: what
+the port needs is Visual Studio 2022 or newer, and that is written down under *Known limits* in
+the [README](../README.md). The target machine type then follows the machine, which is why the
+arm64 preset is for an arm64 machine rather than a cross build.
+
+`x64-osx` is the one cross build: it sets `CMAKE_OSX_ARCHITECTURES=x86_64` so that an arm64
 machine produces an x86_64 consumer (and vcpkg reads that back to pick `x64-osx`). The binaries
 it runs then need Rosetta 2, which is a property of the machine, not of this project.
 
@@ -71,7 +76,7 @@ Useful switches:
 Fast runs skip the heavy label:
 
 ```sh
-ctest --test-dir build/windows -C Release -LE node-suite --output-on-failure
+ctest --test-dir build/x64-windows-static -C Release -LE node-suite --output-on-failure
 ```
 
 ## Skip lists

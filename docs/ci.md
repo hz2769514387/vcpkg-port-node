@@ -32,10 +32,10 @@ that only builds when driven in a special way is not a port, and CI should disco
 first.
 
 ```sh
-VCPKG_ROOT=<pinned checkout> cmake --preset windows \
+VCPKG_ROOT=<pinned checkout> cmake --preset x64-windows-static \
     -DVCPKG_TARGET_TRIPLET=x64-windows-static-release -DCMAKE_BUILD_TYPE=Release
-cmake --build --preset windows --config Release
-ctest --test-dir build/windows -C Release -LE node-suite --output-on-failure
+cmake --build --preset x64-windows-static --config Release
+ctest --test-dir build/x64-windows-static -C Release -LE node-suite --output-on-failure
 ```
 
 Requirements the runner image has to satisfy, all of them failures that have happened at least
@@ -102,16 +102,18 @@ the cause:
 
 ## 3. The matrix
 
-Six legs: both architectures on each of the three platforms the manifest claims.
+Six legs: both architectures on each of the three platforms the manifest claims. A preset in
+`test/CMakePresets.json` is named after the vcpkg triplet it selects, so it differs from the
+triplet column below only where CI installs vcpkg's release-only variant of the same triplet.
 
 | Leg | Runner | Preset | Triplet | Consumer | Blocking? |
 |---|---|---|---|---|---|
-| x64 Windows | `windows-2022` | `windows` | `x64-windows-static-release` | Release | yes |
-| arm64 Windows | `windows-11-arm` | `windows-arm64` | `arm64-windows-static-release` | Release | no — never built |
-| x64 Linux | `ubuntu-latest` | `linux` | `x64-linux-release` | Release | no — never built |
-| arm64 Linux | `ubuntu-24.04-arm` | `linux-arm64` | `arm64-linux-release` | Release | no — never built |
-| arm64 macOS | `macos-latest` | `macos` | `arm64-osx-release` | Release | yes |
-| x64 macOS | `macos-15` | `macos-x64` | `x64-osx-release` | Release | no — never built |
+| x64 Windows | `windows-2022` | `x64-windows-static` | `x64-windows-static-release` | Release | yes |
+| arm64 Windows | `windows-11-arm` | `arm64-windows-static` | `arm64-windows-static-release` | Release | no — fails inside the zlib overlay port |
+| x64 Linux | `ubuntu-latest` | `x64-linux` | `x64-linux-release` | Release | no — passes, still `experimental` |
+| arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release | no — has never finished a build |
+| arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release | yes |
+| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — the port cannot determine the host architecture |
 | all six | weekly/manual | same | stock (dual) | **Debug** | off the push path |
 
 `ci.yml` and `node-suite.yml` run the Release rows; `debug.yml` runs the last one, where no leg
@@ -123,25 +125,34 @@ are asked for `x86_64` (the preset sets `CMAKE_OSX_ARCHITECTURES`, which is also
 reads back to pick the triplet). The produced binaries run under Rosetta, hence the guard in
 section 2.3. A native Intel runner would avoid that; none is used today.
 
-Windows is pinned to `windows-2022` rather than `windows-latest`: the Visual Studio generator
-wants the VS 2022 toolset the runner image states, and the port's `GYP_MSVS_VERSION` is 2022.
+Windows is pinned to `windows-2022` rather than `windows-latest`: the port pins the Visual
+Studio 2022 toolset for gyp (`GYP_MSVS_VERSION`, `ports/node/portfile.cmake`) and needs its
+clang-cl, which that image states.
 
-Only x64 Windows and arm64 macOS have completed a build end to end
-([build.md](build.md), [node-suite.md](node-suite.md)); the other four legs are in the matrix
-rather than absent because the port claims to support them, and leaving them
-red-but-non-blocking is how that claim stays honest instead of aspirational. The Linux legs are
-the oldest gap ([issue #8](https://github.com/hz2769514387/vcpkg-port-node/issues/8)) - the x64
-one was killed by the five-hour limit while it was still building, because it was paying for two
-Node.js builds.
+Three legs have completed a build end to end: x64 Windows and arm64 macOS
+([build.md](build.md), [node-suite.md](node-suite.md)), and - as of 2026-10-17 - x64 Linux,
+which passed 17 of 17 cases in 1h29m once the release-only triplet stopped paying for a second
+Node.js build ([issue #8](https://github.com/hz2769514387/vcpkg-port-node/issues/8)). The other
+three legs are in the matrix rather than absent because the port claims to support them, and
+leaving them red-but-non-blocking is how that claim stays honest instead of aspirational. Two
+of the three have a diagnosis rather than a mystery: arm64 Windows dies in this repository's own
+zlib overlay port (the Chromium fork's ARM SIMD path is not defined for MSVC's arm64 compiler),
+and x64 macOS fails because the port cannot determine the host architecture and so builds
+arm64 host tools that will not link against the x86_64 libraries vcpkg installed.
 
 `experimental` is an input to `build-test.yml`, not `continue-on-error` on the caller, and the
 legs are separate jobs rather than a matrix. Both keywords are accepted by the workflow parser
 and then produce a run with **zero jobs** and a "workflow file issue" failure - a job that calls
 a reusable workflow takes neither. If you add either back, that is what you will see.
 
-Windows is deliberately the Visual Studio generator with an explicit architecture
-(`x64`, `arm64`): the default platform of a Visual Studio generator is Win32, and an
-`x64-windows-static` triplet would then be asked for a Win32 build.
+The Windows presets name neither a generator nor an architecture, and both omissions are
+deliberate. Naming a generator pins one Visual Studio version, while what the port needs is
+2022 **or newer** - the requirement is written down in the README's *Known limits*, because a
+too old Visual Studio fails inside the port's own build rather than at generator lookup - and
+left alone CMake picks the newest Visual Studio installed. Leaving the architecture unstated
+leaves the target machine type to the generator, whose default platform is the machine's own:
+that is the machine type every Windows leg asks for, and stating it explicitly would make any
+non-Visual-Studio generator a hard configure error.
 
 Build presets in `test/CMakePresets.json` deliberately carry no `configuration`: on a
 multi-config generator (Visual Studio) the configuration comes from `cmake --build --config`
@@ -171,6 +182,17 @@ a permission, not a platform property.
 pinned vcpkg commit, the triplet and the contents of `ports/` plus the test manifest, because
 any of those changing changes the ABI of what gets built. The triplet is part of the key
 deliberately: different legs install different binaries and must not share an entry.
+
+**A warm cache is why a leg can finish in minutes, and it is not a leg skipping its work.** The
+restore keys deliberately fall back to an older entry of the same runner and triplet, so a run
+whose `ports/` changed still starts from the previous archives, and vcpkg then reuses only the
+ones whose ABI hash matches - a port change that changes what is built is therefore rebuilt, not
+served stale. When `node` itself comes back from the archive the port is not compiled again, but
+the leg still configures, still builds the consumer project and still runs ctest, which is what
+makes the pass mean anything; the log says so explicitly
+(`Restored 23 package(s) from <workspace>/vcpkg-archives in 5.6 s`). Two legs of the run for
+`2e15776` finished in 35 s and 2m43s that way, against 1h29m for the same Linux leg on a cold
+cache.
 
 The obvious choice - the `x-gha` provider, which is what GitHub Actions caching used to mean
 for vcpkg - was **removed from vcpkg**, and this repository's first CI run proved the failure

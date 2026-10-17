@@ -116,8 +116,9 @@ Where things go:
 ## 7. Before you say "done"
 
 - Run the same thing CI runs when it is affordable:
-  `cmake --preset <platform> && cmake --build --preset <platform>` then
-  `ctest --test-dir build/<platform> -C Release -LE node-suite` from `test/`. The suite
+  `cmake --preset <triplet> && cmake --build --preset <triplet>` then
+  `ctest --test-dir build/<triplet> -C Release -LE node-suite` from `test/`. A preset is named
+  after the vcpkg triplet it selects. The suite
   (`-R node-suite`) is what decides the result is still Node.js, and it is worth its hour
   before anything that touches the build.
 - Say what changed, what you verified, and what you did **not** verify.

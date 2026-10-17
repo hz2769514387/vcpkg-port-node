@@ -41,7 +41,7 @@ jobs:
     secrets: inherit
     with:
       runner: windows-2022
-      preset: windows
+      preset: x64-windows-static
       triplet: x64-windows-static
       config: Debug
       expect-arch: x64
@@ -53,7 +53,7 @@ jobs:
     secrets: inherit
     with:
       runner: windows-11-arm
-      preset: windows-arm64
+      preset: arm64-windows-static
       triplet: arm64-windows-static
       config: Debug
       expect-arch: ARM64
@@ -65,7 +65,7 @@ jobs:
     secrets: inherit
     with:
       runner: ubuntu-latest
-      preset: linux
+      preset: x64-linux
       triplet: x64-linux
       config: Debug
       ctest-options: -LE node-suite
@@ -76,7 +76,7 @@ jobs:
     secrets: inherit
     with:
       runner: ubuntu-24.04-arm
-      preset: linux-arm64
+      preset: arm64-linux
       triplet: arm64-linux
       config: Debug
       ctest-options: -LE node-suite
@@ -87,7 +87,7 @@ jobs:
     secrets: inherit
     with:
       runner: macos-latest
-      preset: macos
+      preset: arm64-osx
       triplet: arm64-osx
       config: Debug
       expect-arch: arm64
@@ -99,7 +99,7 @@ jobs:
     secrets: inherit
     with:
       runner: macos-15
-      preset: macos-x64
+      preset: x64-osx
       triplet: x64-osx
       config: Debug
       expect-arch: x86_64

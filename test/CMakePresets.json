@@ -9,7 +9,7 @@
     {
       "name": "base",
       "hidden": true,
-      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout; every preset names a vcpkg triplet that ships with vcpkg itself - nothing here carries a triplet file, which is the whole point of the port. An unset VCPKG_BUILD_TYPE builds both Release and Debug, so anything that links Debug gets Debug.",
+      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout; every preset is named after the vcpkg triplet it selects, and that triplet ships with vcpkg itself - nothing here carries a triplet file, which is the whole point of the port. An unset VCPKG_BUILD_TYPE builds both Release and Debug, so anything that links Debug gets Debug.",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -18,15 +18,10 @@
       }
     },
     {
-      "name": "windows",
+      "name": "x64-windows-static",
       "inherits": "base",
       "displayName": "Windows x64 (x64-windows-static)",
-      "description": "Visual Studio 2022 rather than Ninja so that a Windows consumer needs nothing beyond vcpkg. CMAKE_MSVC_RUNTIME_LIBRARY has to be stated explicitly: vcpkg's own windows.cmake toolchain sets /MT for building ports, but a consumer's CMake never loads it, so it would default to /MD and fail at link time with LNK2038 against the /MT static library.",
-      "generator": "Visual Studio 17 2022",
-      "architecture": {
-        "value": "x64",
-        "strategy": "external"
-      },
+      "description": "No generator is named on purpose. Naming one would pin one Visual Studio version, and the requirement is Visual Studio 2022 or newer (README, Known limits), not 2022 exactly: left to itself CMake picks the newest Visual Studio installed, so a consumer on 2026 is not forced onto 2022 and one on 2019 fails in the port's build rather than at generator lookup. With no architecture stated either, the target machine type is the machine's own, which is what a Visual Studio generator does by default. CMAKE_MSVC_RUNTIME_LIBRARY has to be stated explicitly: vcpkg's own windows.cmake toolchain sets /MT for building ports, but a consumer's CMake never loads it, so it would default to /MD and fail at link time with LNK2038 against the /MT static library.",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -39,15 +34,10 @@
       }
     },
     {
-      "name": "windows-arm64",
+      "name": "arm64-windows-static",
       "inherits": "base",
       "displayName": "Windows arm64 (arm64-windows-static)",
-      "description": "The same settings as the x64 preset with the architecture swapped. Node.js 24+ builds Windows arm64 with clang-cl targeting aarch64, which the port sets up itself; what matters here is that the VS generator is told arm64, because its default platform is Win32 and the triplet would then be asked for the wrong machine type.",
-      "generator": "Visual Studio 17 2022",
-      "architecture": {
-        "value": "arm64",
-        "strategy": "external"
-      },
+      "description": "The same settings as the x64 preset, with the arm64 triplet. The machine type follows the machine here as well, so this preset is what CI runs on an arm64 runner rather than a cross build from x64. Node.js 24+ builds Windows arm64 with clang-cl targeting aarch64, which the port sets up itself.",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
@@ -60,7 +50,7 @@
       }
     },
     {
-      "name": "linux",
+      "name": "x64-linux",
       "inherits": "base",
       "displayName": "Linux x64 (x64-linux)",
       "generator": "Ninja",
@@ -74,7 +64,7 @@
       }
     },
     {
-      "name": "linux-arm64",
+      "name": "arm64-linux",
       "inherits": "base",
       "displayName": "Linux arm64 (arm64-linux)",
       "generator": "Ninja",
@@ -88,7 +78,7 @@
       }
     },
     {
-      "name": "macos",
+      "name": "arm64-osx",
       "inherits": "base",
       "displayName": "macOS arm64 (arm64-osx)",
       "generator": "Ninja",
@@ -102,7 +92,7 @@
       }
     },
     {
-      "name": "macos-x64",
+      "name": "x64-osx",
       "inherits": "base",
       "displayName": "macOS x64 (x64-osx)",
       "description": "x86_64 on an arm64 runner: CMAKE_OSX_ARCHITECTURES makes the consumer build the same machine type the triplet asks vcpkg for, and vcpkg reads it back to pick the triplet. The binaries the build runs are then x86_64 and need Rosetta 2, which the CI leg provides - a plain arm64 macOS machine does not necessarily have it.",
@@ -120,28 +110,28 @@
   ],
   "buildPresets": [
     {
-      "name": "windows",
-      "configurePreset": "windows"
+      "name": "x64-windows-static",
+      "configurePreset": "x64-windows-static"
     },
     {
-      "name": "windows-arm64",
-      "configurePreset": "windows-arm64"
+      "name": "arm64-windows-static",
+      "configurePreset": "arm64-windows-static"
     },
     {
-      "name": "linux",
-      "configurePreset": "linux"
+      "name": "x64-linux",
+      "configurePreset": "x64-linux"
     },
     {
-      "name": "linux-arm64",
-      "configurePreset": "linux-arm64"
+      "name": "arm64-linux",
+      "configurePreset": "arm64-linux"
     },
     {
-      "name": "macos",
-      "configurePreset": "macos"
+      "name": "arm64-osx",
+      "configurePreset": "arm64-osx"
     },
     {
-      "name": "macos-x64",
-      "configurePreset": "macos-x64"
+      "name": "x64-osx",
+      "configurePreset": "x64-osx"
     }
   ]
 }
