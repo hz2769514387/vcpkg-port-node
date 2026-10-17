@@ -41,6 +41,13 @@ Windows rather than letting the link fail with a wall of `LNK2038`.
 machine produces an x86_64 consumer (and vcpkg reads that back to pick `x64-osx`). The binaries
 it runs then need Rosetta 2, which is a property of the machine, not of this project.
 
+**Which vcpkg you point at is the pin.** The project states no `builtin-baseline` (and no
+`overrides`), because on the built-in registry either one has to be a commit and resolving it
+requires a git checkout of vcpkg - which would rule out the release tarball a user may
+legitimately have downloaded. CI checks out release 2026.07.29 instead (ADR 0005). Running
+locally against a different release is therefore allowed and is not a configuration error, but
+it changes every dependency version, so results are only comparable against the pinned release.
+
 **Do not reuse a `build/<preset>` directory after changing `VCPKG_ROOT`.** vcpkg records its own
 root in the CMake cache as `Z_VCPKG_ROOT_DIR` and never recomputes it once a value is there, so
 a cache left over from a different vcpkg keeps invoking that one - including from Visual

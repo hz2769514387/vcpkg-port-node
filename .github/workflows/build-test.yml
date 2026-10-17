@@ -39,7 +39,7 @@ on:
         type: string
         default: ""
       vcpkg-commit:
-        description: "vcpkg commit to check out (ADR 0003: the baseline is pinned)."
+        description: "vcpkg commit to check out (ADR 0005: the pin is the checkout)."
         required: false
         type: string
         default: 9e593bb18ea69cc5095e012465dcd675a822ed0d

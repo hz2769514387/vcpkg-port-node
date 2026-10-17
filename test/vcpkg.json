@@ -3,9 +3,9 @@
   "version-string": "0.0.0",
   "description": [
     "Consumer-side validation project for the node port: it consumes the port exactly the way anyone else would (overlay-ports + manifest + stock triplet + find_package(unofficial-node)), links the same libraries Node.js itself externalizes next to the ones V8 would otherwise compile in, and runs Node.js's own test suite against both the embedded runtime and the tools feature executable.",
-    "This project is never installed anywhere; it exists to answer two questions: can the node port be consumed, and is what it produced still Node.js."
+    "This project is never installed anywhere; it exists to answer two questions: can the node port be consumed, and is what it produced still Node.js.",
+    "It runs against whatever vcpkg VCPKG_ROOT points at, with no builtin-baseline and no overrides: on the built-in registry either one can only be a commit, and resolving it requires a git checkout of vcpkg, which would rule out the release tarball a consumer may legitimately have downloaded. The pin to vcpkg release 2026.07.29 therefore lives in CI, which checks out that commit (ADR 0005)."
   ],
-  "builtin-baseline": "9e593bb18ea69cc5095e012465dcd675a822ed0d",
   "dependencies": [
     {
       "name": "node",

@@ -3,7 +3,8 @@
 What runs, where, and what each run actually proves. Every workflow lives in
 `.github/workflows/`; anything about *why* the gates are shaped this way is in the ADRs, not
 here ([0002](decisions/0002-node-version-policy.md), [0003](decisions/0003-vcpkg-baseline-policy.md),
-[0004](decisions/0004-continuous-integration.md)).
+[0004](decisions/0004-continuous-integration.md),
+[0005](decisions/0005-vcpkg-pin-without-a-manifest-baseline.md)).
 
 ## 1. The gates
 
@@ -24,7 +25,7 @@ whether a leg is blocking. Each of them also ends with a job that calls
 
 ## 2. How a build is done
 
-Nothing builds the port directly. Every leg checks out the pinned vcpkg (ADR 0003),
+Nothing builds the port directly. Every leg checks out the pinned vcpkg (ADR 0005),
 bootstraps it, and then configures `test/` - the consumer test project - which pulls the port
 in through its manifest and builds it as an ordinary dependency. That is deliberate: a port
 that only builds when driven in a special way is not a port, and CI should discover that
