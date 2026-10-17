@@ -1,12 +1,17 @@
 name: Build and test the node port
 
 # The shared body of every build in this repository: check out the pinned vcpkg, let the
-# consumer test project build the port through it, then run ctest. Called by ci.yml and
-# node-suite.yml, so the two never drift apart.
+# consumer test project build the port through it, then run ctest. Called by ci.yml,
+# debug.yml and node-suite.yml, so they never drift apart.
 #
-# Everything here uses the public consumption path on purpose - overlay ports, a manifest, a
-# stock triplet. If the port only builds when driven in some special way, this is where that
-# would show up.
+# Everything here uses the public consumption path on purpose - overlay ports, a manifest,
+# a triplet that ships with vcpkg, `find_package(unofficial-node CONFIG)`. If the port only
+# builds when driven in some special way, this is where that would show up.
+#
+# The triplets named by the callers are vcpkg's own, its `*-release` *community* triplets
+# included - those are the stock settings plus `VCPKG_BUILD_TYPE release`, and that one line
+# is what keeps a leg from building Release *and* Debug, which would double its wall-clock
+# time. This repository carries no triplet file of its own.
 
 on:
   workflow_call:
@@ -20,9 +25,19 @@ on:
         required: true
         type: string
       triplet:
-        description: vcpkg triplet, for the log header only - the preset already sets it.
+        description: vcpkg triplet to install with, which is what decides the build configuration.
         required: true
         type: string
+      config:
+        description: Consumer build configuration - what the consumer test project is built as. Must match the triplet.
+        required: false
+        type: string
+        default: Release
+      expect-arch:
+        description: "Architecture the built consumer executable must have: x64 / ARM64 / x86 / ARM on Windows (PE machine), x86_64 / arm64 on macOS (Mach-O). Empty skips the check."
+        required: false
+        type: string
+        default: ""
       vcpkg-commit:
         description: "vcpkg commit to check out (ADR 0003: the baseline is pinned)."
         required: false
@@ -38,6 +53,11 @@ on:
         required: false
         type: boolean
         default: false
+      timeout-minutes:
+        description: Job timeout. A dual-configuration (Debug) leg on a slow runner needs more than the default.
+        required: false
+        type: number
+        default: 300
 
 permissions:
   contents: read
@@ -45,13 +65,16 @@ permissions:
 jobs:
   build:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: 300
+    timeout-minutes: ${{ inputs.timeout-minutes }}
     # continue-on-error has to live here rather than on the caller: a job that calls a
     # reusable workflow does not accept it - the file is accepted and then produces a run
     # with zero jobs and "this run likely failed because of a workflow file issue".
     continue-on-error: ${{ inputs.experimental }}
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      # Every log this job produces is tee'd here, so the artifact is one directory no matter
+      # which step failed, and a reader does not have to open several.
+      CI_LOGDIR: ${{ runner.temp }}/ci-logs
       # The GitHub Actions binary cache provider (x-gha) was removed from vcpkg, and
       # `clear;x-gha,readwrite` therefore silently disables caching entirely - it prints a
       # warning and builds every dependency from source on every run. The supported
@@ -68,9 +91,10 @@ jobs:
       - name: Report the starting point
         shell: bash
         run: |
+          mkdir -p "$CI_LOGDIR"
           echo "### Port build"
-          echo "- runner: ${{ inputs.runner }}"
-          echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }})"
+          echo "- runner: ${{ inputs.runner }} ($RUNNER_OS/$RUNNER_ARCH)"
+          echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }}, consumer ${{ inputs.config }})"
           echo "- vcpkg: ${{ inputs.vcpkg-commit }}"
           echo "- ctest: ${{ inputs.ctest-options }}"
           echo ""
@@ -82,10 +106,11 @@ jobs:
           path: ${{ github.workspace }}/vcpkg-archives
           # The key covers the vcpkg commit and the contents of ports/ plus the test
           # manifest: any of those changing changes the ABI of what gets built, so a stale
-          # entry would restore the wrong binaries.
-          key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ hashFiles('ports/**', 'test/vcpkg.json') }}
+          # entry would restore the wrong binaries. The triplet is part of the ABI too, so
+          # legs that install different triplets must not share an entry.
+          key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-${{ hashFiles('ports/**', 'test/vcpkg.json') }}
           restore-keys: |
-            vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-
+            vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-
 
       - name: Check out the pinned vcpkg
         shell: bash
@@ -114,9 +139,10 @@ jobs:
       - name: Toolchain inventory
         shell: bash
         run: |
-          # Everything below is a hard requirement of the node port, and each one has failed
-          # at least once somewhere: cargo for Node.js 26's Temporal crate, python for gyp and
-          # for the official test driver, clang-cl on Windows (upstream requirement since 24).
+          # Everything below is a hard requirement, and each one has failed at least once
+          # somewhere: cargo for Node.js 26's Temporal crate, python for gyp and for the
+          # official test driver, clang-cl on Windows (upstream requirement since 24), and a
+          # CMake 4 or newer for vcpkg's own scripts.
           echo "cargo         : $(cargo --version || echo MISSING)"
           echo "python        : $(python --version 2>&1 || echo MISSING)"
           echo "python3       : $(python3 --version 2>&1 || echo MISSING)"
@@ -126,47 +152,221 @@ jobs:
             echo "clang-cl      : $(command -v clang-cl || echo MISSING)"
           fi
 
+      - name: Require CMake 4 or newer
+        shell: bash
+        run: |
+          set -euo pipefail
+          # vcpkg's own scripts use `string(JSON ... STRING_ENCODE)`, which only exists from
+          # CMake 4. On an image that still ships 3.31 the very first dependency fails with
+          # "invalid mode 'STRING_ENCODE'", which reads like a port bug rather than an image
+          # problem. Checked here so that failure mode is named instead of diagnosed.
+          version="$(cmake --version | head -n 1 | sed -E 's/^[^0-9]*([0-9]+).*/\1/')"
+          echo "cmake major: ${version:-unknown}"
+          if [ -z "$version" ] || [ "$version" -lt 4 ]; then
+            echo "::error::the CMake on PATH reports major version '$version', but vcpkg's scripts need CMake 4 or newer. Install a newer CMake on this leg."
+            exit 1
+          fi
+
+      - name: Ensure Rosetta 2 is available (macOS x64 only)
+        if: runner.os == 'macOS' && contains(inputs.triplet, 'x64-osx')
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The port builds its host tools as the *target* machine type too (Node.js's
+          # --no-cross-compiling path), so on an arm64 image the build and its tests execute
+          # x86_64 binaries. Probed through the capability rather than by looking for a
+          # package name: GitHub's arm64 images do not guarantee Rosetta is preinstalled, and
+          # without it the failure surfaces far from the cause ("Bad CPU type in executable").
+          if arch -x86_64 /usr/bin/true 2>/dev/null; then
+            echo "Rosetta 2 is present"
+          else
+            echo "Installing Rosetta 2"
+            sudo softwareupdate --install-rosetta --agree-to-license
+            arch -x86_64 /usr/bin/true
+          fi
+
       - name: Configure the consumer test project
         shell: bash
         working-directory: test
         env:
           PRESET: ${{ inputs.preset }}
+          TRIPLET: ${{ inputs.triplet }}
+          CONFIG: ${{ inputs.config }}
         run: |
           set -euo pipefail
-          # This is also what builds the port: vcpkg runs in manifest mode during configure.
-          cmake --preset "$PRESET"
+          # This is also what builds the port: vcpkg runs in manifest mode during configure,
+          # and it downloads every dependency's sources while doing so. vcpkg has no retry of
+          # its own for a source tarball, and one timeout from an upstream mirror costs the
+          # whole leg, so a failed attempt is retried - but only when the failure looks like a
+          # download problem. Anything else is a real defect and is left to fail immediately,
+          # because retrying it would only spend the wall-clock twice.
+          log="$CI_LOGDIR/configure.log"
+          attempt_no=0
+          for attempt in 1 2 3 4; do
+            attempt_no="$attempt"
+            if cmake --preset "$PRESET" \
+                 -DVCPKG_TARGET_TRIPLET="$TRIPLET" \
+                 -DCMAKE_BUILD_TYPE="$CONFIG" 2>&1 | tee "$log"; then
+              echo "configure succeeded on attempt $attempt"
+              exit 0
+            fi
+            if grep -qiE "download|timeout|timed out|Could not resolve host|connection reset|Connection refused|SSL|curl" "$log"; then
+              echo "::warning::attempt $attempt failed with what looks like a download error; retrying in $((attempt * 10))s"
+              sleep $((attempt * 10))
+            else
+              echo "::error::attempt $attempt failed for a reason that is not a download problem; not retrying"
+              exit 1
+            fi
+          done
+          echo "::error::configure still failing after $attempt_no attempts"
+          exit 1
 
       - name: Build the consumer test project
         shell: bash
         working-directory: test
         env:
           PRESET: ${{ inputs.preset }}
+          CONFIG: ${{ inputs.config }}
         run: |
           set -euo pipefail
-          cmake --build --preset "$PRESET"
+          # tee'd as well: the port's own output lands in vcpkg's buildtrees, but this step's
+          # output is the consumer's, and the first-error summary reads both.
+          cmake --build --preset "$PRESET" --config "$CONFIG" 2>&1 | tee "$CI_LOGDIR/build.log"
+
+      - name: Assert the architecture of the built executable
+        if: ${{ inputs.expect-arch != '' }}
+        shell: bash
+        working-directory: test
+        env:
+          PRESET: ${{ inputs.preset }}
+          CONFIG: ${{ inputs.config }}
+          EXPECT_ARCH: ${{ inputs.expect-arch }}
+        run: |
+          set -euo pipefail
+          # Why this exists (it is not decoration): an arm64 Windows runner can execute x64
+          # binaries through emulation, and an arm64 macOS runner can execute x86_64 binaries
+          # through Rosetta. A build that silently produced the wrong machine type would
+          # therefore run perfectly and pass every ctest case while proving nothing. This
+          # reads the file itself, which needs no toolchain and no developer environment, so
+          # it still works after an earlier step has broken the environment.
+          exe=""
+          for cand in "build/$PRESET/embedder/$CONFIG/node_embed.exe" \
+                      "build/$PRESET/embedder/node_embed.exe" \
+                      "build/$PRESET/embedder/node_embed"; do
+            if [ -f "$cand" ]; then exe="$cand"; break; fi
+          done
+          if [ -z "$exe" ]; then
+            exe="$(find "build/$PRESET" -type f -name 'node_embed*' 2>/dev/null | head -1 || true)"
+          fi
+          if [ -z "$exe" ] || [ ! -f "$exe" ]; then
+            echo "::error::no embedder executable under build/$PRESET to check the architecture of. What is there:"
+            find "build/$PRESET" -maxdepth 4 -type f -name 'node_embed*' 2>/dev/null | head -20 || true
+            exit 1
+          fi
+
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            # Mach-O: `file` prints e.g. "Mach-O 64-bit executable x86_64".
+            description="$(file -b "$exe")"
+            case "$description" in
+              *x86_64*) got="x86_64" ;;
+              *arm64*)  got="arm64" ;;
+              *)        got="$description" ;;
+            esac
+            detail="$description"
+          else
+            # PE: e_lfanew at 0x3C is the offset of the signature, Machine the first word
+            # after it. od reads two bytes as a host-endian 16-bit value, so a little-endian
+            # file prints the machine code in readable order (x64 -> 8664, arm64 -> aa64).
+            pe_off="$(od -An -tu4 -j60 -N4 "$exe" | tr -d ' \n')"
+            machine="$(od -An -tx2 -j"$((pe_off + 4))" -N2 "$exe" | tr -d ' \n')"
+            case "$machine" in
+              8664) got="x64" ;;
+              aa64) got="ARM64" ;;
+              014c) got="x86" ;;
+              01c4) got="ARM" ;;
+              *)    got="0x$machine" ;;
+            esac
+            detail="PE Machine 0x$machine"
+          fi
+
+          echo "$exe: $detail -> $got (expected $EXPECT_ARCH)"
+          if [ "$got" != "$EXPECT_ARCH" ]; then
+            echo "::error::the built executable is $got, not $EXPECT_ARCH. An arm64 runner emulates or translates the other architecture, so a wrong-architecture build still runs and its tests still pass - it has to be caught here."
+            exit 1
+          fi
 
       - name: Run the tests
         shell: bash
         working-directory: test
         env:
           PRESET: ${{ inputs.preset }}
+          CONFIG: ${{ inputs.config }}
           CTEST_OPTIONS: ${{ inputs.ctest-options }}
         run: |
           set -euo pipefail
           # -C is only meaningful for multi-config generators (Visual Studio); the
           # single-config ones ignore it.
-          ctest --test-dir "build/$PRESET" -C Release --output-on-failure $CTEST_OPTIONS
+          ctest --test-dir "build/$PRESET" -C "$CONFIG" --output-on-failure $CTEST_OPTIONS \
+            2>&1 | tee "$CI_LOGDIR/ctest.log"
 
-      - name: Keep the logs when something fails
-        if: failure()
+      - name: Summarize the run
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          {
+            echo "## ${{ inputs.triplet }} (${{ inputs.config }})"
+            echo ""
+            echo '```'
+            # The pass/fail counts go first: they are the whole answer to "did this leg work",
+            # and they are easy to miss at the end of a few thousand lines.
+            if [ -f "$CI_LOGDIR/ctest.log" ]; then
+              grep -E "tests passed|tests failed|Total Test time" "$CI_LOGDIR/ctest.log" | head -n 5 || true
+              awk '/The following tests FAILED/{found=1} found' "$CI_LOGDIR/ctest.log" | head -n 40 || true
+            else
+              echo "no ctest log: this leg did not get that far"
+            fi
+            echo '```'
+            # The first error, from whichever stream failed first: the port's own diagnostics
+            # live in vcpkg's buildtrees, the consumer's in the tee'd logs.
+            echo ""
+            echo '### First error'
+            echo '```'
+            {
+              grep -m1 -hE "error|Error" "$CI_LOGDIR"/*.log 2>/dev/null || true
+              for f in $(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 100); do
+                if grep -m1 -hE "error:|CMake Error|BUILD_FAILED" "$f" 2>/dev/null; then break; fi
+              done
+            } | head -n 15
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect the logs
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p "$CI_LOGDIR/vcpkg"
+          # The port's own stdout and stderr are separate files in vcpkg's buildtrees
+          # (build-<config>-out.log / -err.log), and the manifest log embeds only one of them.
+          # Without them a diagnostic printed to the other stream is lost.
+          while IFS= read -r f; do
+            cp "$f" "$CI_LOGDIR/vcpkg/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
+          done < <(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 200)
+          # The consumer build's own CMake logs, which are not under buildtrees.
+          while IFS= read -r f; do
+            cp "$f" "$CI_LOGDIR/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
+          done < <(find test/build -name '*.log' -type f 2>/dev/null | head -n 200)
+          du -sh "$CI_LOGDIR" || true
+          ls -la "$CI_LOGDIR" || true
+
+      - name: Upload this leg's logs
+        if: always()
         uses: actions/upload-artifact@v4
         with:
-          name: logs-${{ inputs.preset }}-${{ github.run_id }}
-          # Both streams matter: vcpkg keeps a port's build stdout and stderr in separate
-          # files (build-<config>-out.log / -err.log), and the manifest log only embeds one
-          # of them. Without buildtrees, a diagnostic printed to the other stream is lost.
-          path: |
-            test/build/**/*.log
-            vcpkg/buildtrees/**/*.log
-          if-no-files-found: ignore
+          # Named so that the merge job in every calling workflow picks all legs up with one
+          # pattern: one archive per run, not one per platform.
+          name: logs-part-${{ inputs.triplet }}-${{ inputs.config }}
+          path: ${{ runner.temp }}/ci-logs
+          if-no-files-found: warn
           retention-days: 7

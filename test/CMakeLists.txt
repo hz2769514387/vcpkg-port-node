@@ -16,9 +16,9 @@
 #   smoke/           fast assertions about the *installed* port: Node.js identity, and which
 #                    dependencies actually came from vcpkg rather than out of the vendored
 #                    source tree. Seconds, so they run on every push.
-#   official_suite/  Node.js's own suite through its own driver. Minutes to an hour; labelled
-#                    `node-suite` so a fast run can skip it with `ctest -LE node-suite`.
-#   cmake/           shared CMake helpers: the suite driver and its skip lists.
+#   official_suite/  Node.js's own suite through its own driver, plus its skip lists. Minutes
+#                    to an hour; labelled `node-suite` so a fast run can skip it with
+#                    `ctest -LE node-suite`.
 #
 # Each directory stands on its own - deleting any one of them leaves the others working.
 # The dependency direction is exactly one way: this project consumes `../ports`.
@@ -50,7 +50,7 @@ set(NODE_TEST_SUITES_EXTRA
 
 set(NODE_TEST_SKIP
     ""
-    CACHE STRING "Extra skips for one run. Long-lived ones belong in cmake/node-suite-skips.txt, which requires a written reason for every entry.")
+    CACHE STRING "Extra skips for one run. Long-lived ones belong in official_suite/node-suite-skips.txt, which requires a written reason for every entry.")
 
 set(NODE_TEST_SHARDS
     "1"

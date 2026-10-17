@@ -1,0 +1,115 @@
+name: Debug configuration
+
+# The Debug cell of the configuration matrix (issue #11).
+#
+# Why its own workflow rather than a leg of ci.yml: the Debug configuration is built with the
+# *stock* triplet, which means `VCPKG_BUILD_TYPE` is unset and the port builds Release **and**
+# Debug. That is roughly twice the work, and on a Linux runner it exceeds the five-hour job
+# limit that already killed the old push gate. Keeping it off the push path buys the fast gate
+# its speed without giving up the configuration.
+#
+# Why the stock triplet rather than a debug-only one: a debug-only triplet
+# (`VCPKG_BUILD_TYPE=debug`) moves every install into `${prefix}/debug/...`, and seven ports
+# in this port's dependency closure run post-install fixups against the non-debug layout and
+# fail there - brotli, c-ares, libuv, ngtcp2, openssl, zstd, and this repository's own zlib
+# overlay. A stock triplet with a Debug *consumer* reaches the same configuration with no
+# overlay ports to maintain. The measurements are in issue #11.
+#
+# Weekly rather than per push, and manual on demand: the cost is real and these legs are not
+# on anyone's critical path.
+
+on:
+  schedule:
+    - cron: '47 4 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: debug-${{ github.ref }}
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  # One job per platform rather than a matrix - see the note in ci.yml. The same six cells as
+  # ci.yml, with the Debug consumer instead of the Release one.
+  #
+  # None of these legs is `experimental`: this workflow never runs on a push, so a red run
+  # blocks nothing, and the failures are exactly what it exists to surface.
+  windows:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-2022
+      preset: windows
+      triplet: x64-windows-static
+      config: Debug
+      expect-arch: x64
+      ctest-options: -LE node-suite
+      timeout-minutes: 420
+
+  windows-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-11-arm
+      preset: windows-arm64
+      triplet: arm64-windows-static
+      config: Debug
+      expect-arch: ARM64
+      ctest-options: -LE node-suite
+      timeout-minutes: 420
+
+  linux:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      preset: linux
+      triplet: x64-linux
+      config: Debug
+      ctest-options: -LE node-suite
+      timeout-minutes: 420
+
+  linux-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24.04-arm
+      preset: linux-arm64
+      triplet: arm64-linux
+      config: Debug
+      ctest-options: -LE node-suite
+      timeout-minutes: 420
+
+  macos:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: macos-latest
+      preset: macos
+      triplet: arm64-osx
+      config: Debug
+      expect-arch: arm64
+      ctest-options: -LE node-suite
+      timeout-minutes: 420
+
+  macos-x64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: macos-15
+      preset: macos-x64
+      triplet: x64-osx
+      config: Debug
+      expect-arch: x86_64
+      ctest-options: -LE node-suite
+      timeout-minutes: 420
+
+  logs:
+    needs: [windows, windows-arm64, linux, linux-arm64, macos, macos-x64]
+    if: always()
+    uses: ./.github/workflows/logs.yml
+    secrets: inherit
+    with:
+      label: debug

@@ -1,5 +1,5 @@
 # Skips for Node.js's own test suite - the single source of truth, read by
-# test/cmake/NodeTestSuite.cmake.
+# test/official_suite/CMakeLists.txt.
 #
 # Format, one per line:  <test name> | <platform> | <reason>
 #
@@ -24,7 +24,8 @@
 
 # -- Windows ------------------------------------------------------------------
 # The TypeScript compiler emits CRLF on Windows while the fixture expects LF. Upstream test
-# bug, reproduced here with the port-built executable; see docs/test-suite-results.md.
+# bug, reproduced here with the port-built executable; the mechanism is the "line endings in
+# generated output" category in docs/node-suite.md, section 4.
 test-snapshot-typescript | windows | tsc emits CRLF on Windows, the fixture compares against LF
 
 # The test asserts empty stderr and the environment carries both NO_COLOR and FORCE_COLOR,

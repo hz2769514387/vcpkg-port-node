@@ -1,11 +1,14 @@
 name: Node.js test suite
 
 # The slow gate. Node.js's own suite, run through its own driver, against the executable this
-# repository's consumer project links from libnode. Weekly, and on demand, because one run is
-# roughly an hour per platform.
+# repository's consumer project links from libnode. Weekly, and on demand.
 #
 # The whole point of this repository is that the result is still Node.js, so this is the test
 # that actually decides it - it just cannot be the one that runs on every push.
+#
+# Release-only, like ci.yml: the suite is the delivery configuration's suite, and vcpkg's
+# community `*-release` triplet halves a run that is already the better part of an hour.
+# The same six cells as ci.yml.
 
 on:
   schedule:
@@ -26,9 +29,23 @@ jobs:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
-      runner: windows-latest
+      runner: windows-2022
       preset: windows
-      triplet: x64-windows-static
+      triplet: x64-windows-static-release
+      config: Release
+      expect-arch: x64
+      ctest-options: -R node-suite
+
+  windows-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-11-arm
+      preset: windows-arm64
+      triplet: arm64-windows-static-release
+      config: Release
+      expect-arch: ARM64
+      experimental: true
       ctest-options: -R node-suite
 
   linux:
@@ -37,7 +54,19 @@ jobs:
     with:
       runner: ubuntu-latest
       preset: linux
-      triplet: x64-linux
+      triplet: x64-linux-release
+      config: Release
+      experimental: true
+      ctest-options: -R node-suite
+
+  linux-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24.04-arm
+      preset: linux-arm64
+      triplet: arm64-linux-release
+      config: Release
       experimental: true
       ctest-options: -R node-suite
 
@@ -47,6 +76,27 @@ jobs:
     with:
       runner: macos-latest
       preset: macos
-      triplet: arm64-osx
+      triplet: arm64-osx-release
+      config: Release
+      expect-arch: arm64
+      ctest-options: -R node-suite
+
+  macos-x64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: macos-15
+      preset: macos-x64
+      triplet: x64-osx-release
+      config: Release
+      expect-arch: x86_64
       experimental: true
       ctest-options: -R node-suite
+
+  logs:
+    needs: [windows, windows-arm64, linux, linux-arm64, macos, macos-x64]
+    if: always()
+    uses: ./.github/workflows/logs.yml
+    secrets: inherit
+    with:
+      label: node-suite

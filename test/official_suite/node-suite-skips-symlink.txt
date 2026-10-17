@@ -1,6 +1,6 @@
 # Skips applied only when this machine cannot create symlinks - read by
-# test/cmake/NodeTestSuite.cmake, which probes the capability instead of guessing from the
-# platform name.
+# test/official_suite/CMakeLists.txt, which probes the capability instead of guessing from
+# the platform name.
 #
 # Creating a file symlink on Windows requires SeCreateSymbolicLinkPrivilege, which a normal
 # unprivileged process does not have. It is a property of the account Windows gives you
@@ -8,8 +8,8 @@
 # so the port cannot fix it and the platform name cannot predict it. Hence the probe.
 #
 # All 28 entries below were measured as EPERM failures on such a machine with the port-built
-# executable (docs/test-suite-results.md, 2026-10-16). They are expected to pass wherever
-# symlinks are permitted, and they are re-examined on every Node.js version bump.
+# executable (2026-10-16). They are expected to pass wherever symlinks are permitted, and
+# they are re-examined on every Node.js version bump.
 #
 # Same format as node-suite-skips.txt:  <test name> | <platform> | <reason>
 

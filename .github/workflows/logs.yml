@@ -1,0 +1,57 @@
+name: Log archive
+
+# Merge every leg's log artifact into one, so reading a run is one download instead of one per
+# platform. Called as a job by ci.yml, debug.yml and node-suite.yml after their legs have run.
+#
+# Each leg uploads `logs-part-<triplet>-<config>` unconditionally (build-test.yml), so the
+# archive covers failures *and* successes; without that, the run whose logs you want is
+# exactly the one that has none.
+
+on:
+  workflow_call:
+    inputs:
+      label:
+        description: Name for the archive, e.g. "ci", "debug", "node-suite".
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+jobs:
+  merge:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: logs-part-*
+          path: all-logs
+          merge-multiple: false
+
+      - name: Merge them into one archive
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Create the directory first: when every leg failed at zero seconds (a workflow file
+          # GitHub rejects, for instance) download-artifact creates nothing, and an `ls`-driven
+          # tar would then fail - turning "there were no logs" into a second, misleading red.
+          mkdir -p all-logs
+          ls -R all-logs | head -n 60 || true
+          tar -czf "${{ inputs.label }}-logs.tar.gz" -C all-logs .
+          ls -lh "${{ inputs.label }}-logs.tar.gz"
+          {
+            echo "## Log archive"
+            echo ""
+            echo "One download for the whole run: \`${{ inputs.label }}-logs.tar.gz\`."
+            echo ""
+            echo '```'
+            tar -tzf "${{ inputs.label }}-logs.tar.gz" | head -n 60 || true
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ${{ inputs.label }}-logs
+          path: ${{ inputs.label }}-logs.tar.gz
+          if-no-files-found: error
+          retention-days: 7

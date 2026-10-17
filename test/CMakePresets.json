@@ -9,7 +9,7 @@
     {
       "name": "base",
       "hidden": true,
-      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout; every preset uses a stock vcpkg triplet, which is the whole point of the port - a consumer is supposed to need nothing else. An unset VCPKG_BUILD_TYPE builds both Release and Debug, so anything that links Debug gets Debug.",
+      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout; every preset names a vcpkg triplet that ships with vcpkg itself - nothing here carries a triplet file, which is the whole point of the port. An unset VCPKG_BUILD_TYPE builds both Release and Debug, so anything that links Debug gets Debug.",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -39,6 +39,27 @@
       }
     },
     {
+      "name": "windows-arm64",
+      "inherits": "base",
+      "displayName": "Windows arm64 (arm64-windows-static)",
+      "description": "The same settings as the x64 preset with the architecture swapped. Node.js 24+ builds Windows arm64 with clang-cl targeting aarch64, which the port sets up itself; what matters here is that the VS generator is told arm64, because its default platform is Win32 and the triplet would then be asked for the wrong machine type.",
+      "generator": "Visual Studio 17 2022",
+      "architecture": {
+        "value": "arm64",
+        "strategy": "external"
+      },
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Windows"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
+        "NODE_TEST_JOBS": "2"
+      }
+    },
+    {
       "name": "linux",
       "inherits": "base",
       "displayName": "Linux x64 (x64-linux)",
@@ -50,6 +71,20 @@
       },
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux"
+      }
+    },
+    {
+      "name": "linux-arm64",
+      "inherits": "base",
+      "displayName": "Linux arm64 (arm64-linux)",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Linux"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-linux"
       }
     },
     {
@@ -65,21 +100,48 @@
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-osx"
       }
+    },
+    {
+      "name": "macos-x64",
+      "inherits": "base",
+      "displayName": "macOS x64 (x64-osx)",
+      "description": "x86_64 on an arm64 runner: CMAKE_OSX_ARCHITECTURES makes the consumer build the same machine type the triplet asks vcpkg for, and vcpkg reads it back to pick the triplet. The binaries the build runs are then x86_64 and need Rosetta 2, which the CI leg provides - a plain arm64 macOS machine does not necessarily have it.",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-osx",
+        "CMAKE_OSX_ARCHITECTURES": "x86_64"
+      }
     }
   ],
   "buildPresets": [
     {
       "name": "windows",
-      "configurePreset": "windows",
-      "configuration": "Release"
+      "configurePreset": "windows"
+    },
+    {
+      "name": "windows-arm64",
+      "configurePreset": "windows-arm64"
     },
     {
       "name": "linux",
       "configurePreset": "linux"
     },
     {
+      "name": "linux-arm64",
+      "configurePreset": "linux-arm64"
+    },
+    {
       "name": "macos",
       "configurePreset": "macos"
+    },
+    {
+      "name": "macos-x64",
+      "configurePreset": "macos-x64"
     }
   ]
 }
