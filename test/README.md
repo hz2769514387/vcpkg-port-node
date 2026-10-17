@@ -41,6 +41,12 @@ Windows rather than letting the link fail with a wall of `LNK2038`.
 machine produces an x86_64 consumer (and vcpkg reads that back to pick `x64-osx`). The binaries
 it runs then need Rosetta 2, which is a property of the machine, not of this project.
 
+**Do not reuse a `build/<preset>` directory after changing `VCPKG_ROOT`.** vcpkg records its own
+root in the CMake cache as `Z_VCPKG_ROOT_DIR` and never recomputes it once a value is there, so
+a cache left over from a different vcpkg keeps invoking that one - including from Visual
+Studio's CMake integration, which reads the same cache. Delete `build/<preset>` when you move
+vcpkg, and `test/.vs` if Visual Studio still points at the old one.
+
 The configure step also builds `node` itself through vcpkg, which takes tens of minutes on a
 cold cache and requires the tools the port documents: clang-cl and the MSVC command line on
 Windows, cargo everywhere (Node.js 26 builds its Temporal crate from Rust).
