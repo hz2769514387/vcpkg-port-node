@@ -92,6 +92,23 @@ Two consequences worth planning for, both of them properties of the port rather 
 - **Nothing is shipped prebuilt.** A binary cache makes repeat builds cheap, but there is no
   artifact to download that skips the build.
 
+### On macOS the library's minimum system version is the graph's, not Node.js's
+
+Node.js builds for macOS 13.5, and that number is Node.js's own: it is pinned in
+`common.gypi` and there is no knob for it. Everything else in the graph is vcpkg's: each
+dependency is built with the deployment target vcpkg was given - `VCPKG_OSX_DEPLOYMENT_TARGET`,
+stated in a triplet, because no stock vcpkg triplet pins one - or, when it was given none, the
+SDK's default, which is newer than 13.5 on any current machine. The port therefore hands the
+graph's value to Node.js's own build (`patches/0018`, through `GYP_DEFINES`) and keeps Node.js's
+floor as a lower bound, so the whole library agrees with its dependencies instead of the linker
+warning about every one of them (see the build log entry this replaces: `ld: warning: object file
+(...libicuuc.a[...]) was built for newer 'macOS' version (15.0) than being linked (13.5)`).
+
+The consequence to plan for: **the delivered library requires the graph's macOS version, which by
+default is the SDK's - not Node.js's 13.5.** A consumer who needs 13.5 states
+`set(VCPKG_OSX_DEPLOYMENT_TARGET 13.5)` in their triplet, and the dependencies and Node.js both
+follow it.
+
 ### Windows needs Visual Studio 2022 or newer
 
 That requirement is Node.js's, not a choice made here: Node.js has required clang-cl since v24,

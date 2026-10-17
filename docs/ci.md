@@ -154,8 +154,11 @@ libraries vcpkg had installed. That probe is gone: the macOS presets state the t
 architecture outright instead of comparing it against a host. Stating the target then met a
 second, runner-side wall - `cargo --target x86_64-apple-darwin` wants the Rust standard library
 for that architecture, which an arm64 image does not ship (section 2.3) - and that is provisioned
-now too, so the leg is building. arm64 Linux is the one leg with neither cause nor fix yet,
-because its cold build has never finished.
+now too, so the leg is building. The port also hands Node.js's own build the graph's macOS
+deployment target (`patches/0018`, through `GYP_DEFINES`, with Node.js's 13.5 floor as a lower
+bound), which is why this leg's build log no longer carries one `ld: warning: object file ... was
+built for newer 'macOS' version` per dependency object. arm64 Linux is the one leg with neither
+cause nor fix yet, because its cold build has never finished.
 
 `experimental` is an input to `build-test.yml`, not `continue-on-error` on the caller, and the
 legs are separate jobs rather than a matrix. Both keywords are accepted by the workflow parser

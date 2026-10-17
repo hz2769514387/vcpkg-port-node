@@ -82,6 +82,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0015-js2c-report-unusable-input.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0016-torque-normalize-source-position-paths.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0017-js2c-fallback-simdutf-convert.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0018-macos-deployment-target-from-the-build.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
@@ -448,6 +449,94 @@ if(VCPKG_TARGET_IS_OSX)
             "(--dest-cpu + --no-cross-compiling); the build tools are built for the "
             "target as well")
     endif()
+endif()
+
+# ---------------------------------------------------------------------------
+# macOS: hand Node.js's build the deployment target the rest of the graph uses.
+#
+# Node.js pins its own macOS floor in common.gypi ('MACOSX_DEPLOYMENT_TARGET', 13.5),
+# and nothing else on macOS agrees with it: every dependency vcpkg builds takes the
+# deployment target vcpkg was given - VCPKG_OSX_DEPLOYMENT_TARGET, which a consumer
+# states in a triplet - or, when it was given none, the SDK's default, because no
+# stock vcpkg triplet pins one. Node.js's own objects are then the only ones in the
+# link claiming a different system version, and every macOS build reports it:
+#
+#   ld: warning: object file (...libicuuc.a[24](errorcode.ao)) was built for newer
+#     'macOS' version (15.0) than being linked (13.5)
+#
+# So the graph's value is handed to node's build through GYP_DEFINES, which overrides
+# the gyp variable that patches/0018-macos-deployment-target-from-the-build.patch
+# introduces for exactly this (gyp folds GYP_DEFINES into its defines, so a `x%`
+# default is overridden the same way a command-line -D would override it). Node's own
+# floor stays a lower bound: Node.js cannot be built for an older macOS than it
+# supports, while objects built for an older one link into a newer target without
+# complaint.
+# ---------------------------------------------------------------------------
+if(VCPKG_TARGET_IS_OSX)
+    # Node's floor is read from the source rather than repeated here, so a Node.js
+    # bump cannot leave a stale number behind. Patch 0018 is what puts the variable
+    # into common.gypi, so its absence is a defect here, not a variation.
+    file(READ "${SOURCE_PATH}/common.gypi" _node_common_gypi)
+    string(REGEX MATCH "'node_port_macosx_deployment_target%': '([0-9.]+)'" _node_floor_match
+                  "${_node_common_gypi}")
+    if(NOT _node_floor_match)
+        message(FATAL_ERROR
+            "node port: common.gypi has no node_port_macosx_deployment_target% default. Either "
+            "patches/0018-macos-deployment-target-from-the-build.patch did not apply or upstream "
+            "moved the macOS deployment target; the value cannot be handed to the build without it.")
+    endif()
+    set(_node_macos_floor "${CMAKE_MATCH_1}")
+    unset(_node_common_gypi)
+    unset(_node_floor_match)
+
+    # What the graph builds for. A consumer who states VCPKG_OSX_DEPLOYMENT_TARGET gets
+    # exactly that; otherwise the value is read off a dependency, because vcpkg's own
+    # detection reports the variable - empty here - and not the SDK default it falls
+    # back to. zlib is a dependency of this port, so its library is always installed.
+    set(_node_macos_target "${VCPKG_OSX_DEPLOYMENT_TARGET}")
+    if(_node_macos_target STREQUAL "")
+        foreach(_cand
+            "${CURRENT_INSTALLED_DIR}/lib/libz.a"
+            "${CURRENT_INSTALLED_DIR}/lib/libz.dylib"
+            "${CURRENT_INSTALLED_DIR}/lib/libcrypto.a"
+            "${CURRENT_INSTALLED_DIR}/lib/libcrypto.dylib")
+            if(NOT EXISTS "${_cand}")
+                continue()
+            endif()
+            execute_process(COMMAND /usr/bin/otool -l "${_cand}"
+                            OUTPUT_VARIABLE _node_otool_out ERROR_QUIET)
+            if(_node_otool_out MATCHES "minos ([0-9]+(\\.[0-9]+)?)")
+                set(_node_macos_target "${CMAKE_MATCH_1}")
+            elseif(_node_otool_out MATCHES "LC_VERSION_MIN_MACOSX[^;]*version ([0-9]+(\\.[0-9]+)?)")
+                set(_node_macos_target "${CMAKE_MATCH_1}")
+            endif()
+            unset(_node_otool_out)
+            if(NOT _node_macos_target STREQUAL "")
+                break()
+            endif()
+        endforeach()
+        unset(_cand)
+    endif()
+
+    if(_node_macos_target STREQUAL "")
+        message(WARNING
+            "node port: no macOS deployment target could be determined: VCPKG_OSX_DEPLOYMENT_TARGET "
+            "is unset and no dependency library could be read. Node.js keeps its own floor "
+            "${_node_macos_floor}, while the dependencies were built with whatever vcpkg used by "
+            "default - which is newer - so the link will warn about every one of them. State the "
+            "value with VCPKG_OSX_DEPLOYMENT_TARGET in your triplet to make them agree.")
+        set(_node_macos_target "${_node_macos_floor}")
+    elseif(_node_macos_target VERSION_LESS "${_node_macos_floor}")
+        message(STATUS
+            "node port: the graph builds for macOS ${_node_macos_target}, which is below Node.js's own "
+            "floor ${_node_macos_floor}; node's build stays at the floor")
+        set(_node_macos_target "${_node_macos_floor}")
+    endif()
+
+    set(ENV{GYP_DEFINES} "node_port_macosx_deployment_target=${_node_macos_target}")
+    message(STATUS
+        "node port: node's macOS deployment target ${_node_macos_target} (Node.js floor "
+        "${_node_macos_floor}, graph ${VCPKG_OSX_DEPLOYMENT_TARGET})")
 endif()
 
 # ---------------------------------------------------------------------------

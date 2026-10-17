@@ -1,0 +1,28 @@
+diff --git a/common.gypi b/common.gypi
+--- a/common.gypi
++++ b/common.gypi
+@@ -7,6 +7,15 @@
+     'target_arch%': 'ia32',           # set v8's target architecture
+     'host_arch%': 'ia32',             # set v8's host architecture
+     'want_separate_host_toolset%': 0, # V8 should not build target and host
++    # Node.js's own macOS floor, and the default here is what a plain `./configure &&
++    # make` build targets. A vcpkg port that ships node as a library cannot use it
++    # blindly: every dependency vcpkg builds on macOS takes the deployment target
++    # vcpkg was told, or the SDK's default when it was told nothing, so a node build
++    # pinned to 13.5 would be the one object in the link that says something else
++    # ("ld: warning: object file ... was built for newer 'macOS' version"). Such a
++    # port states the value it wants through GYP_DEFINES, which overrides this
++    # default the same way it overrides any other gyp variable.
++    'node_port_macosx_deployment_target%': '13.5',
+     'library%': 'static_library',     # allow override to 'shared_library' for DLL/.so builds
+     'component%': 'static_library',   # NB. these names match with what V8 expects
+     'msvs_multi_core_compile': '0',   # we do enable multicore compiles, but not using the V8 way
+@@ -760,7 +769,7 @@
+           'GCC_ENABLE_PASCAL_STRINGS': 'NO',        # No -mpascal-strings
+           'GCC_STRICT_ALIASING': 'NO',              # -fno-strict-aliasing
+           'PREBINDING': 'NO',                       # No -Wl,-prebind
+-          'MACOSX_DEPLOYMENT_TARGET': '13.5',       # -mmacosx-version-min=13.5
++          'MACOSX_DEPLOYMENT_TARGET': '<(node_port_macosx_deployment_target)',
+           'USE_HEADERMAP': 'NO',
+           'WARNING_CFLAGS': [
+             '-Wall',
