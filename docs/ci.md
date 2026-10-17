@@ -117,11 +117,11 @@ triplet column below only where CI installs vcpkg's release-only variant of the 
 | Leg | Runner | Preset | Triplet | Consumer | Blocking? |
 |---|---|---|---|---|---|
 | x64 Windows | `windows-2022` | `x64-windows-static` | `x64-windows-static-release` | Release | yes |
-| arm64 Windows | `windows-11-arm` | `arm64-windows-static` | `arm64-windows-static-release` | Release | no — was failing inside the zlib overlay port; patch 0005 fixes that |
+| arm64 Windows | `windows-11-arm` | `arm64-windows-static` | `arm64-windows-static-release` | Release | no — zlib fixed (patch 0005); it now reaches the last link, over libffi's ARM64 assembly (patch 0019) |
 | x64 Linux | `ubuntu-latest` | `x64-linux` | `x64-linux-release` | Release | no — passes, still `experimental` |
 | arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release | no — has never finished a build |
 | arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release | yes |
-| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — both causes fixed, the Rust target included |
+| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — passes now; still `experimental` |
 | all six | weekly/manual | same | stock (dual) | **Debug** | off the push path |
 
 `ci.yml` and `node-suite.yml` run the Release rows; `debug.yml` runs the last one, where no leg
@@ -137,28 +137,39 @@ Windows is pinned to `windows-2022` rather than `windows-latest`: the port pins 
 Studio 2022 toolset for gyp (`GYP_MSVS_VERSION`, `ports/node/portfile.cmake`) and needs its
 clang-cl, which that image states.
 
-Three legs have completed a build end to end: x64 Windows and arm64 macOS
-([build.md](build.md), [node-suite.md](node-suite.md)), and - as of 2026-10-17 - x64 Linux,
-which passed 17 of 17 cases in 1h29m once the release-only triplet stopped paying for a second
-Node.js build ([issue #8](https://github.com/hz2769514387/vcpkg-port-node/issues/8)). The other
-three legs are in the matrix rather than absent because the port claims to support them, and
-leaving them red-but-non-blocking is how that claim stays honest instead of aspirational. Two of
-the three now have a cause and a fix rather than a mystery: arm64 Windows died in this
-repository's own zlib overlay port, because the fork's ARM SIMD branch only knows the POSIX
-spellings of the architecture while CMake calls it `ARM64` on Windows - and on the way it also
-needed `ARMV8_OS_WINDOWS` and no `-march`, none of which MSVC can take from the branch as written
-(`ports/zlib/0005-arm64-windows-msvc.patch`) - and x64 macOS failed because the port's
-host-architecture probe came back empty inside a portfile, which vcpkg runs with `cmake -P`, so
-the build quietly took the native path and produced arm64 host tools that cannot link the x86_64
-libraries vcpkg had installed. That probe is gone: the macOS presets state the target
-architecture outright instead of comparing it against a host. Stating the target then met a
-second, runner-side wall - `cargo --target x86_64-apple-darwin` wants the Rust standard library
-for that architecture, which an arm64 image does not ship (section 2.3) - and that is provisioned
-now too, so the leg is building. The port also hands Node.js's own build the graph's macOS
-deployment target (`patches/0018`, through `GYP_DEFINES`, with Node.js's 13.5 floor as a lower
-bound), which is why this leg's build log no longer carries one `ld: warning: object file ... was
-built for newer 'macOS' version` per dependency object. arm64 Linux is the one leg with neither
-cause nor fix yet, because its cold build has never finished.
+Four legs have completed a build end to end: x64 Windows and arm64 macOS
+([build.md](build.md), [node-suite.md](node-suite.md)), x64 Linux, which passed 17 of 17 cases in
+1h29m once the release-only triplet stopped paying for a second Node.js build, and - as of
+2026-10-17 - x64 macOS, which did it in 1h23m after two fixes of its own
+([issue #8](https://github.com/hz2769514387/vcpkg-port-node/issues/8)). The other two legs are in
+the matrix rather than absent because the port claims to support them, and leaving them
+red-but-non-blocking is how that claim stays honest instead of aspirational. Both have a cause
+rather than a mystery:
+
+- **x64 macOS** failed because the port's host-architecture probe came back empty inside a
+  portfile, which vcpkg runs with `cmake -P`, so the build quietly took the native path and
+  produced arm64 host tools that cannot link the x86_64 libraries vcpkg had installed. The probe
+  is gone: the presets state the target outright instead of comparing it against a host. Stating
+  the target then met a second, runner-side wall - `cargo --target x86_64-apple-darwin` wants the
+  Rust standard library for that architecture, which an arm64 image does not ship (section 2.3) -
+  and that is provisioned too. The port also hands Node.js's own build the graph's macOS
+  deployment target (`patches/0018`), which is why this leg's log no longer carries one
+  `ld: warning: object file ... was built for newer 'macOS' version` per dependency object.
+- **arm64 Windows** first died in this repository's own zlib overlay port, because the fork's ARM
+  SIMD branch only knows the POSIX spellings of the architecture while CMake calls it `ARM64` on
+  Windows - and on the way it also needed `ARMV8_OS_WINDOWS`, `__ARM_NEON` and no `-march`, none
+  of which MSVC can take from the branch as written
+  (`ports/zlib/0005-arm64-windows-msvc.patch`). With that fixed it built all 22 dependencies and
+  2250 of node's 2257 targets, to fail in the last link: node's `deps/libffi` assembles its
+  Windows arm64 object into an action output that only the MSBuild generator's link step picks up,
+  so under `gyp -f ninja` the object was silently absent and `node_mksnapshot.exe` could not
+  resolve `ffi_call_SYSV`, `ffi_closure_SYSV` and `ffi_closure_SYSV_V`
+  (`ports/node/patches/0019`).
+- **arm64 Linux** is the one leg with neither cause nor fix yet, because its cold build has never
+  finished.
+
+x64 Linux and x64 macOS both pass today and both are still `experimental`; dropping that flag is
+a gate decision to take deliberately, one leg at a time, not a consequence of a green run.
 
 `experimental` is an input to `build-test.yml`, not `continue-on-error` on the caller, and the
 legs are separate jobs rather than a matrix. Both keywords are accepted by the workflow parser

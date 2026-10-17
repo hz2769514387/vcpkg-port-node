@@ -1,0 +1,22 @@
+diff --git a/deps/libffi/libffi.gyp b/deps/libffi/libffi.gyp
+--- a/deps/libffi/libffi.gyp
++++ b/deps/libffi/libffi.gyp
+@@ -316,7 +316,17 @@
+           'actions': [
+             {
+               'action_name': 'assemble_win64_arm_asm',
+-              # Don't use process_outputs_as_sources - we link the .obj directly
++              # Upstream leaves this off and links the object through 'libraries'
++              # instead, which is what the MSBuild generator does - it passes a static
++              # library's 'libraries' on to the link step of every dependent project.
++              # This port builds with `gyp -f ninja`, and that generator does not: for
++              # a Windows static_library it links the objects themselves
++              # (NinjaTarget.component_objs, "incremental linking requires linking
++              # against all the .objs"), collecting them from the sources that end in
++              # .obj - a 'libraries' entry never reaches a link line. Without this the
++              # assembled object is silently absent, and the link fails on
++              # ffi_call_SYSV, ffi_closure_SYSV and ffi_closure_SYSV_V.
++              'process_outputs_as_sources': 1,
+               'inputs': [
+                 'preprocess_asm.py',
+                 'include/ffi_cfi.h',

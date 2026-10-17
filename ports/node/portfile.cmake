@@ -83,6 +83,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0016-torque-normalize-source-position-paths.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0017-js2c-fallback-simdutf-convert.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0018-macos-deployment-target-from-the-build.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0019-libffi-win-arm64-asm-reaches-ninja.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
