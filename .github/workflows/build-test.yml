@@ -159,6 +159,55 @@ jobs:
             echo "clang-cl      : $(command -v clang-cl || echo MISSING)"
           fi
 
+      - name: Ensure CMake 4 or newer (vcpkg's scripts need it)
+        shell: bash
+        run: |
+          set -euo pipefail
+          # vcpkg's own scripts call `string(JSON ... STRING_ENCODE)`, which CMake only grew in
+          # 4.0. An image that still ships 3.31 therefore fails on the very first dependency
+          # with "invalid mode 'STRING_ENCODE'", which reads like a port bug rather than an
+          # image problem - it cost the node24 line a full diagnosis, and ubuntu-24.04-arm hit
+          # it here. Installed rather than gated: a stale image must not become a broken leg.
+          #
+          # The version is read out of a variable, not through a pipeline into `head`. With
+          # `set -o pipefail`, `head -n 1` closing the pipe early can kill the writer with
+          # SIGPIPE and fail this step on a CMake that is perfectly fine.
+          version_output="$(cmake --version 2>/dev/null || true)"
+          major="$(printf '%s\n' "$version_output" | sed -nE '1s/^cmake version ([0-9]+).*/\1/p')"
+          if [ -n "$major" ] && [ "$major" -ge 4 ]; then
+            echo "the CMake on PATH is already 4 or newer: $(printf '%s\n' "$version_output" | sed -n 1p)"
+            exit 0
+          fi
+
+          version=4.4.0
+          case "${RUNNER_OS}-${RUNNER_ARCH}" in
+            Linux-X64)     asset="cmake-$version-linux-x86_64.tar.gz";    inner="cmake-$version-linux-x86_64" ;;
+            Linux-ARM64)   asset="cmake-$version-linux-aarch64.tar.gz";   inner="cmake-$version-linux-aarch64" ;;
+            macOS-*)       asset="cmake-$version-macos-universal.tar.gz"; inner="cmake-$version-macos-universal/CMake.app/Contents" ;;
+            Windows-ARM64) asset="cmake-$version-windows-arm64.zip";      inner="cmake-$version-windows-arm64" ;;
+            Windows-*)     asset="cmake-$version-windows-x86_64.zip";     inner="cmake-$version-windows-x86_64" ;;
+            *) echo "::error::no CMake $version asset known for ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+          esac
+          # The arm64 assets are used on purpose: an x86_64 CMake under emulation on an arm64
+          # runner is slow and adds a variable to every build.
+          root="$RUNNER_TEMP/cmake-$version"
+          mkdir -p "$root"
+          curl -fsSL -o "$root/$asset" \
+            "https://github.com/Kitware/CMake/releases/download/v$version/$asset"
+          case "$asset" in
+            *.zip)
+              if command -v unzip >/dev/null 2>&1; then
+                unzip -q -o "$root/$asset" -d "$root"
+              else
+                # Git Bash does not always ship unzip; PowerShell always can.
+                powershell -NoProfile -Command "Expand-Archive -LiteralPath '$root/$asset' -DestinationPath '$root' -Force"
+              fi
+              ;;
+            *) tar -xzf "$root/$asset" -C "$root" ;;
+          esac
+          echo "$root/$inner/bin" >> "$GITHUB_PATH"
+          "$root/$inner/bin/cmake" --version
+
       - name: Ensure Rosetta 2 is available (macOS x64 only)
         if: runner.os == 'macOS' && contains(inputs.triplet, 'x64-osx')
         shell: bash
@@ -202,7 +251,8 @@ jobs:
               echo "configure succeeded on attempt $attempt"
               exit 0
             fi
-            if grep -qiE "download|timeout|timed out|Could not resolve host|connection reset|Connection refused|SSL|curl" "$log"; then
+            if grep -qiE "Failed to download|Could not resolve host|Connection reset|Connection refused|Could not connect|timed out|Timeout|curl: \(" "$log" \
+               && ! grep -qE "CMake Error|BUILD_FAILED" "$log"; then
               echo "::warning::attempt $attempt failed with what looks like a download error; retrying in $((attempt * 10))s"
               sleep $((attempt * 10))
             else

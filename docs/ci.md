@@ -78,11 +78,15 @@ ctest case while proving nothing. The check reads the file itself rather than ca
 Three failures the previous line hit, each fixed here up front because the symptom is far from
 the cause:
 
-- **Reported tool versions, not enforced ones.** The node24 line installed a CMake 4.x because
-  vcpkg's scripts wanted `string(JSON ... STRING_ENCODE)`, which only exists from CMake 4. The
-  images used here ship 3.x and build this port fine, so the version is *reported* alongside
-  cargo, python and clang-cl rather than gated: an enforced minimum failed working legs, and a
-  reported one still makes a mismatch visible.
+- **A CMake 4, installed when the image's is older.** vcpkg's scripts call
+  `string(JSON ... STRING_ENCODE)`, which only exists from CMake 4, and some runner images still
+  ship 3.31 - `ubuntu-24.04-arm` did, and died on the *first* dependency (abseil) with
+  "invalid mode 'STRING_ENCODE'", which reads like a port bug rather than an image problem. The
+  step installs a pinned CMake 4.4.0, matched to the runner's architecture, only when the CMake
+  already on PATH is older. Two details are load-bearing: the version is read out of a variable
+  rather than through a pipeline into `head` (under `pipefail`, `head` closing the pipe early
+  can kill the writer with SIGPIPE and fail the step on a perfectly good CMake), and an arm64
+  runner gets the arm64 asset rather than an x86_64 CMake under emulation.
 - **Rosetta 2 on macOS x64.** The port builds its host tools as the *target* machine type too
   (Node.js's `--no-cross-compiling` path), so on an arm64 image the build and its tests execute
   x86_64 binaries. GitHub's arm64 images do not guarantee Rosetta, so the capability is probed
@@ -90,8 +94,10 @@ the cause:
   "Bad CPU type in executable".
 - **Retrying only download failures.** vcpkg has no retry of its own for a source tarball, and
   one timeout from an upstream mirror costs the whole leg. The configure step retries, but only
-  when the failure looks like a download problem; anything else fails on the first attempt,
-  because retrying a real defect just spends the wall-clock twice.
+  when the failure looks like a download problem *and* carries no build error: matching the word
+  "download" alone is not enough, because the log quotes absolute paths such as
+  `.../vcpkg/downloads/<archive>`, so a plain build failure matches it too and would then be
+  retried four times at full wall-clock cost.
 
 ## 3. The matrix
 
