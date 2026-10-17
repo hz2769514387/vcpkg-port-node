@@ -38,7 +38,9 @@ string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" ZLIB_BUILD_STATIC)
 # particular it leaves the crc32 SIMD off, because Node.js leaves it off. Patch 0005 does the
 # same for the ARM64 branch, which upstream only recognises under the POSIX spellings of the
 # architecture: on Windows CMake calls it ARM64, so a Windows ARM64 build used to receive no
-# SIMD defines at all and died inside the fork.
+# SIMD defines at all and died inside the fork. It also carries the one source change MSVC needs:
+# adler32_simd.c initialises its NEON vectors from brace lists, which clang and gcc allow and
+# MSVC's own vector types do not.
 vcpkg_cmake_configure(
     SOURCE_PATH "${SOURCE_PATH}"
     OPTIONS

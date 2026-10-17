@@ -38,7 +38,7 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
  
 -    SET(CMAKE_C_FLAGS "${CMAKE_C_FLAGS} -march=armv8-a+crc+crypto")
 +    # The two compilers that can build this tree for ARM64 Windows differ, and MSVC
-+    # needs three adjustments. CMAKE_C_COMPILER_ID is used rather than MSVC because
++    # needs four adjustments. CMAKE_C_COMPILER_ID is used rather than MSVC because
 +    # clang-cl sets MSVC as well, and everything in this branch is about the front
 +    # end, not the compatibility layer:
 +    #   * the ARM CRC32 path needs <arm_acle.h>, which the MSVC toolset does not
@@ -57,3 +57,53 @@ diff --git a/CMakeLists.txt b/CMakeLists.txt
    endif()
  
    if (CMAKE_SYSTEM_PROCESSOR STREQUAL "riscv64")
+diff --git a/adler32_simd.c b/adler32_simd.c
+--- a/adler32_simd.c
++++ b/adler32_simd.c
+@@ -247,8 +247,18 @@ uint32_t ZLIB_INTERNAL adler32_simd_(  /* NEON */
+          * Process n blocks of data. At most NMAX data bytes can be
+          * processed before s2 must be reduced modulo BASE.
+          */
++#if defined(_MSC_VER)
++        /* MSVC's NEON vector types are its own builtins - uint32x4_t is __n128 -
++         * and cannot be initialised from a brace list the way clang and gcc allow:
++         * it reports C2078 "too many initializers", then C2059. The same values are
++         * therefore built with intrinsics both compilers have. */
++        uint32x4_t v_s2 = vdupq_n_u32(0);
++        v_s2 = vsetq_lane_u32(s1 * n, v_s2, 3);
++        uint32x4_t v_s1 = vdupq_n_u32(0);
++#else
+         uint32x4_t v_s2 = (uint32x4_t) { 0, 0, 0, s1 * n };
+         uint32x4_t v_s1 = (uint32x4_t) { 0, 0, 0, 0 };
++#endif
+ 
+         uint16x8_t v_column_sum_1 = vdupq_n_u16(0);
+         uint16x8_t v_column_sum_2 = vdupq_n_u16(0);
+@@ -289,6 +299,19 @@ uint32_t ZLIB_INTERNAL adler32_simd_(  /* NEON */
+         /*
+          * Multiply-add bytes by [ 32, 31, 30, ... ] for s2.
+          */
++#if defined(_MSC_VER)
++        /* vcreate_u16() takes the four lanes packed into one 64-bit value, with the
++         * lowest lane in the lowest bits - the same constants the literals above
++         * spell out lane by lane. */
++        v_s2 = vmlal_u16(v_s2, vget_low_u16 (v_column_sum_1), vcreate_u16(0x001D001E001F0020ULL));
++        v_s2 = vmlal_u16(v_s2, vget_high_u16(v_column_sum_1), vcreate_u16(0x0019001A001B001CULL));
++        v_s2 = vmlal_u16(v_s2, vget_low_u16 (v_column_sum_2), vcreate_u16(0x0015001600170018ULL));
++        v_s2 = vmlal_u16(v_s2, vget_high_u16(v_column_sum_2), vcreate_u16(0x0011001200130014ULL));
++        v_s2 = vmlal_u16(v_s2, vget_low_u16 (v_column_sum_3), vcreate_u16(0x000D000E000F0010ULL));
++        v_s2 = vmlal_u16(v_s2, vget_high_u16(v_column_sum_3), vcreate_u16(0x0009000A000B000CULL));
++        v_s2 = vmlal_u16(v_s2, vget_low_u16 (v_column_sum_4), vcreate_u16(0x0005000600070008ULL));
++        v_s2 = vmlal_u16(v_s2, vget_high_u16(v_column_sum_4), vcreate_u16(0x0001000200030004ULL));
++#else
+         v_s2 = vmlal_u16(v_s2, vget_low_u16 (v_column_sum_1),
+             (uint16x4_t) { 32, 31, 30, 29 });
+         v_s2 = vmlal_u16(v_s2, vget_high_u16(v_column_sum_1),
+@@ -305,6 +328,7 @@ uint32_t ZLIB_INTERNAL adler32_simd_(  /* NEON */
+             (uint16x4_t) {  8,  7,  6,  5 });
+         v_s2 = vmlal_u16(v_s2, vget_high_u16(v_column_sum_4),
+             (uint16x4_t) {  4,  3,  2,  1 });
++#endif
+ 
+         /*
+          * Sum epi32 ints v_s1(s2) and accumulate in s1(s2).
