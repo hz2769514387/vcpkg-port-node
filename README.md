@@ -85,7 +85,10 @@ Two consequences worth planning for, both of them properties of the port rather 
   tens of minutes, and the machine needs what the build documents: `cargo`, a Python 3, and on
   Windows the clang-cl component of Visual Studio 2022 or newer (the port locates clang-cl and
   assembles the MSVC command-line environment itself, so a stock triplet is still all *you* need
-  to select).
+  to select). A cross build needs one more thing, and it is easy to miss: the Rust standard
+  library for the *target* architecture, because `cargo --target` builds Node.js's Rust crates
+  and rustup ships the standard library only for the architecture it was installed for. On an
+  arm64 machine building `x64-osx`, for instance: `rustup target add x86_64-apple-darwin`.
 - **Nothing is shipped prebuilt.** A binary cache makes repeat builds cheap, but there is no
   artifact to download that skips the build.
 

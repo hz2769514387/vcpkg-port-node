@@ -99,6 +99,14 @@ the cause:
   "download" alone is not enough, because the log quotes absolute paths such as
   `.../vcpkg/downloads/<archive>`, so a plain build failure matches it too and would then be
   retried four times at full wall-clock cost.
+- **The Rust standard library for the target architecture.** The port builds Node.js's Rust
+  crates with `cargo --target <triple>`, and a rustup toolchain ships the standard library for
+  the architecture it was installed for - which on an x64-osx leg is not the one the triplet
+  asks for. Without it the build stops a few hundred targets in with
+  `error[E0463]: can't find crate for 'core'`, which names neither the leg nor the cause. The
+  step reads the architecture off the triplet rather than off the runner - they disagree exactly
+  when the leg is a cross build - and adds the matching target on every leg, because that is
+  idempotent.
 
 ## 3. The matrix
 
@@ -113,7 +121,7 @@ triplet column below only where CI installs vcpkg's release-only variant of the 
 | x64 Linux | `ubuntu-latest` | `x64-linux` | `x64-linux-release` | Release | no — passes, still `experimental` |
 | arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release | no — has never finished a build |
 | arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release | yes |
-| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — was failing; the port now states the target architecture |
+| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — both causes fixed, the Rust target included |
 | all six | weekly/manual | same | stock (dual) | **Debug** | off the push path |
 
 `ci.yml` and `node-suite.yml` run the Release rows; `debug.yml` runs the last one, where no leg
@@ -143,8 +151,11 @@ needed `ARMV8_OS_WINDOWS` and no `-march`, none of which MSVC can take from the 
 host-architecture probe came back empty inside a portfile, which vcpkg runs with `cmake -P`, so
 the build quietly took the native path and produced arm64 host tools that cannot link the x86_64
 libraries vcpkg had installed. That probe is gone: the macOS presets state the target
-architecture outright instead of comparing it against a host. arm64 Linux is the one leg with
-neither cause nor fix yet, because its cold build has never finished.
+architecture outright instead of comparing it against a host. Stating the target then met a
+second, runner-side wall - `cargo --target x86_64-apple-darwin` wants the Rust standard library
+for that architecture, which an arm64 image does not ship (section 2.3) - and that is provisioned
+now too, so the leg is building. arm64 Linux is the one leg with neither cause nor fix yet,
+because its cold build has never finished.
 
 `experimental` is an input to `build-test.yml`, not `continue-on-error` on the caller, and the
 legs are separate jobs rather than a matrix. Both keywords are accepted by the workflow parser
