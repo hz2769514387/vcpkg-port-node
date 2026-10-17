@@ -78,9 +78,11 @@ ctest case while proving nothing. The check reads the file itself rather than ca
 Three failures the previous line hit, each fixed here up front because the symptom is far from
 the cause:
 
-- **CMake 4 or newer.** vcpkg's own scripts use `string(JSON ... STRING_ENCODE)`, which only
-  exists from CMake 4. On an image that still ships 3.31 the first dependency fails with
-  "invalid mode 'STRING_ENCODE'", which reads like a port bug. Checked before anything else.
+- **Reported tool versions, not enforced ones.** The node24 line installed a CMake 4.x because
+  vcpkg's scripts wanted `string(JSON ... STRING_ENCODE)`, which only exists from CMake 4. The
+  images used here ship 3.x and build this port fine, so the version is *reported* alongside
+  cargo, python and clang-cl rather than gated: an enforced minimum failed working legs, and a
+  reported one still makes a mismatch visible.
 - **Rosetta 2 on macOS x64.** The port builds its host tools as the *target* machine type too
   (Node.js's `--no-cross-compiling` path), so on an arm64 image the build and its tests execute
   x86_64 binaries. GitHub's arm64 images do not guarantee Rosetta, so the capability is probed

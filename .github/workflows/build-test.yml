@@ -143,8 +143,13 @@ jobs:
         run: |
           # Everything below is a hard requirement, and each one has failed at least once
           # somewhere: cargo for Node.js 26's Temporal crate, python for gyp and for the
-          # official test driver, clang-cl on Windows (upstream requirement since 24), and a
-          # CMake 4 or newer for vcpkg's own scripts.
+          # official test driver, clang-cl on Windows (upstream requirement since 24).
+          #
+          # The CMake version is reported but deliberately not enforced. vcpkg's scripts have
+          # had CMake-version requirements (the node24 line needed CMake 4 for
+          # `string(JSON ... STRING_ENCODE)`), yet the images used here ship 3.x and build
+          # this port fine - a hard gate on the version would therefore fail working legs.
+          # Reported, a mismatch is visible; enforced, it is a false alarm.
           echo "cargo         : $(cargo --version || echo MISSING)"
           echo "python        : $(python --version 2>&1 || echo MISSING)"
           echo "python3       : $(python3 --version 2>&1 || echo MISSING)"
@@ -152,21 +157,6 @@ jobs:
           echo "ninja         : $(ninja --version 2>/dev/null || echo MISSING)"
           if [ "$RUNNER_OS" = "Windows" ]; then
             echo "clang-cl      : $(command -v clang-cl || echo MISSING)"
-          fi
-
-      - name: Require CMake 4 or newer
-        shell: bash
-        run: |
-          set -euo pipefail
-          # vcpkg's own scripts use `string(JSON ... STRING_ENCODE)`, which only exists from
-          # CMake 4. On an image that still ships 3.31 the very first dependency fails with
-          # "invalid mode 'STRING_ENCODE'", which reads like a port bug rather than an image
-          # problem. Checked here so that failure mode is named instead of diagnosed.
-          version="$(cmake --version | head -n 1 | sed -E 's/^[^0-9]*([0-9]+).*/\1/')"
-          echo "cmake major: ${version:-unknown}"
-          if [ -z "$version" ] || [ "$version" -lt 4 ]; then
-            echo "::error::the CMake on PATH reports major version '$version', but vcpkg's scripts need CMake 4 or newer. Install a newer CMake on this leg."
-            exit 1
           fi
 
       - name: Ensure Rosetta 2 is available (macOS x64 only)
