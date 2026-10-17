@@ -177,6 +177,31 @@ function dumpbinSymbols(lib, dumpbin) {
 const RE_NM = /^\s*[0-9A-Fa-f]*\s+([A-Za-z])\s+(\S+)\s*$/;
 const NM_WEAK = new Set(['W', 'V', 'w', 'v', 'U', 'u', 'i']);
 
+// On ELF/MachO, C++ standard library template instantiations and compiler support
+// routines are emitted as strong (T) symbols in every translation unit that uses them,
+// and the linker folds them by COMDAT equivalence (the Itanium ABI's vague linkage).
+// nm has no way to see that folding, so without this filter every archive pair that
+// both instantiate std::basic_string<...> reports a wall of false positives - exactly
+// the case dumpbin on Windows handles via the COMDAT selection in the COFF table.
+//
+// Patterns (Itanium ABI mangling):
+//   __ZNSt...   / __ZNKSt...   - std:: members (libc++: St3__1, libstdc++: St)
+//   __ZSt...                   - std:: free functions
+//   __ZTI...St / __ZTS...St / __ZTV...St - typeinfo/string/vtable for std:: types
+//   ___clang_call_terminate    - clang's terminate landing pad
+// We only filter std:: here; a real ODR violation between two versions of abseil or
+// highway shows up as a non-std:: symbol and is still a finding.
+function isStdLibInstantiation(name) {
+  if (name.startsWith('__ZNSt') || name.startsWith('__ZNKSt')) return true;
+  if (name.startsWith('__ZSt')) return true;
+  if (name.startsWith('__ZTI') || name.startsWith('__ZTS') || name.startsWith('__ZTV')) {
+    // typeinfo / typeinfo name / vtable for a std:: type: __ZTVNSt...
+    return name.indexOf('NSt') >= 0;
+  }
+  if (name === '___clang_call_terminate') return true;
+  return false;
+}
+
 function nmSymbols(lib, nm) {
   let out;
   try {
@@ -197,6 +222,7 @@ function nmSymbols(lib, nm) {
     const [, type, name] = m;
     if (NM_WEAK.has(type)) continue;
     if (name.startsWith('.')) continue;
+    if (isStdLibInstantiation(name)) continue;
     strong.add(name);
   }
   return { syms: strong, err: null };
