@@ -48,8 +48,9 @@ endif()
 # node's library directory: node-config.cmake lives in <prefix>/share/unofficial-node/,
 # so the libraries are in <prefix>/lib. After the collision-move step, abseil/highway/
 # crdtp/v8_zlib etc. live in <prefix>/lib/manual-link - both dirs must be scanned
-# (the script accepts a repeated --node-lib-dir).
-get_filename_component(_node_port_prefix "${node_DIR}/../.." ABSOLUTE)
+# (the script accepts a repeated --node-lib-dir). find_package(unofficial-node CONFIG)
+# sets unofficial-node_DIR to the config file's directory.
+get_filename_component(_node_port_prefix "${unofficial-node_DIR}/../.." ABSOLUTE)
 set(_node_port_libdir "${_node_port_prefix}/lib")
 
 # Key: treat ONLY the libraries node itself installed as the "node side". <prefix>/lib
