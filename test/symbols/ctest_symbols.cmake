@@ -18,15 +18,21 @@ if(NOT EXISTS "${_node_port_symbol_audit}")
   return()
 endif()
 
-# Resolve the tool's absolute path at configure time: the CMake process has the MSVC
-# toolchain on PATH (via the chainloaded toolchain), so dumpbin is findable here. The
-# ctest process is NOT in vcvars, so it cannot find dumpbin by PATH - we must pass the
-# absolute path into the script.
+# Resolve the tool's absolute path at configure time. The CMake process may not have
+# the MSVC bin directory on PATH (Visual Studio generator does not chainload vcvars into
+# the CMake process), so find_program by name alone can fail. Fall back to the compiler
+# and linker directories: cl.exe and link.exe live in the same dir as dumpbin.exe.
+# The ctest process is NOT in vcvars either, so we must pass the absolute path into the
+# script.
 set(_node_port_symtool_arg "")
 if(WIN32)
-  find_program(NODE_PORT_DUMPBIN NAMES dumpbin)
+  get_filename_component(_node_port_cl_dir "${CMAKE_CXX_COMPILER}" DIRECTORY)
+  get_filename_component(_node_port_link_dir "${CMAKE_LINKER}" DIRECTORY)
+  find_program(NODE_PORT_DUMPBIN NAMES dumpbin
+               HINTS "${_node_port_cl_dir}" "${_node_port_link_dir}")
   if(NOT NODE_PORT_DUMPBIN)
-    message(WARNING "dumpbin not found; skipping symbol audit (needs MSVC or Windows SDK dumpbin)")
+    message(WARNING "dumpbin not found (looked in PATH and next to ${CMAKE_CXX_COMPILER}); "
+                    "skipping symbol audit")
     return()
   endif()
   set(_node_port_symtool_arg --dumpbin "${NODE_PORT_DUMPBIN}")
