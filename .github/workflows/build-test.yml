@@ -72,9 +72,6 @@ jobs:
     continue-on-error: ${{ inputs.experimental }}
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      # Every log this job produces is tee'd here, so the artifact is one directory no matter
-      # which step failed, and a reader does not have to open several.
-      CI_LOGDIR: ${{ runner.temp }}/ci-logs
       # The GitHub Actions binary cache provider (x-gha) was removed from vcpkg, and
       # `clear;x-gha,readwrite` therefore silently disables caching entirely - it prints a
       # warning and builds every dependency from source on every run. The supported
@@ -91,7 +88,12 @@ jobs:
       - name: Report the starting point
         shell: bash
         run: |
-          mkdir -p "$CI_LOGDIR"
+          # Every log this job produces is tee'd under $RUNNER_TEMP/ci-logs, so the uploaded
+          # artifact is one directory no matter which step failed. It is spelled with the
+          # RUNNER_TEMP environment variable rather than a job-level env entry on purpose:
+          # the `runner` context is not available in job-level env, and using it there makes
+          # the whole workflow file invalid ("Unrecognized named-value: 'runner'").
+          mkdir -p "$RUNNER_TEMP/ci-logs"
           echo "### Port build"
           echo "- runner: ${{ inputs.runner }} ($RUNNER_OS/$RUNNER_ARCH)"
           echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }}, consumer ${{ inputs.config }})"
@@ -200,7 +202,7 @@ jobs:
           # whole leg, so a failed attempt is retried - but only when the failure looks like a
           # download problem. Anything else is a real defect and is left to fail immediately,
           # because retrying it would only spend the wall-clock twice.
-          log="$CI_LOGDIR/configure.log"
+          log="$RUNNER_TEMP/ci-logs/configure.log"
           attempt_no=0
           for attempt in 1 2 3 4; do
             attempt_no="$attempt"
@@ -231,7 +233,7 @@ jobs:
           set -euo pipefail
           # tee'd as well: the port's own output lands in vcpkg's buildtrees, but this step's
           # output is the consumer's, and the first-error summary reads both.
-          cmake --build --preset "$PRESET" --config "$CONFIG" 2>&1 | tee "$CI_LOGDIR/build.log"
+          cmake --build --preset "$PRESET" --config "$CONFIG" 2>&1 | tee "$RUNNER_TEMP/ci-logs/build.log"
 
       - name: Assert the architecture of the built executable
         if: ${{ inputs.expect-arch != '' }}
@@ -307,7 +309,7 @@ jobs:
           # -C is only meaningful for multi-config generators (Visual Studio); the
           # single-config ones ignore it.
           ctest --test-dir "build/$PRESET" -C "$CONFIG" --output-on-failure $CTEST_OPTIONS \
-            2>&1 | tee "$CI_LOGDIR/ctest.log"
+            2>&1 | tee "$RUNNER_TEMP/ci-logs/ctest.log"
 
       - name: Summarize the run
         if: always()
@@ -320,9 +322,9 @@ jobs:
             echo '```'
             # The pass/fail counts go first: they are the whole answer to "did this leg work",
             # and they are easy to miss at the end of a few thousand lines.
-            if [ -f "$CI_LOGDIR/ctest.log" ]; then
-              grep -E "tests passed|tests failed|Total Test time" "$CI_LOGDIR/ctest.log" | head -n 5 || true
-              awk '/The following tests FAILED/{found=1} found' "$CI_LOGDIR/ctest.log" | head -n 40 || true
+            if [ -f "$RUNNER_TEMP/ci-logs/ctest.log" ]; then
+              grep -E "tests passed|tests failed|Total Test time" "$RUNNER_TEMP/ci-logs/ctest.log" | head -n 5 || true
+              awk '/The following tests FAILED/{found=1} found' "$RUNNER_TEMP/ci-logs/ctest.log" | head -n 40 || true
             else
               echo "no ctest log: this leg did not get that far"
             fi
@@ -333,7 +335,7 @@ jobs:
             echo '### First error'
             echo '```'
             {
-              grep -m1 -hE "error|Error" "$CI_LOGDIR"/*.log 2>/dev/null || true
+              grep -m1 -hE "error|Error" "$RUNNER_TEMP/ci-logs"/*.log 2>/dev/null || true
               for f in $(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 100); do
                 if grep -m1 -hE "error:|CMake Error|BUILD_FAILED" "$f" 2>/dev/null; then break; fi
               done
@@ -346,19 +348,19 @@ jobs:
         shell: bash
         run: |
           set -uo pipefail
-          mkdir -p "$CI_LOGDIR/vcpkg"
+          mkdir -p "$RUNNER_TEMP/ci-logs/vcpkg"
           # The port's own stdout and stderr are separate files in vcpkg's buildtrees
           # (build-<config>-out.log / -err.log), and the manifest log embeds only one of them.
           # Without them a diagnostic printed to the other stream is lost.
           while IFS= read -r f; do
-            cp "$f" "$CI_LOGDIR/vcpkg/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
+            cp "$f" "$RUNNER_TEMP/ci-logs/vcpkg/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
           done < <(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 200)
           # The consumer build's own CMake logs, which are not under buildtrees.
           while IFS= read -r f; do
-            cp "$f" "$CI_LOGDIR/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
+            cp "$f" "$RUNNER_TEMP/ci-logs/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
           done < <(find test/build -name '*.log' -type f 2>/dev/null | head -n 200)
-          du -sh "$CI_LOGDIR" || true
-          ls -la "$CI_LOGDIR" || true
+          du -sh "$RUNNER_TEMP/ci-logs" || true
+          ls -la "$RUNNER_TEMP/ci-logs" || true
 
       - name: Upload this leg's logs
         if: always()
