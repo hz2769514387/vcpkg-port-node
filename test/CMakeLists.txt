@@ -19,6 +19,9 @@
 #   official_suite/  Node.js's own suite through its own driver, plus its skip lists. Minutes
 #                    to an hour; labelled `node-suite` so a fast run can skip it with
 #                    `ctest -LE node-suite`.
+#   symbols/         the symbol audit: no strong symbol defined twice in one process.
+#                    Seconds; labelled `symbols` so a fast run can skip it with
+#                    `ctest -LE symbols`.
 #
 # Each directory stands on its own - deleting any one of them leaves the others working.
 # The dependency direction is exactly one way: this project consumes `../ports`.
@@ -105,6 +108,7 @@ add_subdirectory(embedder)
 add_subdirectory(embedding)
 add_subdirectory(smoke)
 add_subdirectory(zlib)
+add_subdirectory(symbols)
 add_subdirectory(official_suite)
 
 message(STATUS "node consumer test project")
