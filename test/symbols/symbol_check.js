@@ -203,20 +203,60 @@ function isStdLibInstantiation(name) {
 }
 
 function nmSymbols(lib, nm) {
+  // On macOS, nm reports C++ vague-linkage symbols (inline functions, template
+  // instantiations, guard variables, vtables) as strong (T/S) rather than weak (W),
+  // because MachO uses coalesced sections instead of ELF weak symbols. `nm -m` prints
+  // the section name, which lets us identify coalesced symbols and treat them as weak -
+  // matching what nm on Linux does natively and what dumpbin does via COMDAT on Windows.
+  const isMacOS = process.platform === 'darwin';
   let out;
-  try {
-    out = run(nm, ['-g', '--defined-only', lib]);
-  } catch (e) {
-    // macOS nm does not accept --defined-only long form; fall back to -g and filter.
+  let useCoalesced = false;
+  if (isMacOS) {
     try {
-      out = run(nm, ['-g', lib]);
-    } catch (e2) {
-      return { syms: null, err: String(e2 && e2.message ? e2.message : e2) };
+      out = run(nm, ['-g', '-m', lib]);
+      useCoalesced = true;
+    } catch (e) {
+      // fall through to the plain path
+      out = null;
+    }
+  }
+  if (!useCoalesced) {
+    try {
+      out = run(nm, ['-g', '--defined-only', lib]);
+    } catch (e) {
+      // macOS nm does not accept --defined-only long form; fall back to -g and filter.
+      try {
+        out = run(nm, ['-g', lib]);
+      } catch (e2) {
+        return { syms: null, err: String(e2 && e2.message ? e2.message : e2) };
+      }
     }
   }
   const strong = new Set();
   for (const line of out.split(/\r?\n/)) {
     if (!line || line.endsWith(':')) continue;  // archive member header
+    if (useCoalesced) {
+      // macOS `nm -g -m` lines look like:
+      //   0000000000001234 (__TEXT,__textcoal_nt) external __ZN3ada...
+      //   0000000000001234 (__TEXT,__text)        external __ZN3ada...
+      //   0000000000000000 (undefined)            external _printf
+      // A coalesced section (name contains "coal") is vague linkage: the linker folds
+      // it like COMDAT, so it is not a finding. Undefined symbols are not definitions
+      // and must be skipped too.
+      if (line.indexOf('(undefined)') >= 0) continue;
+      const mCoal = line.match(/^\s*[0-9A-Fa-f]*\s+\([^)]*\)\s+(\S+)\s+(\S+)\s*$/);
+      if (mCoal) {
+        const [, vis, name] = mCoal;
+        if (vis !== 'external') continue;
+        if (line.indexOf('coal') >= 0) continue;  // vague linkage
+        if (name.startsWith('.')) continue;
+        if (isStdLibInstantiation(name)) continue;
+        strong.add(name);
+        continue;
+      }
+      // line did not match the -m format; skip it
+      continue;
+    }
     const m = RE_NM.exec(line);
     if (!m) continue;
     const [, type, name] = m;
