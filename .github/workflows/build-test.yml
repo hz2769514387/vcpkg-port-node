@@ -157,6 +157,29 @@ jobs:
           echo "ninja         : $(ninja --version 2>/dev/null || echo MISSING)"
           if [ "$RUNNER_OS" = "Windows" ]; then
             echo "clang-cl      : $(command -v clang-cl || echo MISSING)"
+            # Whether this job runs elevated decides a whole class of Node.js
+            # test-suite results. Four cases (test-fs-rm and friends) use icacls
+            # to deny themselves access and then assert EPERM, which is not the
+            # same obstacle for a process in the Administrators group as for an
+            # ordinary one - and these images do run elevated. Reported rather
+            # than assumed, because the alternative is writing a skip whose
+            # reason is a guess.
+            echo "account       : $(whoami)"
+            echo "elevated      : $(net session >/dev/null 2>&1 && echo yes || echo no)"
+            probe="$RUNNER_TEMP/acl-probe"
+            rm -rf "$probe"; mkdir -p "$probe/acl_dir"
+            : > "$probe/acl_dir/f.txt"
+            if icacls "$probe/acl_dir" /deny 'everyone:(OI)(CI)(DE,DC,X)' >/dev/null 2>&1; then
+              # The whole point: does a deny ACE actually stop us?
+              if rm -f "$probe/acl_dir/f.txt" 2>/dev/null; then
+                echo "deny ACE      : INEFFECTIVE (deletion succeeded - EPERM tests will fail)"
+              else
+                echo "deny ACE      : effective"
+              fi
+            else
+              echo "deny ACE      : icacls failed"
+            fi
+            rm -rf "$probe" 2>/dev/null || true
           fi
 
       - name: Ensure the Rust standard library for the target architecture

@@ -127,9 +127,11 @@ the cause:
 
 ## 3. The matrix
 
-Six legs: both architectures on each of the three platforms the manifest claims. A preset in
-`test/CMakePresets.json` is named after the vcpkg triplet it selects, so it differs from the
-triplet column below only where CI installs vcpkg's release-only variant of the same triplet.
+A preset in `test/CMakePresets.json` is named after the vcpkg triplet it selects, so it differs
+from the triplet column below only where CI installs vcpkg's release-only variant of the same
+triplet. `*-release` is not available for every triplet, which is why some rows below install a
+dual triplet and then build all three consumer configurations - the second port build is already
+paid for.
 
 Every cell below is a promise a consumer can hold this repository to, and each one is a leg.
 
@@ -196,8 +198,11 @@ rather than a mystery:
 - **arm64 Linux** is the one leg with neither cause nor fix yet, because its cold build has never
   finished.
 
-x64 Linux and x64 macOS both pass today and both are still `experimental`; dropping that flag is
-a gate decision to take deliberately, one leg at a time, not a consequence of a green run.
+Nothing is `experimental` in `ci.yml` or `debug.yml` today - every one of those twelve legs is
+expected to pass and blocks a merge. What is still open is the eight `matrix.yml` legs, none of
+which has completed a build, and Node.js's own suite on Windows, which has residual failures of
+its own (section 4.2). Dropping `experimental` from a leg is a gate decision to take
+deliberately, one leg at a time, not a consequence of a green run.
 
 `experimental` is an input to `build-test.yml`, not `continue-on-error` on the caller, and the
 legs are separate jobs rather than a matrix. Both keywords are accepted by the workflow parser
@@ -233,6 +238,36 @@ library. Those are tracked as work items, not skipped.
 Skips live in `test/official_suite/node-suite-skips*.txt` with a mandatory reason per entry, and the
 symbol-link ones are applied only after probing whether this machine can create symlinks —
 a permission, not a platform property.
+
+### 4.1 The suite's working directory is load-bearing
+
+The driver hands the shell `--test-reporter=./test/common/test-error-reporter.js`, a **relative**
+path, so it resolves against whatever directory the process was started in. `add_test` defaults
+that to the *binary* directory, which is where `official_suite/` is generated and where no `test/`
+exists. Every case that uses the reporter then dies with
+
+```
+ERR_MODULE_NOT_FOUND ... /official_suite/test/common/test-error-reporter.js
+```
+
+while the cases that do not use it pass, because the suite's own files reach the driver through
+`--test-root` either way. A partially red suite is the misleading version of this failure: it
+looks like two dozen unrelated Node.js defects rather than one wrong directory. The tests set
+`WORKING_DIRECTORY` to the installed suite root (`test/official_suite/CMakeLists.txt`).
+
+### 4.2 Anything that depends on Windows ACLs is suspect before it is ours
+
+Four cases drive `icacls` to deny access and then assert `EPERM`:
+`test-fs-mkdir-recursive-eaccess`, `test-fs-rm`, `test-fs-rmSync-special-char-additional-error`
+and `test-module-readonly`. They pass on an ordinary Windows machine and fail on a
+GitHub-hosted Windows runner, which runs the job as an account in the Administrators group - a
+deny ACE is not the same obstacle for an elevated process, and `icacls` reports a non-ASCII path
+as not found. Two consequences for reading a run:
+
+- a failure in this group is a candidate for the skip list, not automatically a defect here;
+- before one is written off, the same case has to be run on the same runner with the **official**
+  Node.js binary - official passes and ours fails is the only thing that makes it ours. That
+  cross-check is not wired into CI yet.
 
 ## 5. Caching
 
