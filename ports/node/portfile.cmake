@@ -591,7 +591,11 @@ function(_node_shared_args _out _libdir)
         "brotli|brotlidec,brotlienc,brotlicommon"
         "nghttp2|nghttp2"
         "ngtcp2|ngtcp2"
-        "nghttp3|nghttp3"
+        # vcpkg's nghttp3 port devendors sfparse (001-devendor-sfparse.patch) and
+        # its own libnghttp3.pc carries "Libs.private: -lsfparse", so the static
+        # library leaves sfparse_* undefined: the link line needs it as well.
+        # Order matters - nghttp3 references sfparse, not the other way round.
+        "nghttp3|nghttp3,sfparse"
         "http-parser|llhttp"
         "zstd|zstd"
         "simdjson|simdjson"

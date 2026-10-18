@@ -24,6 +24,7 @@
     "ngtcp2",
     "openssl",
     "perfetto",
+    "sfparse",
     "simdjson",
     "simdutf",
     {
