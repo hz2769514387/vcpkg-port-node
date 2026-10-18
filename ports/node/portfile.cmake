@@ -591,6 +591,7 @@ function(_node_shared_args _out _libdir)
         "brotli|brotlidec,brotlienc,brotlicommon"
         "nghttp2|nghttp2"
         "ngtcp2|ngtcp2"
+        "nghttp3|nghttp3"
         "http-parser|llhttp"
         "zstd|zstd"
         "simdjson|simdjson"
