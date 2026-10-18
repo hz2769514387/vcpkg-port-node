@@ -15,7 +15,7 @@ Early development: there is no release yet, no tag, and no stable interface.
 
 | | |
 |---|---|
-| Node.js | v26.11.1 (v26 line) |
+| Node.js | v26.12.0 (v26 line) |
 | vcpkg | 2026.07.29 (pinned) |
 | Build route | `configure.py` → `gyp -f ninja` → `ninja` |
 | Delivery | static library + CMake config, as overlay ports |

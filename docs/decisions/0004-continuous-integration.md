@@ -12,7 +12,7 @@ builds, how often, and what a red build means.
 Facts that shaped this decision:
 
 - A full Node.js build is dominated by V8. Measured on `x64-windows-static` with
-  Node.js v26.11.1: about 40 minutes on a developer machine for Release **and** Debug, and
+  Node.js v26.12.0: about 40 minutes on a developer machine for Release **and** Debug, and
   the official test suite adds roughly another 15 minutes per run. That is too expensive to
   put in front of every push, and too valuable to leave to memory.
 - The deliverable is a **port**. Its consumers reach it through vcpkg, so the thing that can

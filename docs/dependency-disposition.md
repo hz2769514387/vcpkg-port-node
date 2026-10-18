@@ -1,4 +1,4 @@
-# Dependency disposition — Node.js v26.11.1 against vcpkg 2026.07.29
+# Dependency disposition — Node.js v26.12.0 against vcpkg 2026.07.29
 
 Every dependency Node.js carries, what vcpkg has, what was measured, and what we do about
 it. This is the reference behind `ports/` and its overlay ports; keep it in step with them.
@@ -27,7 +27,7 @@ There is a second, independent rule that protects consumers:
 
 ## 2. How these numbers were produced
 
-- **Node.js side**: the official `node-v26.11.1.tar.xz` release tarball (the same archive
+- **Node.js side**: the official `node-v26.12.0.tar.xz` release tarball (the same archive
   the port downloads and hash-pins). Versions were read from the source itself —
   `include/uv/version.h`, `VERSION.dat`, `zlib.h`, `include/LIEF/version.h`,
   `README.chromium`, `package.json` and so on — not from upstream documentation.
@@ -39,7 +39,7 @@ There is a second, independent rule that protects consumers:
 
   ```sh
   python3 tools/compare_vendored.py \
-      --node node-v26.11.1.tar.xz \
+      --node node-v26.12.0.tar.xz \
       --upstream /path/to/vcpkg/downloads/libuv-libuv-v1.52.1.tar.gz \
       --path deps/uv
   ```
@@ -50,9 +50,9 @@ There is a second, independent rule that protects consumers:
 
 ## 3. Version baseline
 
-Versions measured from the Node.js v26.11.1 source tree. "vcpkg" is release 2026.07.29.
+Versions measured from the Node.js v26.12.0 source tree. "vcpkg" is release 2026.07.29.
 
-| Dependency | Node.js 26.11.1 | vcpkg | Channel | Version verdict |
+| Dependency | Node.js 26.12.0 | vcpkg | Channel | Version verdict |
 |---|---|---|---|---|
 | V8 | 14.6.202.34 | — | none | vendored (node fork, no `--shared-v8`) |
 | openssl | 3.5.9 | 3.6.3 | `--shared-openssl` | vcpkg ahead → use vcpkg |
@@ -61,17 +61,17 @@ Versions measured from the Node.js v26.11.1 source tree. "vcpkg" is release 2026
 | brotli | 1.2.0 | 1.2.0 | `--shared-brotli` | equal, 1 node patch → overlay |
 | zstd | 1.5.7 | 1.5.7 | `--shared-zstd` | equal, sources match → use vcpkg |
 | nghttp2 | 1.70.0 | 1.69.0 | `--shared-nghttp2` | vcpkg behind → overlay |
-| ngtcp2 | 1.25.0 | 1.25.0 | `--shared-ngtcp2` | equal; vcpkg port forces a TLS backend → overlay (strip TLS) |
-| nghttp3 | 1.18.0 | 1.18.0 | `--shared-nghttp3` | equal; same TLS/sfparse caveat → overlay (configure only) |
-| sqlite3 | 3.53.4 | 3.53.4 | `--shared-sqlite` | equal, sources match; feature set must be aligned |
+| ngtcp2 | 1.25.0 | 1.25.0 | `--shared-ngtcp2` | equal; vcpkg port's TLS backends are opt-in features (none default-on) → use vcpkg port |
+| nghttp3 | 1.18.0 | 1.18.0 | `--shared-nghttp3` | equal → use vcpkg port; its static lib devendors sfparse, so the link line carries `-lsfparse` too |
+| sqlite3 | 3.54.0 | 3.53.4 | `--shared-sqlite` | vcpkg behind → overlay pin 3.54.0 |
 | icu | 78.3 (icu-small) | 78.3 | `--with-intl=system-icu` | equal → use vcpkg (decision: full ICU) |
 | llhttp | 9.4.3 | 9.3.1 | `--shared-http-parser` | vcpkg behind → overlay |
-| simdjson | not in tree (amalgamation) | 4.6.4 | `--shared-simdjson` | node's amalgamation is newer → overlay (verify version) |
+| simdjson | 5.0.3 | 4.6.4 | `--shared-simdjson` | vcpkg behind → overlay pin 5.0.3 |
 | ada-url | not in tree (amalgamation) | 3.4.4 | `--shared-ada` | node is ahead by a major → overlay + simdutf feature |
 | hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → overlay |
-| LIEF | 1.0.0 | 0.17.6 | `--shared-lief` | vcpkg behind a major → issue #4 |
-| libffi | 3.8.0 | 3.7.1 | `--shared-ffi` | vcpkg behind → overlay |
-| perfetto | 58.2 | 53.0 | `--shared-perfetto` | vcpkg far behind; shared with V8 → decide with issue #1 |
+| LIEF | 1.0.0 | 0.17.6 | `--shared-lief` | vcpkg behind a major → overlay pin 1.0.0 |
+| libffi | 3.8.0 | 3.7.1 | `--shared-ffi` | vcpkg behind → overlay pin 3.8.0 |
+| perfetto | 58.2 | 53.0 | `--shared-perfetto` | vcpkg behind → overlay pin 58.2 (node-only, not V8) |
 | zlib | 1.3.2.1-motley (Chromium fork) | 1.3.2 (madler) | `--shared-zlib` | different source → overlay port, built and measured: [zlib-fork.md](zlib-fork.md) |
 | googletest | Chromium fork 1.8.0.git-9518a57 | 1.17.0 | `--shared-gtest` | test only → see §4 |
 | V8: abseil | Chromium fork, rev `6d8e1a5c…` | 20260107.1 | `--shared-abseil` | different fork → issue #1 |
@@ -94,7 +94,7 @@ Versions measured from the Node.js v26.11.1 source tree. "vcpkg" is release 2026
 Two entries deserve a correction note:
 
 - **abseil**: the previous cycle's research recorded V8's abseil revision as `6d5ac0f7`.
-  The v26.11.1 tree says `6d8e1a5cf00d6a6b26069b0baf0dd9b855a17459`. Use the value measured
+  The v26.12.0 tree says `6d8e1a5cf00d6a6b26069b0baf0dd9b855a17459`. Use the value measured
   here.
 - **zlib**: node's `README.chromium` gives `Version: 1.3.2` with
   `Revision: 09a1572a…` — that revision describes the **upstream** madler tree the fork is
@@ -105,7 +105,7 @@ Two entries deserve a correction note:
 ## 4. What V8 compiles into the artifacts we ship
 
 The question "is this library vendored or externalized" is only interesting when the
-library actually produces symbols in the delivered package. Measured on v26.11.1 by
+library actually produces symbols in the delivered package. Measured on v26.12.0 by
 searching every `.gyp` / `.gypi` / `.gn` / `.gni` file in the tree:
 
 | V8 third-party library | Referenced by build files | Compiled into our artifacts? |
@@ -142,12 +142,12 @@ is mostly gyp/GN build files, and sometimes generated headers Node.js checks in.
 | brotli 1.2.0 | 1 | 1 | 57 | 3 | `c/common/platform.h` — Node.js's platform compatibility patch. |
 | c-ares 1.34.8 | 1 | **0** | 212 | 37 | The only differing file is `.gitignore`. **No source differences.** Node.js checks in 11 generated headers (`config/*/ares_config.h`, `include/ares_build.h`) that vcpkg generates at build time instead — the values must be compared, not the files. |
 | zstd 1.5.7 | 0 | 0 | 536 | 3 | Clean. |
-| sqlite3 3.53.4 | 0 | 0 | 46 | 3 | Clean; Node.js ships the 6-file amalgamation. |
+| sqlite3 3.54.0 | 0 | 0 | 46 | 3 | Clean; Node.js ships the 6-file amalgamation. |
 | ngtcp2 1.25.0 | 0 | 0 | 233 | 90 | Clean sources; Node.js adds `third-party/libev`, `third-party/urlparse` and a generated `version.h` for its own build. |
 | zlib (Chromium fork) | 24 | 19 | 67 | 18 | 24 files differ and 18 more exist only in Node.js (the SIMD sources, `chromeconf.h`, `cpu_features.*`, `zlib.gyp`, `BUILD.gn`). The fork adds SIMD crc32/adler32 with runtime CPU detection and several inflate/deflate corrections upstream never merged. |
 | nghttp2 1.70.0 vs 1.69.0 | 31 | 31 | 553 | 7 | The version gap is real: the public header and the session/HPACK internals all move. |
 | llhttp 9.4.3 vs 9.3.1 | 3 | 3 | 1 | 3 | `include/llhttp.h`, `src/api.c`, `src/llhttp.c` (llhttp ships a generated parser). |
-| simdjson (node amalgamation) vs 4.6.4 | 0 common files | 0 | 740 | 5 | Node.js ships only the amalgamation (`simdjson.h`/`simdjson.cpp`), so this comparison cannot date the version — measure against the upstream release Node.js names. |
+| simdjson 5.0.3 vs 4.6.4 | 0 common files | 0 | 740 | 5 | Node.js ships only the amalgamation (`simdjson.h`/`simdjson.cpp`) — but unlike ada's it **does** date itself: the generated header comment and `SIMDJSON_VERSION` both say 5.0.3, so the overlay pin is measured, not guessed. |
 | ada-url (node amalgamation) vs 3.4.4 | 1 (README) | 0 | 192 | 6 | Same shape; the major-version gap needs an upstream 4.0.0 comparison. |
 
 Not measured yet (no matching upstream tarball on hand): nghttp3, icu, hdr-histogram,
@@ -171,9 +171,8 @@ tree, and the choice needs a provenance source for the commit (§7).
 
 | Disposition | Dependencies |
 |---|---|
-| Use the vcpkg port as-is | openssl (3.6.3 > 3.5.9), icu (78.3), c-ares, zstd, sqlite3 |
-| Overlay: pin the version Node.js ships, add its patches | libuv, brotli, nghttp2, llhttp, simdjson, ada-url (+ simdutf feature), hdr-histogram, libffi, LIEF, perfetto |
-| Overlay: configuration only (no version change) | ngtcp2, nghttp3 — strip the TLS backend the vcpkg port forces, drop `sfparse` |
+| Use the vcpkg port as-is | openssl (3.6.3 > 3.5.9), icu (78.3), c-ares, zstd, nghttp3 (link sfparse alongside), ngtcp2 |
+| Overlay: pin the version Node.js ships, add its patches | libuv, brotli, nghttp2, llhttp, simdjson, ada-url (+ simdutf feature), hdr-histogram, libffi, LIEF, perfetto, sqlite3 |
 | Overlay: replace the upstream source entirely | zlib → Chromium fork (issue #3) |
 | Externalize from V8's tree (the must-unify four) | abseil, highway (issue #1), simdutf (issue #2), zlib (issue #3) |
 | Vendor | V8; jsoncpp, fast_float, fp16, rapidhash, dragonbox, wasm-api, utf8-decoder, re2 (produce no symbols); googletest (test only); uvwasi, merve, nbytes, ncrypto, postject, inspector_protocol, temporal_capi (no vcpkg port); npm, undici, acorn, minimatch, amaro, crates (other ecosystems) |
@@ -193,8 +192,8 @@ issue with its acceptance criteria:
 Still to measure before any of this is called done:
 
 - Byte-level deltas for nghttp3, icu, hdr-histogram, libffi, LIEF, perfetto, openssl.
-- The real versions of `simdjson` and `ada-url` as Node.js ships them (the amalgamations
-  carry no version string), so the overlay pins are not guesses.
+- The real version of `ada-url` as Node.js ships it — its amalgamation carries no version
+  string (simdjson's does: 5.0.3), so the planned overlay pin would otherwise be a guess.
 - The `c-ares` generated headers: `config/*/ares_config.h` and `ares_build.h` as Node.js
   checks them in, against what vcpkg's CMake generates on each platform.
 - `sqlite3` compile-time macro set versus the overlay's feature list.

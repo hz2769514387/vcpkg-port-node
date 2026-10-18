@@ -12,7 +12,7 @@
 # conventions vcpkg expects - static/dynamic layout, debug suffixes, pkg-config, the exported
 # CMake config - stay exactly what consumers already get.
 #
-# Source: chromium/src/third_party/zlib at the commit Node.js v26.11.1 vendors. The tree calls
+# Source: chromium/src/third_party/zlib at the commit Node.js v26.12.0 vendors. The tree calls
 # itself 1.3.2.1-motley, which is why this port's version is 1.3.2.1; the commit is the pin, and
 # the version assertion further down checks that the two agree at build time. Chromium drives
 # this tree from GN, so the CMakeLists in it is a second-class path; that is why the patch set

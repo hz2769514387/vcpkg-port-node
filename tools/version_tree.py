@@ -7,7 +7,7 @@ What `git-tree` is
 Every version entry in the vcpkg registry version file `versions/<letter>-/<port>.json`
 carries a `git-tree`:
 
-    { "version": "26.11.1", "git-tree": "73f5edbf08874aa57cb3bcbfb4e295ccebbf8b8c" }
+    { "version": "26.12.0", "git-tree": "bd4283f953ad6d282944f01e57f7ee8d52b3b802" }
 
 It is **not** a commit id. It is the Git **tree object hash of the `ports/<port>`
 directory** - the fingerprint of every path and every byte inside that directory, exactly

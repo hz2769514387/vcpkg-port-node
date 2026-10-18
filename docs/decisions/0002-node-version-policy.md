@@ -14,9 +14,9 @@ notices when upstream moves.
 Facts that shaped this decision:
 
 - The port's version number *is* the upstream Node.js version (`vcpkg.json` carries
-  `"version": "26.11.1"`). vcpkg has no notion of a "major line", so "follow 26.x" can only
+  `"version": "26.12.0"`). vcpkg has no notion of a "major line", so "follow 26.x" can only
   be a policy we enforce in review and automation — not a mechanism we can configure.
-- Node.js v26.0.0 shipped on 2026-05-05 and becomes Active LTS on 2026-10-28. v26.11.1
+- Node.js v26.0.0 shipped on 2026-05-05 and becomes Active LTS on 2026-10-28. v26.12.0
   (2026-10-07) is the newest patch as of this decision.
 - Within one line, Node.js itself pins V8 (`26.x` → `14.6.202.34-node.37`) and
   `NODE_MODULE_VERSION` (147), so native add-ons stay compatible across patch releases of

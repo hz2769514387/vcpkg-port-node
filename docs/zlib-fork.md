@@ -17,7 +17,7 @@ The decision is issue #4's; this document is the evidence it asked for.
 | Version string in the tree | `1.3.2.1-motley` |
 | Fetch | `vcpkg_from_git`, `REF` = the commit (the repository is ~2.8 MB, so a shallow fetch by SHA is cheaper than an archive download and does not depend on archive bytes staying stable) |
 
-The commit is the one Node.js v26.11.1 ships, established by content rather than by a version
+The commit is the one Node.js v26.12.0 ships, established by content rather than by a version
 field: `deps/zlib/README.chromium` records `Version: 1.3.2` with a `Revision:` that belongs to
 madler's repository, not to the fork, so it cannot be used as a pin. Comparing the checked out
 fork against node's `deps/zlib` file by file:

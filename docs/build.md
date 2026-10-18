@@ -3,7 +3,7 @@
 Reference for the `gyp → ninja` route on the v26 line: the externalization mechanism, the
 platform behaviour that is not obvious from upstream's documentation, and the fixes the
 port has to carry. Findings marked **measured** were reproduced on this machine against
-`node-v26.11.1`; see §5 for the exact commands.
+`node-v26.12.0`; see §5 for the exact commands.
 
 The disposition of individual dependencies is in
 [dependency-disposition.md](dependency-disposition.md).
@@ -58,7 +58,7 @@ ninja link line ends up with real MSVC library names.
 
 ## 3. What the externalization actually removes (measured)
 
-With `--shared-abseil --shared-highway` on v26.11.1:
+With `--shared-abseil --shared-highway` on v26.12.0:
 
 | Check | Result |
 |---|---|
@@ -202,7 +202,7 @@ every link line).
 
 ## 6. Full build status
 
-The port builds `libnode.lib` successfully on `x64-windows-static` with Node.js v26.11.1
+The port builds `libnode.lib` successfully on `x64-windows-static` with Node.js v26.12.0
 (measured: 2026-10-15). Both Release and Debug configurations complete; the full
 `vcpkg install` including binary cache submission takes ~40 min on this machine.
 
@@ -211,7 +211,7 @@ The port builds `libnode.lib` successfully on `x64-windows-static` with Node.js 
 The fixes in §4 were necessary but not sufficient. Three additional problems surfaced
 during the full build:
 
-1. **simdutf `atomic_*` symbols missing.** V8 v26.11.1 bundles simdutf 7.7.0; vcpkg ships
+1. **simdutf `atomic_*` symbols missing.** V8 v26.12.0 bundles simdutf 7.7.0; vcpkg ships
    8.2.0. V8 calls `simdutf::atomic_binary_to_base64` and `simdutf::atomic_base64_to_binary_safe`,
    which are gated by `SIMDUTF_ATOMIC_REF` (requires `__cpp_lib_atomic_ref >= 201806L`, a
    C++20 feature). vcpkg's simdutf defaults to `SIMDUTF_CXX_STANDARD=11`, so the `atomic_*`

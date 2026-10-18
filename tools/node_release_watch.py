@@ -87,7 +87,7 @@ def fetch_index(url, timeout):
 
 
 def normalize_version(value):
-    """Strip the leading 'v' Node.js uses in its index (`v26.11.1` -> `26.11.1`)."""
+    """Strip the leading 'v' Node.js uses in its index (`v26.12.0` -> `26.12.0`)."""
     return str(value).strip().lstrip("v")
 
 
