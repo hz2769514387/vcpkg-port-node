@@ -120,18 +120,26 @@ measured in this repository, so 2022 is the floor rather than a ceiling. The pre
 machine whose newest is 2019 fails inside the port's build, with gyp's or the compiler's
 message, instead of at generator lookup.
 
-### Overlaying this port replaces zlib for your whole dependency graph
+### Overlaying this repository replaces ten registry ports for your whole dependency graph
+
+Declaring `overlay-ports` gives every consumer in the graph this repository's build of any port
+it ships under a registry name. Ten do: the zlib Chromium fork, `simdutf`, `sqlite3`,
+`simdjson`, `libffi`, `mbedtls`, `frozen`, `tcb-span`, `lief` and `perfetto`. The full table -
+the version each one replaces, what the graph gets instead, and what it means if you also link
+that library directly - is in [docs/overlay-replacements.md](docs/overlay-replacements.md).
+Read the `mbedtls` row first: the overlay is 4.0 while the registry at the pinned baseline
+ships 3.6, which is a breaking API change, not a version bump.
+
+The zlib fork is the one whose blast radius is largest in practice: **248 ports in the
+registry depend on `zlib`**, and overlaying this repository's ports gives every one of them
+the Chromium fork, not just node. It cannot be opted out of while still consuming this port.
+It is deliberate, it is measured and tested rather than assumed, and the evidence and the
+accepted downside are written up in `docs/zlib-fork.md` and `docs/decisions/`.
 
 Node.js does not use madler's zlib: it vendors the Chromium fork, with SIMD crc32/adler32 and
 inflate/deflate corrections upstream never merged. This repository ships that fork as
 `ports/zlib`, because Node.js's compression behaviour and `process.versions.zlib` are the
 reference the port is held to.
-
-That is the one decision whose blast radius leaves this port: **248 ports in the registry
-depend on `zlib`**, and overlaying this repository's ports gives every one of them the
-Chromium fork, not just node. It cannot be opted out of while still consuming this port. It is
-deliberate, it is measured and tested rather than assumed, and the evidence and the accepted
-downside are written up in `docs/zlib-fork.md` and `docs/decisions/`.
 
 ### The consumer's configuration and CRT must match the installed library
 

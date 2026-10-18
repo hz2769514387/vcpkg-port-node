@@ -213,6 +213,32 @@ def discover_ports(root):
     )
 
 
+def check_overlay_disclosure(report, root, ports):
+    """Every port must be disclosed in docs/overlay-replacements.md.
+
+    An overlay whose name exists in the registry silently replaces that library for
+    the consumer's whole dependency graph; the disclosure file is what makes that
+    visible before it happens, so a new port without a row is a review blocker.
+    Rows are matched by the backticked port name in the first column.
+    """
+    doc = os.path.join(root, "docs", "overlay-replacements.md")
+    if not os.path.isfile(doc):
+        report.error(
+            "docs/overlay-replacements.md",
+            "missing: every port under ports/ has to be disclosed there",
+        )
+        return
+    with open(doc, "r", encoding="utf-8") as fh:
+        text = fh.read()
+    for port in ports:
+        if "| `%s` |" % port not in text:
+            report.error(
+                "docs/overlay-replacements.md",
+                "ports/%s has no row in the disclosure table (say what it replaces and "
+                "what changes for a consumer)" % port,
+            )
+
+
 def main(argv=None):
     cwd = os.getcwd()
     root = repo_root(cwd)
@@ -224,6 +250,7 @@ def main(argv=None):
     ports = discover_ports(root)
     check_port_patches(report, root, ports)
     check_port_versions(report, root, ports)
+    check_overlay_disclosure(report, root, ports)
 
     for line in report.warnings:
         print(line)
