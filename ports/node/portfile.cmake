@@ -567,6 +567,10 @@ function(_node_shared_args _out _libdir _is_debug)
             set(_spdlog_lib "spdlog")
             set(_fmt_lib    "fmt")
         endif()
+        # bcrypt exists on Windows only - it is mbedtls's Windows entropy source
+        # (BCryptGenRandom), and LIEF's own CMake links it under if(WIN32) for
+        # the same reason. On Unix mbedtls reads /dev/urandom and needs nothing.
+        set(_lief_libs "LIEF,${_spdlog_lib},${_fmt_lib},mbedx509,tfpsacrypto,bcrypt")
     else()
         set(_zlib_lib    "z")
         set(_openssl_lib "crypto,ssl")
@@ -581,6 +585,7 @@ function(_node_shared_args _out _libdir _is_debug)
             set(_spdlog_lib "spdlog")
             set(_fmt_lib    "fmt")
         endif()
+        set(_lief_libs "LIEF,${_spdlog_lib},${_fmt_lib},mbedx509,tfpsacrypto")
         set(_absl_prefix "libabsl_")
         set(_absl_suffix ".a")
         set(_hwy_lib     "hwy")
@@ -638,11 +643,10 @@ function(_node_shared_args _out _libdir _is_debug)
         # the providers after it on the link line - exactly what LIEFConfig.cmake
         # does for CMake consumers through find_dependency. Order: consumers
         # first, providers later (mbedx509 references tfpsacrypto symbols).
-        # bcrypt is mbedtls's Windows entropy source (BCryptGenRandom); LIEF's
-        # own CMake adds it on WIN32 for the same reason. LIEF, mbedtls and
-        # bcrypt keep their names in the debug tree; spdlog/fmt carry the d
-        # postfix, hence the per-config names above.
-        "lief|LIEF,${_spdlog_lib},${_fmt_lib},mbedx509,tfpsacrypto,bcrypt")
+        # The exact chain is platform-dependent (bcrypt is Windows-only), see
+        # _lief_libs above; LIEF, mbedtls and bcrypt keep their names in the
+        # debug tree while spdlog/fmt carry the d postfix.
+        "lief|${_lief_libs}")
         string(REPLACE "|" ";" _pair "${_spec}")
         list(GET _pair 0 _opt)
         list(GET _pair 1 _libnames)
@@ -941,7 +945,10 @@ foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
              "unofficial-brotli CONFIG" "ada CONFIG" "simdjson CONFIG"
              "simdutf CONFIG" "ngtcp2 CONFIG" "zstd CONFIG"
              "ICU COMPONENTS uc i18n data" "unofficial-sqlite3 CONFIG"
-             "hdr_histogram CONFIG" "hwy CONFIG")
+             "hdr_histogram CONFIG" "hwy CONFIG"
+             # LIEF's own config pulls its dependency chain in turn
+             # (MbedTLS, spdlog, nlohmann_json, frozen, tl-expected, utf8cpp).
+             "LIEF")
     string(APPEND _cfg "find_dependency(${_dep})\n")
 endforeach()
 unset(_dep)
@@ -1005,13 +1012,13 @@ endif()
 
 # Everything gyp produces for a Node.js build. abseil/highway/simdutf/zlib come
 # from vcpkg; v8_zlib remains (patched down to compression_utils_portable.cc, so
-# it defines no zlib core symbols).
+# it defines no zlib core symbols). LIEF and libffi are vcpkg packages now and
+# are wired below as their own imported targets (LIEF::LIEF, unofficial::node::ffi).
 set(_node_all_archives
     libnode node_base
     v8_base_without_compiler v8_compiler v8_init v8_initializers
     v8_snapshot v8_libbase v8_libplatform v8_zlib
-    ncrypto ncrypto_engine nbytes merve uvwasi crdtp node_crates
-    liblief libffi)
+    ncrypto ncrypto_engine nbytes merve uvwasi crdtp node_crates)
 set(_node_archive_links "")
 foreach(_a IN LISTS _node_all_archives)
     _node_archive_filename("${_a}" _file)
@@ -1083,6 +1090,21 @@ if("Debug" IN_LIST _node_configs)
 endif()
 string(APPEND _cfg "endif()\n")
 
+# libffi ships no CMake config either (autotools), so import its archive the
+# same way. vcpkg names it ffi.lib / libffi.a on Windows / Unix.
+string(APPEND _cfg
+    "find_library(_node_ffi_lib ffi HINTS \${_node_lib} REQUIRED)\n"
+    "if(NOT TARGET unofficial::node::ffi)\n"
+    "  add_library(unofficial::node::ffi STATIC IMPORTED)\n"
+    "  set_target_properties(unofficial::node::ffi PROPERTIES IMPORTED_LOCATION \"\${_node_ffi_lib}\")\n")
+if("Debug" IN_LIST _node_configs)
+    _node_archive_filename("ffi" _ffi_file)
+    string(APPEND _cfg
+        "  set_target_properties(unofficial::node::ffi PROPERTIES IMPORTED_LOCATION_DEBUG"
+        " \"\${_node_prefix}/debug/lib/${_ffi_file}\")\n")
+endif()
+string(APPEND _cfg "endif()\n")
+
 # The gyp archives have real cycles (libnode <-> node_base, v8_compiler ->
 # v8_base_without_compiler). Windows' link.exe rescans the whole list, and Apple's
 # ld64 has no rescan construct, so both are flat; GNU linkers get CMake's
@@ -1095,7 +1117,8 @@ string(APPEND _cfg
     "    simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static\n"
     "    ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3\n"
     "    hdr_histogram::hdr_histogram_static unofficial::node::nghttp2 llhttp::llhttp_static\n"
-    "    hwy::hwy \${_node_absl_links})\n")
+    "    hwy::hwy \${_node_absl_links}\n"
+    "    LIEF::LIEF unofficial::node::ffi)\n")
 if(VCPKG_TARGET_IS_WINDOWS OR VCPKG_TARGET_IS_OSX)
     string(APPEND _cfg
         "target_link_libraries(unofficial::node::node INTERFACE \${_node_archives_link} \${_node_deps_link})\n")

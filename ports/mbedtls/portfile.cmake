@@ -101,6 +101,11 @@ vcpkg_cmake_configure(
         -DENABLE_TESTING=OFF
         -DENABLE_PROGRAMS=OFF
         -DMBEDTLS_FATAL_WARNINGS=OFF
+        # mbedtls defaults GEN_FILES to ON on non-Windows hosts, which runs its
+        # generators against python packages (jsonschema, jinja2) that a plain
+        # runner does not have. The generated files are shipped in generated/
+        # and laid over the source tree above, so generation is never needed.
+        -DGEN_FILES=OFF
         -DUSE_SHARED_MBEDTLS_LIBRARY=${USE_SHARED_MBEDTLS_LIBRARY}
         -DUSE_STATIC_MBEDTLS_LIBRARY=${USE_STATIC_MBEDTLS_LIBRARY}
 )
