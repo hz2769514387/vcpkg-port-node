@@ -1,0 +1,13 @@
+{
+  "name": "nghttp2",
+  "version": "1.70.0",
+  "description": "Implementation of the Hypertext Transfer Protocol version 2 in C (overlay: pinned to the version Node.js v26.12.0 ships; the vcpkg baseline's 1.69.0 is behind, and 31 files differ between the two - the public header, session and HPACK internals - so the registry build is not the library Node.js is tested against)",
+  "homepage": "https://github.com/nghttp2/nghttp2",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    }
+  ]
+}

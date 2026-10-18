@@ -1,0 +1,164 @@
+diff --git a/src/unix/fs.c b/src/unix/fs.c
+--- a/src/unix/fs.c
++++ b/src/unix/fs.c
+@@ -460,27 +460,28 @@
+                                      off_t off,
+                                      _Atomic uintptr_t* cache,
+                                      int is_pread) {
+-  ssize_t (*f)(int, const struct iovec*, uv__iovcnt, off_t);
+-  void* p;
++  union {
++    ssize_t (*f)(int, const struct iovec*, uv__iovcnt, off_t);
++    void* p;
++  } u;
+ 
+-  p = (void*) atomic_load_explicit(cache, memory_order_relaxed);
+-  if (p == NULL) {
++  u.p = (void*) atomic_load_explicit(cache, memory_order_relaxed);
++  if (u.p == NULL) {
+ #ifdef RTLD_DEFAULT
+     /* Try _LARGEFILE_SOURCE version of preadv/pwritev first,
+      * then fall back to the plain version, for libcs like musl.
+      */
+-    p = dlsym(RTLD_DEFAULT, is_pread ? "preadv64" : "pwritev64");
+-    if (p == NULL)
+-      p = dlsym(RTLD_DEFAULT, is_pread ? "preadv" : "pwritev");
++    u.p = dlsym(RTLD_DEFAULT, is_pread ? "preadv64" : "pwritev64");
++    if (u.p == NULL)
++      u.p = dlsym(RTLD_DEFAULT, is_pread ? "preadv" : "pwritev");
+     dlerror();  /* Clear errors. */
+ #endif  /* RTLD_DEFAULT */
+-    if (p == NULL)
+-      p = is_pread ? uv__preadv_emul : uv__pwritev_emul;
+-    atomic_store_explicit(cache, (uintptr_t) p, memory_order_relaxed);
++    if (u.p == NULL)
++      u.f = is_pread ? uv__preadv_emul : uv__pwritev_emul;
++    atomic_store_explicit(cache, (uintptr_t) u.p, memory_order_relaxed);
+   }
+ 
+-  f = p;
+-  return f(fd, bufs, nbufs, off);
++  return u.f(fd, bufs, nbufs, off);
+ }
+ 
+ 
+@@ -1324,10 +1325,7 @@
+   times[1] = src_statsbuf.st_mtim;
+ #endif
+ 
+-  if (futimens(dstfd, times) == -1) {
+-    err = UV__ERR(errno);
+-    goto out;
+-  }
++  (void) futimens(dstfd, times);
+ 
+   /*
+    * Change the ownership and permissions of the destination file to match the
+diff --git a/src/uv-common.c b/src/uv-common.c
+--- a/src/uv-common.c
++++ b/src/uv-common.c
+@@ -957,7 +957,7 @@
+   int i;
+ 
+   for (i = 0; i < count; i++)
+-    uv__free(cpu_infos[i].model);
++    uv__free((char*) cpu_infos[i].model);
+ 
+   uv__free(cpu_infos);
+ #endif  /* __linux__ */
+diff --git a/src/win/fs-event.c b/src/win/fs-event.c
+--- a/src/win/fs-event.c
++++ b/src/win/fs-event.c
+@@ -63,13 +63,17 @@
+   handle->req_pending = 1;
+ }
+ 
+-static void uv__relative_path(const WCHAR* filename,
+-                              const WCHAR* dir,
+-                              WCHAR** relpath) {
++/* Compute the path of `filename` relative to the watched directory `dir`.
++ * Returns 0 on success, -1 if `filename` is not actually prefixed by `dir`,
++ * which can happen if the directory is a short path. */
++static int uv__relative_path(const WCHAR* filename,
++                             const WCHAR* dir,
++                             WCHAR** relpath) {
+   size_t relpathlen;
+   size_t filenamelen = wcslen(filename);
+   size_t dirlen = wcslen(dir);
+-  assert(!_wcsnicmp(filename, dir, dirlen));
++  if (filenamelen <= dirlen || _wcsnicmp(filename, dir, dirlen) != 0)
++    return -1;
+   if (dirlen > 0 && dir[dirlen - 1] == '\\')
+     dirlen--;
+   relpathlen = filenamelen - dirlen - 1;
+@@ -78,6 +82,7 @@
+     uv_fatal_error(ERROR_OUTOFMEMORY, "uv__malloc");
+   wcsncpy(*relpath, filename + dirlen + 1, relpathlen);
+   (*relpath)[relpathlen] = L'\0';
++  return 0;
+ }
+ 
+ static int uv__split_path(const WCHAR* filename, WCHAR** dir,
+@@ -517,12 +522,21 @@
+ 
+               if (long_filenamew) {
+                 /* Get the file name out of the long path. */
+-                uv__relative_path(long_filenamew,
+-                                  handle->dirw,
+-                                  &filenamew);
+-                uv__free(long_filenamew);
+-                long_filenamew = filenamew;
+-                sizew = -1;
++                if (uv__relative_path(long_filenamew,
++                                      handle->dirw,
++                                      &filenamew) == 0) {
++                  uv__free(long_filenamew);
++                  long_filenamew = filenamew;
++                  sizew = -1;
++                } else {
++                  /* The resolved long path was not prefixed by the watched
++                   * directory (e.g. short name vs long name mismatch),
++                   * fall back to the name given by ReadDirectoryChangesW. */
++                  uv__free(long_filenamew);
++                  long_filenamew = NULL;
++                  filenamew = file_info->FileName;
++                  sizew = file_info->FileNameLength / sizeof(WCHAR);
++                }
+               } else {
+                 /* We couldn't get the long filename, use the one reported. */
+                 filenamew = file_info->FileName;
+diff --git a/src/win/tcp.c b/src/win/tcp.c
+--- a/src/win/tcp.c
++++ b/src/win/tcp.c
+@@ -52,10 +52,12 @@
+ /*
+  * Check if Windows version is 10.0.16299 (Windows 10, version 1709) or later.
+  */
+-static int uv__windows10_version1709(void) {
++static int minimal_windows10_version1709(void) {
+   OSVERSIONINFOW os_info;
+   if (!pRtlGetVersion)
+     return 0;
++  os_info.dwOSVersionInfoSize = sizeof(os_info);
++  os_info.szCSDVersion[0] = L'\0';
+   pRtlGetVersion(&os_info);
+   if (os_info.dwMajorVersion < 10)
+     return 0;
+@@ -89,7 +91,7 @@
+ 
+   /* Windows 10, version 1709 (build 10.0.16299) and later require second units
+    * for TCP keepalive options. */
+-  if (uv__windows10_version1709()) {
++  if (minimal_windows10_version1709()) {
+     if (setsockopt(socket,
+                    IPPROTO_TCP,
+                    TCP_KEEPIDLE,
+@@ -865,7 +867,7 @@
+    * is not reachable, instead of waiting for 2s. We do not care if this fails.
+    * This only works on Windows version 10.0.16299 and later.
+    */
+-  if (uv__windows10_version1709() && uv__is_loopback(&converted)) {
++  if (minimal_windows10_version1709() && uv__is_loopback(&converted)) {
+     memset(&retransmit_ioctl, 0, sizeof(retransmit_ioctl));
+     retransmit_ioctl.Rtt = TCP_INITIAL_RTO_NO_SYN_RETRANSMISSIONS;
+     retransmit_ioctl.MaxSynRetransmissions = TCP_INITIAL_RTO_NO_SYN_RETRANSMISSIONS;

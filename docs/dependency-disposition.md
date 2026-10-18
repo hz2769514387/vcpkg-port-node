@@ -71,15 +71,15 @@ Versions measured from the Node.js v26.12.0 source tree. "vcpkg" is release 2026
 | c-ares | 1.34.8 | 1.34.8 | `--shared-cares` | equal, sources match → use vcpkg |
 | brotli | 1.2.0 | 1.2.0 | `--shared-brotli` | equal, 1 node patch → overlay |
 | zstd | 1.5.7 | 1.5.7 | `--shared-zstd` | equal, sources match → use vcpkg |
-| nghttp2 | 1.70.0 | 1.69.0 | `--shared-nghttp2` | vcpkg behind → overlay |
+| nghttp2 | 1.70.0 | 1.69.0 | `--shared-nghttp2` | vcpkg behind → `ports/nghttp2` pins 1.70.0 (overlay) |
 | ngtcp2 | 1.25.0 | 1.25.0 | `--shared-ngtcp2` | equal; vcpkg port's TLS backends are opt-in features (none default-on) → use vcpkg port |
 | nghttp3 | 1.18.0 | 1.18.0 | `--shared-nghttp3` | equal → use vcpkg port; its static lib devendors sfparse, so the link line carries `-lsfparse` too |
 | sqlite3 | 3.54.0 | 3.53.4 | `--shared-sqlite` | vcpkg behind → overlay pin 3.54.0 |
 | icu | 78.3 (icu-small) | 78.3 | `--with-intl=system-icu` | equal → use vcpkg (decision: full ICU) |
-| llhttp | 9.4.3 | 9.3.1 | `--shared-http-parser` | vcpkg behind → overlay |
+| llhttp | 9.4.3 | 9.3.1 | `--shared-http-parser` | vcpkg behind → `ports/llhttp` pins 9.4.3 (overlay) |
 | simdjson | 5.0.3 | 4.6.4 | `--shared-simdjson` | vcpkg behind → overlay pin 5.0.3 |
-| ada-url | not in tree (amalgamation) | 3.4.4 | `--shared-ada` | node is ahead by a major → overlay + simdutf feature |
-| hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → overlay |
+| ada-url | 4.0.0 (amalgamation: `ADA_VERSION`) | 3.4.4 | `--shared-ada` | major version ahead → `ports/ada-url` pins 4.0.0 (overlay) |
+| hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → `ports/hdr-histogram` pins 0.12.0 (overlay) |
 | LIEF | 1.0.0 | 0.17.6 | `--shared-lief` | vcpkg behind a major → overlay pin 1.0.0 |
 | libffi | 3.8.0 | 3.7.1 | `--shared-ffi` | vcpkg behind → overlay pin 3.8.0 |
 | perfetto | 58.2 | 53.0 | `--shared-perfetto` | overlay pin 58.2 (node-only, not V8) — **ready but not wired**, see below |
