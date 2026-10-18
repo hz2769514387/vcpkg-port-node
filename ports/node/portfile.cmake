@@ -551,7 +551,7 @@ endif()
 #    Debug builds must link the dependencies' debug libraries, otherwise
 #    _ITERATOR_DEBUG_LEVEL does not match.
 # ---------------------------------------------------------------------------
-function(_node_shared_args _out _libdir)
+function(_node_shared_args _out _libdir _is_debug)
     if(VCPKG_TARGET_IS_WINDOWS)
         set(_zlib_lib    "zs")
         set(_openssl_lib "libcrypto,libssl")
@@ -559,10 +559,28 @@ function(_node_shared_args _out _libdir)
         set(_absl_prefix "absl_")
         set(_absl_suffix ".lib")
         set(_hwy_lib     "hwy")
+        # vcpkg's spdlog and fmt add the usual debug postfix.
+        if(_is_debug)
+            set(_spdlog_lib "spdlogd")
+            set(_fmt_lib    "fmtd")
+        else()
+            set(_spdlog_lib "spdlog")
+            set(_fmt_lib    "fmt")
+        endif()
     else()
         set(_zlib_lib    "z")
         set(_openssl_lib "crypto,ssl")
         set(_libuv_lib   "uv")
+        # The CI triplets on Unix are release-only, so only the release names
+        # are exercised there; the debug postfix is a CMake-level convention
+        # that holds on Unix too, but that combination is unverified.
+        if(_is_debug)
+            set(_spdlog_lib "spdlogd")
+            set(_fmt_lib    "fmtd")
+        else()
+            set(_spdlog_lib "spdlog")
+            set(_fmt_lib    "fmt")
+        endif()
         set(_absl_prefix "libabsl_")
         set(_absl_suffix ".a")
         set(_hwy_lib     "hwy")
@@ -606,8 +624,25 @@ function(_node_shared_args _out _libdir)
         "abseil|${_absl_libnames}"
         "highway|${_hwy_lib}"
         "ffi|ffi"
-        "perfetto|perfetto"
-        "lief|LIEF")
+        # perfetto is deliberately absent: --shared-perfetto is gated on
+        # --with-perfetto in configure.py, and enabling it trips a V8 gyp gap
+        # in the shared-SDK path (v8_libplatform loses trace-object.cc from its
+        # source list while legacy tracing members still reference
+        # TraceObject::~TraceObject, so mksnapshot fails to link). perfetto
+        # tracing is an opt-in embedder feature that Node's own release build
+        # does not enable, so the channel stays unwired until that is fixed;
+        # ports/perfetto is ready and the issue is written up in docs.
+        # "perfetto|perfetto"
+        # LIEF is a C++ static library whose own TUs use spdlog (which is built
+        # against external fmt) and mbedtls directly, so a consumer has to put
+        # the providers after it on the link line - exactly what LIEFConfig.cmake
+        # does for CMake consumers through find_dependency. Order: consumers
+        # first, providers later (mbedx509 references tfpsacrypto symbols).
+        # bcrypt is mbedtls's Windows entropy source (BCryptGenRandom); LIEF's
+        # own CMake adds it on WIN32 for the same reason. LIEF, mbedtls and
+        # bcrypt keep their names in the debug tree; spdlog/fmt carry the d
+        # postfix, hence the per-config names above.
+        "lief|LIEF,${_spdlog_lib},${_fmt_lib},mbedx509,tfpsacrypto,bcrypt")
         string(REPLACE "|" ";" _pair "${_spec}")
         list(GET _pair 0 _opt)
         list(GET _pair 1 _libnames)
@@ -637,18 +672,20 @@ set(_node_installed_libs "")
 foreach(_node_cfg IN LISTS _node_configs)
     if(_node_cfg STREQUAL "Debug")
         set(_node_cfg_arg "--debug")
+        set(_node_is_debug TRUE)
         set(_node_lib_dir "${CURRENT_INSTALLED_DIR}/debug/lib")
         set(ENV{PKG_CONFIG_PATH} "${CURRENT_INSTALLED_DIR}/debug/lib/pkgconfig")
         set(ENV{LIB} "${_node_lib_dir};$ENV{LIB}")
     else()
         set(_node_cfg_arg "")
+        set(_node_is_debug FALSE)
         set(_node_lib_dir "${CURRENT_INSTALLED_DIR}/lib")
         set(ENV{PKG_CONFIG_PATH} "${CURRENT_INSTALLED_DIR}/lib/pkgconfig")
         set(ENV{LIB} "${_node_lib_dir};$ENV{LIB}")
     endif()
 
 
-    _node_shared_args(_node_shared_args "${_node_lib_dir}")
+    _node_shared_args(_node_shared_args "${_node_lib_dir}" "${_node_is_debug}")
 
     vcpkg_execute_required_process(
         COMMAND "${PYTHON3}" configure.py

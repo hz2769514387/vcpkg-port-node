@@ -82,7 +82,7 @@ Versions measured from the Node.js v26.12.0 source tree. "vcpkg" is release 2026
 | hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → overlay |
 | LIEF | 1.0.0 | 0.17.6 | `--shared-lief` | vcpkg behind a major → overlay pin 1.0.0 |
 | libffi | 3.8.0 | 3.7.1 | `--shared-ffi` | vcpkg behind → overlay pin 3.8.0 |
-| perfetto | 58.2 | 53.0 | `--shared-perfetto` | vcpkg behind → overlay pin 58.2 (node-only, not V8) |
+| perfetto | 58.2 | 53.0 | `--shared-perfetto` | overlay pin 58.2 (node-only, not V8) — **ready but not wired**, see below |
 | zlib | 1.3.2.1-motley (Chromium fork) | 1.3.2 (madler) | `--shared-zlib` | different source → overlay port, built and measured: [zlib-fork.md](zlib-fork.md) |
 | googletest | Chromium fork 1.8.0.git-9518a57 | 1.17.0 | `--shared-gtest` | test only → see §4 |
 | V8: abseil | Chromium fork, rev `6d8e1a5c…` | 20260107.1 | `--shared-abseil` | different fork → issue #1 |
@@ -112,6 +112,15 @@ Two entries deserve a correction note:
   based on, not a Chromium commit. `ZLIB_VERSION` in the tree is `1.3.2.1-motley`, with no
   commit suffix. Any statement about "the Chromium fork commit node pins" needs another
   source than this tree (§7).
+- **perfetto** is the one row whose channel is deliberately left unwired. It is an opt-in
+  embedder feature — Node.js's own release build does not pass `--with-perfetto`, so the
+  default build compiles no perfetto at all (nothing to collide with). Turning it on hits
+  a V8 gyp gap in the shared-SDK path: with `v8_use_perfetto=1` the GN-scraped source list
+  drops `src/libplatform/tracing/trace-object.cc` from `v8_libplatform`, while legacy
+  tracing members still emitted into `v8_libplatform` and `mksnapshot` reference
+  `TraceObject::~TraceObject()`, so `mksnapshot.exe` fails to link with LNK2019/LNK1120.
+  The `ports/perfetto` overlay is built and verified; wiring it needs that V8 build-system
+  gap fixed first (tracked in issue #12).
 
 ### 3.1 LIEF's own dependencies (the rule applied transitively)
 
