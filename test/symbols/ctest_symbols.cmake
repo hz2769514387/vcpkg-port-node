@@ -46,10 +46,12 @@ else()
 endif()
 
 # node's library directory: node-config.cmake lives in <prefix>/share/unofficial-node/,
-# so the libraries are in <prefix>/lib. After the collision-move step, abseil/highway/
-# crdtp/v8_zlib etc. live in <prefix>/lib/manual-link - both dirs must be scanned
-# (the script accepts a repeated --node-lib-dir). find_package(unofficial-node CONFIG)
-# sets unofficial-node_DIR to the config file's directory.
+# so the libraries are in <prefix>/lib. <prefix>/lib/manual-link is scanned as well - it is
+# vcpkg's directory for libraries a port deliberately keeps out of the shared link path, and
+# this port installs nothing there today (the directory is usually absent and the script
+# skips it). Keeping both on the command line means moving a colliding library aside later is
+# a portfile change only. find_package(unofficial-node CONFIG) sets unofficial-node_DIR to
+# the config file's directory.
 get_filename_component(_node_port_prefix "${unofficial-node_DIR}/../.." ABSOLUTE)
 set(_node_port_libdir "${_node_port_prefix}/lib")
 

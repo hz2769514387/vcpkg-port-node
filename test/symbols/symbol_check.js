@@ -21,9 +21,11 @@
 //                        [--node-libs a.lib,b.lib,...] [--dumpbin <path>] [--nm <path>]
 //                        [--json out.json] [--fail-on-duplicates]
 //
-//   --node-lib-dir: repeatable. node's libraries live in <prefix>/lib and
-//     <prefix>/lib/manual-link (the latter holds the libraries that would collide if
-//     installed into the common dir); both must be scanned.
+//   --node-lib-dir: repeatable. node's libraries live in <prefix>/lib. The port also
+//     passes <prefix>/lib/manual-link, which vcpkg reserves for libraries a port keeps out
+//     of the shared link path; this port installs nothing there today, so the directory is
+//     usually absent and the scan skips it. It stays on the command line so that moving a
+//     colliding library aside later needs no test change.
 //
 //   --node-libs: treat ONLY these files as "node's libraries". Strongly recommended.
 //     <prefix>/lib is shared by the whole manifest project, so it also holds libraries
@@ -83,8 +85,8 @@ function parseArgs(argv) {
     if (a === '--fail-on-duplicates') { opts.failOnDuplicates = true; continue; }
     if (a === '--node-lib-dir') {
       // Repeatable: node's libraries may be split across <prefix>/lib and
-      // <prefix>/lib/manual-link (the latter holds abseil/highway/etc. after the
-      // collision-move step); both must be audited.
+      // <prefix>/lib/manual-link. Nothing is in manual-link today (see the usage note
+      // above); scanning it costs nothing and keeps the two dirs symmetric.
       opts.nodeLibDirs.push(argv[++i]);
       continue;
     }
@@ -271,29 +273,24 @@ function nmSymbols(lib, nm) {
 // ---------------------------------------------------------------------------
 // Known-duplicate allowlist
 // ---------------------------------------------------------------------------
-// V8 carries private copies of abseil / highway inside deps/v8/third_party, and vcpkg
-// provides same-named libraries - the two copies' strong symbols are cross-archive
-// duplicates on ELF/MachO (nm reports them as strong; on Windows the same duplicates
-// are COMDAT and so read as weak, so the Windows gate is naturally green while Linux/macOS
-// goes red - same root cause, opposite conclusion per platform). This is a documented
-// known limitation.
+// Empty on purpose. It used to hold abseil and highway, from the time V8 still compiled its
+// vendored copies next to the vcpkg ones. That stopped when the externalization landed
+// (issue #1): the node package builds no abseil archive at all, and the v8 archives only
+// reference the external libraries. Measured 2026-10-18, after the matrix went green on all
+// six legs:
 //
-// The allowlist matches by library file stem (directory and extension stripped). A dep
-// entry ending in '*' is a prefix glob. Allowlisted duplicates are still reported (placed
-// in known_duplicates, included in JSON) but do not trigger --fail-on-duplicates -
-// any duplicate OUTSIDE the allowlist is still red.
-const KNOWN_DUPLICATES = [
-  {
-    node: 'abseil',
-    dep: ['absl_*'],
-    why: 'v8 vendored abseil vs vcpkg abseil (two copies of the same third-party lib, known limitation)',
-  },
-  {
-    node: 'highway',
-    dep: ['hwy', 'hwy_*'],
-    why: 'v8 vendored highway vs vcpkg highway / libhwy (same as above, known limitation)',
-  },
-];
+//   Windows: "0 group(s) on the known-duplicate allowlist"
+//   Linux:   "== cross-archive duplicate strong symbols == (none)"
+//
+// Keep it empty. An entry here is a claim that a duplicate is unavoidable and understood, so
+// the honest response to a new red audit is to fix the duplicate, not to add a line - and the
+// audit is only a gate while the list is empty.
+//
+// The allowlist matches by library file stem (directory and extension stripped). A dep entry
+// ending in '*' is a prefix glob. Allowlisted duplicates are still reported (placed in
+// known_duplicates, included in JSON) but do not trigger --fail-on-duplicates - any duplicate
+// OUTSIDE the allowlist is still red.
+const KNOWN_DUPLICATES = [];
 
 function libStem(file) {
   let s = file.replace(/\.(lib|a)$/i, '').replace(/^.*[\\/]/, '');
