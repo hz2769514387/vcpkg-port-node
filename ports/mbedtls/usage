@@ -1,0 +1,12 @@
+The package provides CMake targets:
+
+    find_package(MbedTLS CONFIG REQUIRED)
+    target_link_libraries(main PRIVATE
+        MbedTLS::tfpsacrypto   # PSA Crypto API
+        MbedTLS::mbedx509      # X.509 parsing
+        MbedTLS::mbedtls       # TLS protocol layer
+    )
+
+This overlay pins a 4.0.0 development snapshot (see portfile.cmake); the
+exported target set matches that snapshot's tf-psa-crypto / mbedx509 / mbedtls
+split, which the 3.x line does not have.

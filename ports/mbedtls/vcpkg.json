@@ -1,0 +1,21 @@
+{
+  "name": "mbedtls",
+  "version": "4.0.0",
+  "port-version": 1,
+  "description": [
+    "An open source, portable, easy to use, readable and flexible SSL library (overlay: the 4.0.0 development snapshot that LIEF 1.0.0 vendors).",
+    "Why an overlay exists: the vcpkg baseline ships 3.6.5, which predates the tf-psa-crypto / mbedx509 library split. LIEF 1.0.0 requires find_package(MbedTLS 4.0.0) and links MbedTLS::tfpsacrypto and MbedTLS::mbedx509, neither of which exists in 3.6.x. The pin is upstream commit ec4044008d (2025-10-13) plus the framework and TF-PSA-Crypto submodule commits it references; the build reports the upstream MBEDTLS_VERSION 4.0.0. port-version 1 records that this is a snapshot rather than the eventual 4.0.0 release."
+  ],
+  "homepage": "https://www.trustedfirmware.org/projects/mbed-tls/",
+  "license": "Apache-2.0 OR GPL-2.0-or-later",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}
