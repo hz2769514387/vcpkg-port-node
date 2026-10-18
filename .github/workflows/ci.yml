@@ -1,8 +1,20 @@
 name: CI
 
-# The fast gate: build the port through its own consumer test project and run everything that
-# is cheap enough to run on every push. The Debug configuration and Node.js's own suite are
-# separate workflows, because each of them costs far more per run.
+# The push gate: build the port through its own consumer test project on every platform cell
+# the manifest claims, and run everything - this repository's own tests and Node.js's own
+# suite - against the result.
+#
+# Each leg installs the port once and builds the consumer twice: Release, which is what is
+# delivered and what the suite runs against, and RelWithDebInfo, which is the release ABI
+# with debug information and therefore the configuration a consumer uses to debug their own
+# code. Debug is a different install rather than a different consumer configuration - on
+# Windows the debug CRT cannot link a release library - so it has its own workflow.
+#
+# Release-only triplets, vcpkg's own community `*-release` ones: with VCPKG_BUILD_TYPE unset
+# the port builds Release *and* Debug, which is roughly twice the work per leg. The other two
+# dimensions of the matrix - the dynamic CRT, and a shared library - are `matrix.yml`, and
+# Debug is `debug.yml`; all three run on push as well, so a push covers every dimension, just
+# not inside one job.
 #
 # During the development period this branch is allowed to be red; the point is that the
 # signal is honest (AGENTS.md, section 5).
@@ -35,10 +47,6 @@ jobs:
   # Six legs: both architectures on each of the three platforms the manifest claims.
   # macOS x64 is a cross build from an arm64 image (see the x64-osx preset), which is why
   # that leg also needs the Rosetta guard and the Mach-O architecture assertion.
-  #
-  # Release-only, and that is the whole point: with VCPKG_BUILD_TYPE unset the port builds
-  # Release *and* Debug, which doubled every leg and pushed the Linux leg past the 5-hour job
-  # limit. The `*-release` names are vcpkg's own community triplets.
   windows:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
@@ -46,9 +54,9 @@ jobs:
       runner: windows-2022
       preset: x64-windows-static
       triplet: x64-windows-static-release
-      config: Release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
       expect-arch: x64
-      ctest-options: -LE node-suite
 
   windows-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -57,10 +65,9 @@ jobs:
       runner: windows-11-arm
       preset: arm64-windows-static
       triplet: arm64-windows-static-release
-      config: Release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
       expect-arch: ARM64
-
-      ctest-options: -LE node-suite
 
   linux:
     uses: ./.github/workflows/build-test.yml
@@ -69,9 +76,8 @@ jobs:
       runner: ubuntu-latest
       preset: x64-linux
       triplet: x64-linux-release
-      config: Release
-
-      ctest-options: -LE node-suite
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
 
   linux-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -80,9 +86,8 @@ jobs:
       runner: ubuntu-24.04-arm
       preset: arm64-linux
       triplet: arm64-linux-release
-      config: Release
-
-      ctest-options: -LE node-suite
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
 
   macos:
     uses: ./.github/workflows/build-test.yml
@@ -91,9 +96,9 @@ jobs:
       runner: macos-latest
       preset: arm64-osx
       triplet: arm64-osx-release
-      config: Release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
       expect-arch: arm64
-      ctest-options: -LE node-suite
 
   macos-x64:
     uses: ./.github/workflows/build-test.yml
@@ -102,10 +107,9 @@ jobs:
       runner: macos-15
       preset: x64-osx
       triplet: x64-osx-release
-      config: Release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
       expect-arch: x86_64
-
-      ctest-options: -LE node-suite
 
   # One archive with every leg's logs, instead of one artifact per platform.
   logs:

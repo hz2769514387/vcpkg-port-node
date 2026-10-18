@@ -11,18 +11,27 @@ here ([0002](decisions/0002-node-version-policy.md), [0003](decisions/0003-vcpkg
 | Workflow | Trigger | Cost | Decides |
 |---|---|---|---|
 | `lint.yml` | push to `main`, pull request, manual | seconds | the repository still obeys its own rules: version files match the ports, tracked files are English/LF/UTF-8, referenced patches exist |
-| `ci.yml` | push to `main`, pull request, manual | tens of minutes per leg | the port **builds and can be consumed** as a Release consumer, and the fast assertions about it pass |
-| `debug.yml` | weekly (Monday 04:47 UTC), manual | about an hour per leg | the same, for the **Debug** configuration |
-| `node-suite.yml` | weekly (Monday 03:17 UTC), manual | about an hour per leg | what was built is **still Node.js** |
+| `ci.yml` | push to `main`, pull request, manual | tens of minutes to a few hours per leg | the port **builds and can be consumed**, as a Release and as a RelWithDebInfo consumer, and **what was built is still Node.js** - Node.js's own suite runs on the Release consumer of every leg |
+| `debug.yml` | push to `main`, pull request, weekly, manual | about twice `ci.yml` per leg | the same for the **Debug** configuration, which needs a Debug library and therefore its own install |
+| `matrix.yml` | push to `main`, pull request, weekly, manual | about twice `ci.yml` per leg | the rest of the matrix: the **dynamic CRT** on Windows and a **shared libnode** on every platform |
 | `node-release-watch.yml` | daily (06:23 UTC), manual | seconds | whether upstream has published a newer Node.js release (ADR 0002) |
 | `vcpkg-release-watch.yml` | daily (06:53 UTC), manual | seconds | whether upstream has published a newer vcpkg release (docs/versioning.md) |
 
+Every dimension is verified on push. What is *not* true is that every dimension is verified
+inside one job: `debug.yml` and `matrix.yml` exist because a job that installed the port for
+three configurations and ran the suite three times would exceed GitHub's six-hour job limit,
+while three workflows run in parallel and each stays inside it (ADR 0007).
+
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
-place the build steps exist. They differ in which `preset`, `triplet` and `config` they pass,
-in `ctest-options` (`-LE node-suite` for the fast path, `-R node-suite` for the suite), and in
-whether a leg is blocking. Each of them also ends with a job that calls
-`.github/workflows/logs.yml`, which merges every leg's logs into **one** archive per run
+place the build steps exist. They differ in which `preset` and `triplet` they pass, in which
+`consumer-configs` they build the consumer as, in which of those run Node.js's own suite
+(`suite-configs`), and in whether a leg is blocking. Each of them also ends with a job that
+calls `.github/workflows/logs.yml`, which merges every leg's logs into **one** archive per run
 (section 6) - reading a run is one download, not one per platform.
+
+`node-suite.yml` is gone: it ran Node.js's suite once a week on the same six cells that
+`ci.yml` now builds on every push, with the suite included. Keeping both would have meant
+maintaining two descriptions of the same thing.
 
 ## 2. How a build is done
 
@@ -44,26 +53,33 @@ once: `cargo` (Node.js 26 builds its Temporal crate from Rust), `python3` (gyp, 
 official test driver), `clang-cl` on Windows (upstream requirement), and enough disk space.
 They are reported by a step named *Toolchain inventory*; the disk is printed before the build.
 
-### 2.1 One configuration per leg
+### 2.1 Which install, and which consumer configurations
+
+A leg installs the port once and then builds the consumer once per configuration in
+`consumer-configs` - the install is the expensive part and the loop is not. On a multi-config
+generator (Visual Studio) every configuration already exists in one build tree; on a
+single-config one (Ninja, Makefiles) `CMAKE_BUILD_TYPE` is fixed at configure time, so the loop
+reconfigures before it builds, and vcpkg - already satisfied - costs nothing the second time.
 
 `VCPKG_BUILD_TYPE` can only be set in a triplet, and leaving it unset makes the port build
 Release **and** Debug - two Node.js builds per leg. That is what pushed the Linux leg past the
-five-hour job limit. The push legs therefore name vcpkg's own **community** `*-release`
-triplets - `x64-windows-static-release`, `arm64-windows-static-release`, `x64-linux-release`,
-`arm64-linux-release`, `arm64-osx-release`, `x64-osx-release` - which are the standard
-settings plus `VCPKG_BUILD_TYPE release`. vcpkg ships them, so this repository carries no
-triplet file, and a consumer can name them too without copying anything.
+five-hour job limit. `ci.yml` therefore names vcpkg's own **community** `*-release` triplets -
+`x64-windows-static-release`, `arm64-windows-static-release`, `x64-linux-release`,
+`arm64-linux-release`, `arm64-osx-release`, `x64-osx-release` - which are the standard settings
+plus `VCPKG_BUILD_TYPE release`. vcpkg ships them, so this repository carries no triplet file,
+and a consumer can name them too without copying anything.
 
-`debug.yml` instead installs the *stock* (dual) triplet and builds the consumer as Debug,
-because a debug-only triplet is not usable: seven ports in this port's dependency closure
-(brotli, c-ares, libuv, ngtcp2, openssl, zstd, and this repository's own zlib overlay) run
-post-install fixups against the non-debug layout and fail there. The measurements are in
-issue #11.
+`debug.yml` installs the *stock* (dual) triplet instead, because Debug is a property of the
+install rather than of the consumer: on Windows a Debug consumer is the debug CRT and cannot
+link a Release library. Debug-only is not an option either - a debug-only triplet moves every
+install into `${prefix}/debug/...` and seven ports in this port's dependency closure (brotli,
+c-ares, libuv, ngtcp2, openssl, zstd, and this repository's own zlib overlay) run post-install
+fixups against the non-debug layout and fail there. The measurements are in issue #11.
 
-The reason release is the push configuration rather than debug is that the two cost nearly the
-same (measured 2026-10-15: Release 25m16s, Debug 27m38s for the same build on one machine) and
-release is the layout vcpkg's own ports are written for. Debug is still verified - just off the
-push path, where its cost does not hold up every commit.
+Node.js's own suite runs on the configurations named by `suite-configs` and on no others: it
+costs the better part of an hour, and running it against RelWithDebInfo would re-run the suite
+against the same release library with symbols attached. Every other case - identity,
+embedding, symbol, zlib - runs on every configuration a leg builds.
 
 ### 2.2 The architecture assertion
 
@@ -115,19 +131,30 @@ Six legs: both architectures on each of the three platforms the manifest claims.
 `test/CMakePresets.json` is named after the vcpkg triplet it selects, so it differs from the
 triplet column below only where CI installs vcpkg's release-only variant of the same triplet.
 
-| Leg | Runner | Preset | Triplet | Consumer | Blocking? |
-|---|---|---|---|---|---|
-| x64 Windows | `windows-2022` | `x64-windows-static` | `x64-windows-static-release` | Release | yes |
-| arm64 Windows | `windows-11-arm` | `arm64-windows-static` | `arm64-windows-static-release` | Release | no — zlib fixed (patch 0005); it now reaches the last link, over libffi's ARM64 assembly (patch 0019) |
-| x64 Linux | `ubuntu-latest` | `x64-linux` | `x64-linux-release` | Release | no — passes, still `experimental` |
-| arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release | no — has never finished a build |
-| arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release | yes |
-| x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release | no — passes now; still `experimental` |
-| all six | weekly/manual | same | stock (dual) | **Debug** | off the push path |
+Every cell below is a promise a consumer can hold this repository to, and each one is a leg.
 
-`ci.yml` and `node-suite.yml` run the Release rows; `debug.yml` runs the last one, where no leg
-is `experimental` because that workflow never runs on a push and its failures are exactly what
-it exists to surface.
+| Workflow | Leg | Runner | Preset | Triplet | Consumer | Node.js suite | Blocking? |
+|---|---|---|---|---|---|---|---|
+| `ci.yml` | x64 Windows | `windows-2022` | `x64-windows-static` | `x64-windows-static-release` | Release, RelWithDebInfo | Release | yes |
+| `ci.yml` | arm64 Windows | `windows-11-arm` | `arm64-windows-static` | `arm64-windows-static-release` | Release, RelWithDebInfo | Release | yes |
+| `ci.yml` | x64 Linux | `ubuntu-latest` | `x64-linux` | `x64-linux-release` | Release, RelWithDebInfo | Release | yes |
+| `ci.yml` | arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release, RelWithDebInfo | Release | yes |
+| `ci.yml` | arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release, RelWithDebInfo | Release | yes |
+| `ci.yml` | x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release, RelWithDebInfo | Release | yes |
+| `debug.yml` | all six | as above | as above | stock (dual) | **Debug** | Debug | yes |
+| `matrix.yml` | x64 Windows, `/MD` | `windows-2022` | `x64-windows-static-md` | `x64-windows-static-md` | Release, RelWithDebInfo, Debug | Release | no — new cell |
+| `matrix.yml` | arm64 Windows, `/MD` | `windows-11-arm` | `arm64-windows-static-md` | `arm64-windows-static-md` | Release, RelWithDebInfo, Debug | Release | no — new cell |
+| `matrix.yml` | x64 Windows, shared | `windows-2022` | `x64-windows` | `x64-windows` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | arm64 Windows, shared | `windows-11-arm` | `arm64-windows` | `arm64-windows` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | x64 Linux, shared | `ubuntu-latest` | `x64-linux-dynamic` | `x64-linux-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
+| `matrix.yml` | arm64 Linux, shared | `ubuntu-24.04-arm` | `arm64-linux-dynamic` | `arm64-linux-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
+| `matrix.yml` | arm64 macOS, shared | `macos-latest` | `arm64-osx-dynamic` | `arm64-osx-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
+| `matrix.yml` | x64 macOS, shared | `macos-15` | `x64-osx-dynamic` | `x64-osx-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
+
+The `matrix.yml` legs are `experimental` because they have not completed a build yet, which is
+this repository's standing rule for a leg in that state: the port claims these cells, so they
+are in the matrix rather than absent, and being red-but-non-blocking is how the claim stays
+honest instead of aspirational. A leg stops being experimental when it passes.
 
 x64 macOS is a **cross build**: the runner is an arm64 image and both the port and the consumer
 are asked for `x86_64` (the preset sets `CMAKE_OSX_ARCHITECTURES`, which is also what vcpkg

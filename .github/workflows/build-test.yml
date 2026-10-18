@@ -28,11 +28,16 @@ on:
         description: vcpkg triplet to install with, which is what decides the build configuration.
         required: true
         type: string
-      config:
-        description: Consumer build configuration - what the consumer test project is built as. Must match the triplet.
+      consumer-configs:
+        description: "Comma-separated consumer build configurations to build and test in this leg, e.g. 'Release,RelWithDebInfo'. One port install serves all of them, which is the whole reason to loop here instead of opening one leg per configuration."
         required: false
         type: string
         default: Release
+      suite-configs:
+        description: "Comma-separated subset of consumer-configs that also runs Node.js's own suite. The rest run with -LE node-suite. Empty means no configuration runs the suite."
+        required: false
+        type: string
+        default: ""
       expect-arch:
         description: "Architecture the built consumer executable must have: x64 / ARM64 / x86 / ARM on Windows (PE machine), x86_64 / arm64 on macOS (Mach-O). Empty skips the check."
         required: false
@@ -43,11 +48,6 @@ on:
         required: false
         type: string
         default: 9e593bb18ea69cc5095e012465dcd675a822ed0d
-      ctest-options:
-        description: Flags for ctest, e.g. "-LE node-suite" for the fast path.
-        required: false
-        type: string
-        default: -LE node-suite
       experimental:
         description: "Mark the platform as unverified: failures are reported but do not fail the run."
         required: false
@@ -96,9 +96,9 @@ jobs:
           mkdir -p "$RUNNER_TEMP/ci-logs"
           echo "### Port build"
           echo "- runner: ${{ inputs.runner }} ($RUNNER_OS/$RUNNER_ARCH)"
-          echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }}, consumer ${{ inputs.config }})"
+          echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }}, consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
           echo "- vcpkg: ${{ inputs.vcpkg-commit }}"
-          echo "- ctest: ${{ inputs.ctest-options }}"
+          echo "- suite on: ${{ inputs.suite-configs }}"
           echo ""
           echo "Free space before:"; df -h . || true
 
@@ -266,9 +266,16 @@ jobs:
         env:
           PRESET: ${{ inputs.preset }}
           TRIPLET: ${{ inputs.triplet }}
-          CONFIG: ${{ inputs.config }}
+          CONFIG: ${{ inputs.consumer-configs }}
         run: |
           set -euo pipefail
+          # CMAKE_BUILD_TYPE is the *first* configuration in the list. On a
+          # multi-config generator (Visual Studio) it is not what decides the
+          # build - every configuration is available in one tree - and on a
+          # single-config one the per-configuration loop below reconfigures
+          # before it builds. Either way this configure is the one that builds
+          # the port, which is the expensive part, and it happens once.
+          FIRST_CONFIG="${CONFIG%%,*}"
           # This is also what builds the port: vcpkg runs in manifest mode during configure,
           # and it downloads every dependency's sources while doing so. vcpkg has no retry of
           # its own for a source tarball, and one timeout from an upstream mirror costs the
@@ -281,7 +288,7 @@ jobs:
             attempt_no="$attempt"
             if cmake --preset "$PRESET" \
                  -DVCPKG_TARGET_TRIPLET="$TRIPLET" \
-                 -DCMAKE_BUILD_TYPE="$CONFIG" 2>&1 | tee "$log"; then
+                 -DCMAKE_BUILD_TYPE="$FIRST_CONFIG" 2>&1 | tee "$log"; then
               echo "configure succeeded on attempt $attempt"
               exit 0
             fi
@@ -302,12 +309,30 @@ jobs:
         working-directory: test
         env:
           PRESET: ${{ inputs.preset }}
-          CONFIG: ${{ inputs.config }}
+          TRIPLET: ${{ inputs.triplet }}
+          CONFIGS: ${{ inputs.consumer-configs }}
         run: |
           set -euo pipefail
-          # tee'd as well: the port's own output lands in vcpkg's buildtrees, but this step's
-          # output is the consumer's, and the first-error summary reads both.
-          cmake --build --preset "$PRESET" --config "$CONFIG" 2>&1 | tee "$RUNNER_TEMP/ci-logs/build.log"
+          # One install of the port serves every configuration, so the loop is
+          # the cheap part - the port is built once, above.
+          #
+          # Reconfigured per configuration because a single-config generator
+          # (Ninja, Makefiles) fixes CMAKE_BUILD_TYPE at configure time and
+          # builds one tree per value; on a multi-config one the reconfigure is
+          # a no-op that costs seconds and every configuration already exists
+          # in the same tree.
+          IFS=',' read -r -a cfgs <<< "$CONFIGS"
+          for cfg in "${cfgs[@]}"; do
+            echo "::group::consumer configuration $cfg"
+            cmake --preset "$PRESET" \
+                -DVCPKG_TARGET_TRIPLET="$TRIPLET" \
+                -DCMAKE_BUILD_TYPE="$cfg"
+            # tee'd as well: the port's own output lands in vcpkg's buildtrees, but this
+            # step's output is the consumer's, and the first-error summary reads both.
+            cmake --build --preset "$PRESET" --config "$cfg" 2>&1 \
+              | tee "$RUNNER_TEMP/ci-logs/build-$cfg.log"
+            echo "::endgroup::"
+          done
 
       - name: Assert the architecture of the built executable
         if: ${{ inputs.expect-arch != '' }}
@@ -315,7 +340,7 @@ jobs:
         working-directory: test
         env:
           PRESET: ${{ inputs.preset }}
-          CONFIG: ${{ inputs.config }}
+          CONFIGS: ${{ inputs.consumer-configs }}
           EXPECT_ARCH: ${{ inputs.expect-arch }}
         run: |
           set -euo pipefail
@@ -325,8 +350,10 @@ jobs:
           # therefore run perfectly and pass every ctest case while proving nothing. This
           # reads the file itself, which needs no toolchain and no developer environment, so
           # it still works after an earlier step has broken the environment.
+          IFS=',' read -r -a cfgs <<< "$CONFIGS"
+          for cfg in "${cfgs[@]}"; do
           exe=""
-          for cand in "build/$PRESET/embedder/$CONFIG/node_embed.exe" \
+          for cand in "build/$PRESET/embedder/$cfg/node_embed.exe" \
                       "build/$PRESET/embedder/node_embed.exe" \
                       "build/$PRESET/embedder/node_embed"; do
             if [ -f "$cand" ]; then exe="$cand"; break; fi
@@ -365,25 +392,41 @@ jobs:
             detail="PE Machine 0x$machine"
           fi
 
-          echo "$exe: $detail -> $got (expected $EXPECT_ARCH)"
+          echo "$exe ($cfg): $detail -> $got (expected $EXPECT_ARCH)"
           if [ "$got" != "$EXPECT_ARCH" ]; then
             echo "::error::the built executable is $got, not $EXPECT_ARCH. An arm64 runner emulates or translates the other architecture, so a wrong-architecture build still runs and its tests still pass - it has to be caught here."
             exit 1
           fi
+          done
 
       - name: Run the tests
         shell: bash
         working-directory: test
         env:
           PRESET: ${{ inputs.preset }}
-          CONFIG: ${{ inputs.config }}
-          CTEST_OPTIONS: ${{ inputs.ctest-options }}
+          CONFIGS: ${{ inputs.consumer-configs }}
+          SUITE_CONFIGS: ${{ inputs.suite-configs }}
         run: |
           set -euo pipefail
-          # -C is only meaningful for multi-config generators (Visual Studio); the
-          # single-config ones ignore it.
-          ctest --test-dir "build/$PRESET" -C "$CONFIG" --output-on-failure $CTEST_OPTIONS \
-            2>&1 | tee "$RUNNER_TEMP/ci-logs/ctest.log"
+          # Node.js's own suite costs the better part of an hour, so it runs on
+          # the configurations it says something about (the delivered Release,
+          # and Debug where that is built) and not on every configuration a leg
+          # builds. Everything else - the identity, embedding, symbol and zlib
+          # cases - runs everywhere.
+          IFS=',' read -r -a cfgs <<< "$CONFIGS"
+          IFS=',' read -r -a suitecfgs <<< "$SUITE_CONFIGS"
+          for cfg in "${cfgs[@]}"; do
+            opts="-LE node-suite"
+            for s in "${suitecfgs[@]}"; do
+              if [ "$s" = "$cfg" ]; then opts=""; fi
+            done
+            echo "::group::ctest $cfg ($opts)"
+            # -C is only meaningful for multi-config generators (Visual Studio); the
+            # single-config ones ignore it.
+            ctest --test-dir "build/$PRESET" -C "$cfg" --output-on-failure $opts \
+              2>&1 | tee "$RUNNER_TEMP/ci-logs/ctest-$cfg.log"
+            echo "::endgroup::"
+          done
 
       - name: Summarize the run
         if: always()
@@ -391,14 +434,20 @@ jobs:
         run: |
           set -uo pipefail
           {
-            echo "## ${{ inputs.triplet }} (${{ inputs.config }})"
+            echo "## ${{ inputs.triplet }} (consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
             echo ""
             echo '```'
             # The pass/fail counts go first: they are the whole answer to "did this leg work",
             # and they are easy to miss at the end of a few thousand lines.
-            if [ -f "$RUNNER_TEMP/ci-logs/ctest.log" ]; then
-              grep -E "tests passed|tests failed|Total Test time" "$RUNNER_TEMP/ci-logs/ctest.log" | head -n 5 || true
-              awk '/The following tests FAILED/{found=1} found' "$RUNNER_TEMP/ci-logs/ctest.log" | head -n 40 || true
+            # One log per configuration, so the counts are read out of all of
+            # them; a leg that builds three configurations and reports one is
+            # not reporting what it did.
+            for f in "$RUNNER_TEMP"/ci-logs/ctest-*.log; do
+              [ -f "$f" ] || continue
+              echo "-- $(basename "$f")"
+              grep -E "tests passed|tests failed|Total Test time" "$f" | head -n 5 || true
+              awk '/The following tests FAILED/{found=1} found' "$f" | head -n 40 || true
+            done
             else
               echo "no ctest log: this leg did not get that far"
             fi
@@ -442,7 +491,7 @@ jobs:
         with:
           # Named so that the merge job in every calling workflow picks all legs up with one
           # pattern: one archive per run, not one per platform.
-          name: logs-part-${{ inputs.triplet }}-${{ inputs.config }}
+          name: logs-part-${{ inputs.triplet }}-${{ inputs.consumer-configs }}
           path: ${{ runner.temp }}/ci-logs
           if-no-files-found: warn
           retention-days: 7

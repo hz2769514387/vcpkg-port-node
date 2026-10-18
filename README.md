@@ -18,7 +18,7 @@ Early development: there is no release yet, no tag, and no stable interface.
 | Node.js     | v26.12.0 (v26 line)                             |
 | vcpkg       | 2026.07.29 (pinned)                             |
 | Build route | `configure.py` → `gyp -f ninja` → `ninja`       |
-| Delivery    | static library + CMake config, as overlay ports |
+| Delivery    | static or shared library + CMake config, as overlay ports |
 
 The machine-readable record of these pins — plus V8's version, `NODE_MODULE_VERSION` and  
 Node.js's LTS dates — is [versions.json](versions.json), and  
@@ -153,11 +153,54 @@ These are MSVC's ABI, not this port's rules:
 - **Runtime library.** A `/MD` consumer cannot link a `/MT` library, or the other way round  
   (`LNK2038 RuntimeLibrary mismatch`). Which one the library uses is decided by the triplet  
   that installed the port, through `VCPKG_CRT_LINKAGE`.
-- **Configuration.** A Debug consumer needs a Debug library. A release-only triplet installs  
-  nothing under `debug/lib`, so a Debug consumer cannot link such an install at all.
+- **Configuration.** A Debug consumer needs a Debug library: MSVC's Debug configuration is the  
+  debug CRT (`/MTd` or `/MDd`) plus `_ITERATOR_DEBUG_LEVEL=2`, and a Release library carries  
+  the release values. A release-only triplet installs nothing under `debug/lib`, so a Debug  
+  consumer cannot link such an install at all.
+
+**Release and RelWithDebInfo work against any install.** `RelWithDebInfo` is the release ABI  
+with full debug information, so it is the configuration to use when what you need is to debug  
+your own code - and you are never pushed into Release to do it. **Debug needs a dual triplet**  
+(a stock one, with `VCPKG_BUILD_TYPE` unset), which is what makes the port build a Debug  
+library as well.
 
 The exported config checks both at configure time and fails with the fix in the message,  
 instead of letting you meet them as a wall of linker errors.
+
+### Node.js is compiled with clang-cl on Windows, gcc on Linux and clang on macOS
+
+That is Node.js's own build and test matrix, and this port does not change it. What *you* use to
+compile your own code is a separate choice, and the supported way to make it is in your preset:
+
+| Platform | Recommended | How to state it |
+|---|---|---|
+| Windows | `clang-cl` | `toolset: {value: ClangCL, strategy: set}` |
+| Linux | `gcc` | `CMAKE_C_COMPILER: gcc`, `CMAKE_CXX_COMPILER: g++` |
+| macOS | `clang` | `CMAKE_C_COMPILER: clang`, `CMAKE_CXX_COMPILER: clang++` |
+
+**On Windows do not use `CMAKE_CXX_COMPILER` to ask for clang.** A Visual Studio generator
+derives its compiler from its toolset and ignores that variable entirely - by bare name and by
+full path alike, with no error and no warning, so you get `cl.exe` while believing otherwise.
+Measured on Visual Studio 2022 / CMake 3.31, and the whole of [ADR 0007](docs/decisions/0007-toolchain-configuration-and-linkage-policy.md).
+
+Every other combination - `cl.exe` on Windows, clang on Linux, a mixed build whose dependencies
+come from one compiler and whose executable from another - is **legal and unverified**: nothing
+here blocks it, and nothing here promises it works. Changing those settings is fine; the result
+is yours. Note that on Windows "mixed" is the default rather than something you opt into: the
+port always builds Node.js with clang-cl, so naming no toolset already gives you a `cl.exe`
+executable against a clang-cl library.
+
+### A shared libnode has to be findable at run time
+
+With `VCPKG_LIBRARY_LINKAGE=dynamic` the delivered library is a DLL, a `.so` or a `.dylib`, and
+finding it is the consumer's job: copy it next to your executable on Windows, or give your target
+a `BUILD_RPATH` on Unix. `test/CMakeLists.txt` does both, in one small function you can copy.
+
+Two things differ from the static library, and both are deliberate: a shared `libnode` already
+contains the externalized dependencies, so the exported config links the library and **nothing
+else** - linking them again would put a second copy of every symbol into the process - and the
+addon story is not the same, because native addons bind against symbols the hosting executable
+exports.
 
 ### It integrates with CMake, and only with CMake
 
@@ -169,16 +212,26 @@ libraries by hand; the generated config is the readable description of that link
 
 ## Continuous integration
 
-Five gates, described in `docs/ci.md`: a seconds-long lint pass on every push; a release-only  
-build of the port through `test/` on every push, across all six platform cells - both  
-architectures on Windows, Linux and macOS - blocking on x64 Windows and arm64 macOS and  
-non-blocking on the rest until each completes a build (x64 Linux reached that point on  
-2026-10-17); a weekly build of the Debug configuration,  
-which is off the push path because it costs roughly a full extra build per platform; a weekly  
-run of Node.js's own test suite; and a scheduled watcher that compares the pinned Node.js  
-version against `nodejs.org` and opens an issue when upstream moves, because nothing else will:  
-Renovate and Dependabot have no vcpkg manager. Every run's logs from every leg end up in a  
-single archive, and the run summary carries the test counts and the first error.
+Four gates, described in `docs/ci.md`, and every dimension of the matrix is verified **on every
+push**:
+
+- a seconds-long lint pass;
+- `ci.yml` — the port built through `test/` across all six platform cells (both architectures on
+  Windows, Linux and macOS), consumed as Release **and** as RelWithDebInfo, with Node.js's own
+  test suite run against the Release consumer of every leg;
+- `debug.yml` — the same six cells as a **Debug** consumer, which needs a Debug library and
+  therefore its own install;
+- `matrix.yml` — the rest of the matrix: the dynamic CRT on Windows and a **shared libnode** on
+  every platform. These legs are non-blocking until each has completed a build.
+
+Debug and the wider matrix are separate workflows rather than extra legs of `ci.yml` because a
+job that installed the port for every configuration and ran the suite for each would exceed
+GitHub's six-hour job limit, while three workflows run in parallel and each stays inside it.
+
+Plus two daily watchers that compare the pinned Node.js and vcpkg releases against upstream and
+open an issue when either moves, because nothing else will: Renovate and Dependabot have no
+vcpkg manager. Every run's logs from every leg end up in a single archive, and the run summary
+carries the test counts and the first error.
 
 ## Repository layout
 

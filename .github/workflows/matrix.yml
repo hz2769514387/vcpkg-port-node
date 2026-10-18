@@ -1,0 +1,149 @@
+name: Matrix
+
+# The remaining dimensions of the build matrix (issue #11): the dynamic CRT on Windows, and a
+# shared libnode on every platform. Both are ordinary vcpkg triplets - `*-windows-static-md`
+# and the `*-dynamic` ones - so a consumer reaches them the same way they reach anything else.
+#
+# Why these are not legs of ci.yml: each one is a full extra install of the port, and putting
+# them in one job would put that job over the six-hour limit. Split across workflows they run
+# in parallel on push, which is what "verified on push" has to mean here.
+#
+# Every leg is `experimental` today, which is this repository's standing rule for a leg that
+# has not completed a build: the port claims these cells, so they are in the matrix rather
+# than absent, and being red-but-non-blocking is how the claim stays honest instead of
+# aspirational. A leg stops being experimental when it passes.
+
+on:
+  push:
+    branches:
+      - main
+      - "*_vcpkg-*"
+  pull_request:
+  schedule:
+    - cron: '23 5 * * 1'
+  workflow_dispatch:
+
+concurrency:
+  group: matrix-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  # One job per cell rather than a matrix - see the note in ci.yml.
+  #
+  # These triplets are dual (no `*-release` community variant exists for most of them), so
+  # the port builds Release *and* Debug here, and the legs build all three consumer
+  # configurations: that second port build is already paid for, and Debug is a promise anyway.
+
+  windows-md:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-2022
+      preset: x64-windows-static-md
+      triplet: x64-windows-static-md
+      consumer-configs: Release,RelWithDebInfo,Debug
+      suite-configs: Release
+      expect-arch: x64
+      experimental: true
+      timeout-minutes: 420
+
+  windows-md-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-11-arm
+      preset: arm64-windows-static-md
+      triplet: arm64-windows-static-md
+      consumer-configs: Release,RelWithDebInfo,Debug
+      suite-configs: Release
+      expect-arch: ARM64
+      experimental: true
+      timeout-minutes: 420
+
+  windows-shared:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-2022
+      preset: x64-windows
+      triplet: x64-windows
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
+      expect-arch: x64
+      experimental: true
+      timeout-minutes: 420
+
+  windows-shared-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-11-arm
+      preset: arm64-windows
+      triplet: arm64-windows
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
+      expect-arch: ARM64
+      experimental: true
+      timeout-minutes: 420
+
+  linux-shared:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      preset: x64-linux-dynamic
+      triplet: x64-linux-dynamic
+      consumer-configs: Release,RelWithDebInfo,Debug
+      suite-configs: Release
+      experimental: true
+      timeout-minutes: 420
+
+  linux-shared-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24.04-arm
+      preset: arm64-linux-dynamic
+      triplet: arm64-linux-dynamic
+      consumer-configs: Release,RelWithDebInfo,Debug
+      suite-configs: Release
+      experimental: true
+      timeout-minutes: 420
+
+  macos-shared:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: macos-latest
+      preset: arm64-osx-dynamic
+      triplet: arm64-osx-dynamic
+      consumer-configs: Release,RelWithDebInfo,Debug
+      suite-configs: Release
+      expect-arch: arm64
+      experimental: true
+      timeout-minutes: 420
+
+  macos-shared-x64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: macos-15
+      preset: x64-osx-dynamic
+      triplet: x64-osx-dynamic
+      consumer-configs: Release,RelWithDebInfo,Debug
+      suite-configs: Release
+      expect-arch: x86_64
+      experimental: true
+      timeout-minutes: 420
+
+  logs:
+    needs: [windows-md, windows-md-arm64, windows-shared, windows-shared-arm64,
+            linux-shared, linux-shared-arm64, macos-shared, macos-shared-x64]
+    if: always()
+    uses: ./.github/workflows/logs.yml
+    secrets: inherit
+    with:
+      label: matrix
