@@ -28,23 +28,86 @@ ctest --test-dir build/x64-windows-static -C Release --output-on-failure
 ```
 
 A preset is named after the vcpkg triplet it selects, so the name you type is the triplet you
-install: `x64-windows-static`, `arm64-windows-static`, `x64-linux`, `arm64-linux`, `arm64-osx`,
-`x64-osx` - both architectures on each platform. Each names a triplet that ships with vcpkg
-itself and carries no configuration, so `CMAKE_BUILD_TYPE` and `--config` decide that. With an
-unset `VCPKG_BUILD_TYPE` such a triplet makes the port build Release **and** Debug, so a Debug
+install. That rule was set on 2026-10-17 and it still holds for the preset you should copy:
+**no suffix means this repository's recommendation for its platform.** A suffix names one
+deliberate deviation from that recommendation, and the only suffix today is `-msvc` on Windows.
+
+### Which compiler you get, and how to change it
+
+The port builds Node.js with **clang-cl on Windows**, **gcc on Linux** and **clang on macOS**,
+because that is what Node.js upstream builds and tests with. That is the port's own build and
+nothing here changes it.
+
+What a preset controls is the compiler for **your** code:
+
+| Platform | This repository recommends | How the preset states it |
+|---|---|---|
+| Windows | `clang-cl` | `toolset: {value: ClangCL, strategy: set}` |
+| Linux | `gcc` | `CMAKE_C_COMPILER: gcc`, `CMAKE_CXX_COMPILER: g++` |
+| macOS | `clang` | `CMAKE_C_COMPILER: clang`, `CMAKE_CXX_COMPILER: clang++` |
+
+**On Windows, do not reach for `CMAKE_CXX_COMPILER`.** A Visual Studio generator derives its
+compiler from the toolset and ignores `CMAKE_C_COMPILER` / `CMAKE_CXX_COMPILER` completely -
+with no error and no warning. Measured on Visual Studio 2022 / CMake 3.31: asking for
+`clang-cl` that way, by name or by full path, silently builds with `cl.exe`. `toolset` is the
+field that works (see ADR 0007). It only works because the Windows presets name no generator,
+so CMake picks the newest Visual Studio; with Ninja on Windows you are on your own.
+
+The `-msvc` presets are the **mixed** case: your executable compiled with `cl.exe` against a
+Node.js library compiled with clang-cl. That is a legal MSVC-ABI mix, and it is what this
+repository's CI did before ADR 0007 - but it is not the recommendation, it is not covered by
+any promise, and changing it is on you. Note that "mixed" is not something you opt into on
+Windows: naming no toolset already gives you `cl.exe` while the port stays on clang-cl.
+
+Anything else - clang on Linux, MinGW, a different clang - is likewise not blocked and not
+verified. Nothing here detects or rejects it.
+
+### Which configuration you can use
+
+| Configuration | Needs | Notes |
+|---|---|---|
+| `Release` | any install | |
+| `RelWithDebInfo` | any install, **release-only included** | the release ABI plus full debug information: this is what to use when the need is to debug your own code |
+| `Debug` | a **dual** install (stock triplet, `VCPKG_BUILD_TYPE` unset) | on Windows a Debug consumer is `/MTd`/`/MDd` and cannot link a Release library (`LNK2038`) |
+
+Presets carry no configuration, so `CMAKE_BUILD_TYPE` and `--config` decide it. With an unset
+`VCPKG_BUILD_TYPE` a stock triplet makes the port build Release **and** Debug, so a Debug
 consumer is possible - configure with `-DCMAKE_BUILD_TYPE=Debug` and build with `--config Debug`.
-CI instead names vcpkg's community **release-only** triplets (`*-release`), whose install has no
+CI also names vcpkg's community **release-only** triplets (`*-release`), whose install has no
 debug library; the port's exported config says so at configure time on Windows rather than
 letting the link fail with a wall of `LNK2038`.
+
+### The rest of the matrix
+
+Every preset names a triplet that ships with vcpkg, so this repository still carries no triplet
+file. Both architectures on each of the three platforms, both library linkages, and on Windows
+both CRTs:
+
+| | static library | shared library |
+|---|---|---|
+| Windows x64, `/MT` | `x64-windows-static` | — |
+| Windows x64, `/MD` | `x64-windows-static-md` | `x64-windows` |
+| Windows arm64, `/MT` | `arm64-windows-static` | — |
+| Windows arm64, `/MD` | `arm64-windows-static-md` | `arm64-windows` |
+| Linux x64 / arm64 | `x64-linux`, `arm64-linux` | `x64-linux-dynamic`, `arm64-linux-dynamic` |
+| macOS x64 / arm64 | `x64-osx`, `arm64-osx` | `x64-osx-dynamic`, `arm64-osx-dynamic` |
+
+Node.js recommends `/MD`; `/MT` is equally supported and equally verified, and the unsuffixed
+`*-windows-static` presets keep it because that is what this repository's Windows legs have
+always built.
 
 On Windows the presets name no generator, so CMake uses the newest Visual Studio installed: what
 the port needs is Visual Studio 2022 or newer, and that is written down under *Known limits* in
 the [README](../README.md). The target machine type then follows the machine, which is why the
 arm64 preset is for an arm64 machine rather than a cross build.
 
-`x64-osx` is the one cross build: it sets `CMAKE_OSX_ARCHITECTURES=x86_64` so that an arm64
-machine produces an x86_64 consumer (and vcpkg reads that back to pick `x64-osx`). The binaries
-it runs then need Rosetta 2, which is a property of the machine, not of this project.
+`x64-osx` and `x64-osx-dynamic` are cross builds: they set `CMAKE_OSX_ARCHITECTURES=x86_64` so
+that an arm64 machine produces an x86_64 consumer (and vcpkg reads that back to pick `x64-osx`).
+The binaries it runs then need Rosetta 2, which is a property of the machine, not of this
+project.
+
+With a shared library the runtime has to find the DLL or `.so`; the test project handles that for
+its own targets, and what a consumer has to do is written in the [README](../README.md).
 
 **Which vcpkg you point at is the pin.** The project states no `builtin-baseline` (and no
 `overrides`), because on the built-in registry either one has to be a commit and resolving it

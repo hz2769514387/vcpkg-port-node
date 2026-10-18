@@ -980,12 +980,37 @@ string(APPEND _cfg
 # release-only install + a Debug consumer: fail at configure time rather than
 # link time (LNK2038 RuntimeLibrary).
 if(VCPKG_TARGET_IS_WINDOWS)
+    # A release-only install cannot serve a Debug consumer: MSVC's Debug
+    # configuration is the debug CRT (/MTd or /MDd) plus _ITERATOR_DEBUG_LEVEL=2,
+    # and a Release static library carries the release values, so the link ends
+    # in LNK2038. Measured 2026-10-18 (ADR 0007).
+    #
+    # Two ways a consumer can ask for Debug, and they are not the same:
+    #   * a single-config generator states it in CMAKE_BUILD_TYPE, and that is a
+    #     fact about this build - refuse it;
+    #   * a multi-config generator (Visual Studio) always lists Debug among its
+    #     CMAKE_CONFIGURATION_TYPES, whether or not it is ever built, and
+    #     CMAKE_BUILD_TYPE is empty there. A test against CMAKE_BUILD_TYPE
+    #     therefore never fires on the generator most Windows consumers use -
+    #     which is exactly what the previous version of this guard did. Warn
+    #     instead of failing: refusing to configure because a configuration
+    #     *exists* would break everyone who only builds Release.
     string(APPEND _cfg
-        "if(CMAKE_BUILD_TYPE STREQUAL \"Debug\" AND NOT EXISTS \"\${_node_prefix}/debug/lib\")\n"
-        "  message(FATAL_ERROR\n"
-        "    \"This node install is release-only (VCPKG_BUILD_TYPE=release); there is no debug library.\\n\"\n"
-        "    \"On Windows a Debug consumer (/MTd or /MDd) cannot link a Release (/MT or /MD) node.\\n\"\n"
-        "    \"Use a dual triplet (e.g. x64-windows-static) or build the consumer as Release.\")\n"
+        "if(NOT EXISTS \"\${_node_prefix}/debug/lib\")\n"
+        "  if(CMAKE_BUILD_TYPE STREQUAL \"Debug\")\n"
+        "    message(FATAL_ERROR\n"
+        "      \"This node install is release-only (VCPKG_BUILD_TYPE=release); there is no debug library.\\n\"\n"
+        "      \"On Windows a Debug consumer (/MTd or /MDd) cannot link a Release (/MT or /MD) node.\\n\"\n"
+        "      \"Use a dual triplet (e.g. x64-windows-static) or build the consumer as Release\\n\"\n"
+        "      \"or RelWithDebInfo - RelWithDebInfo is the release ABI with debug information,\\n\"\n"
+        "      \"which is what you want when the need is to debug your own code.\")\n"
+        "  elseif(CMAKE_CONFIGURATION_TYPES)\n"
+        "    message(WARNING\n"
+        "      \"This node install is release-only (VCPKG_BUILD_TYPE=release); there is no debug library,\\n\"\n"
+        "      \"so building this project's Debug configuration will fail with LNK2038 RuntimeLibrary\\n\"\n"
+        "      \"mismatches. Release and RelWithDebInfo are fine. Use a dual triplet (e.g.\\n\"\n"
+        "      \"x64-windows-static) if you need Debug.\")\n"
+        "  endif()\n"
         "endif()\n")
     if(VCPKG_CRT_LINKAGE STREQUAL "static")
         string(APPEND _cfg

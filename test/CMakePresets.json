@@ -9,7 +9,7 @@
     {
       "name": "base",
       "hidden": true,
-      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout; every preset is named after the vcpkg triplet it selects, and that triplet ships with vcpkg itself - nothing here carries a triplet file, which is the whole point of the port. An unset VCPKG_BUILD_TYPE builds both Release and Debug, so anything that links Debug gets Debug.",
+      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout. Every visible preset is named after the vcpkg triplet it selects, and that triplet ships with vcpkg itself - this repository carries no triplet file, which is the whole point of the port. A preset with no suffix is this repository's recommended choice for its platform; a suffix names one deliberate deviation from it (see test/README.md). An unset VCPKG_BUILD_TYPE builds both Release and Debug, so a Debug consumer links the Debug library.",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
@@ -17,93 +17,253 @@
         "NODE_TEST_JOBS": "$env{VCPKG_MAX_CONCURRENCY}"
       }
     },
+
     {
-      "name": "x64-windows-static",
+      "name": "windows",
+      "hidden": true,
       "inherits": "base",
-      "displayName": "Windows x64 (x64-windows-static)",
-      "description": "No generator is named on purpose. Naming one would pin one Visual Studio version, and the requirement is Visual Studio 2022 or newer (README, Known limits), not 2022 exactly: left to itself CMake picks the newest Visual Studio installed, so a consumer on 2026 is not forced onto 2022 and one on 2019 fails in the port's build rather than at generator lookup. With no architecture stated either, the target machine type is the machine's own, which is what a Visual Studio generator does by default. CMAKE_MSVC_RUNTIME_LIBRARY has to be stated explicitly: vcpkg's own windows.cmake toolchain sets /MT for building ports, but a consumer's CMake never loads it, so it would default to /MD and fail at link time with LNK2038 against the /MT static library.",
+      "description": "Windows. No generator is named on purpose: naming one would pin a single Visual Studio version, while what the port needs is 2022 or newer (README, Known limits) - left alone CMake picks the newest installed, so a consumer on 2026 is not forced onto 2022 and one on 2019 fails inside the port's build instead of at generator lookup. No architecture is named either, so the target machine type is the machine's own. CMAKE_MSVC_RUNTIME_LIBRARY has to be stated explicitly: vcpkg's windows.cmake sets the CRT for building ports, but a consumer's CMake never loads it, so it would default to /MD and fail at link time with LNK2038.",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Windows"
       },
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
         "NODE_TEST_JOBS": "2"
       }
     },
     {
-      "name": "arm64-windows-static",
-      "inherits": "base",
-      "displayName": "Windows arm64 (arm64-windows-static)",
-      "description": "The same settings as the x64 preset, with the arm64 triplet. The machine type follows the machine here as well, so this preset is what CI runs on an arm64 runner rather than a cross build from x64. Node.js 24+ builds Windows arm64 with clang-cl targeting aarch64, which the port sets up itself.",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Windows"
-      },
-      "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows-static",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>",
-        "NODE_TEST_JOBS": "2"
+      "name": "windows-clang",
+      "hidden": true,
+      "inherits": "windows",
+      "description": "clang-cl for the consumer's own code, which is this repository's recommendation on Windows: it is the compiler Node.js is built and tested with, and using it for both halves means one toolchain rather than two. The compiler is selected through 'toolset', not through CMAKE_CXX_COMPILER: a Visual Studio generator derives its compiler from the toolset and ignores CMAKE_CXX_COMPILER entirely - with no error and no warning, so asking for clang-cl that way silently gets you cl.exe (measured, ADR 0007). The port always builds Node.js with clang-cl regardless of what is chosen here.",
+      "toolset": {
+        "value": "ClangCL",
+        "strategy": "set"
       }
     },
     {
-      "name": "x64-linux",
+      "name": "linux",
+      "hidden": true,
       "inherits": "base",
-      "displayName": "Linux x64 (x64-linux)",
+      "description": "Linux. gcc, which is what Node.js upstream builds with on this platform. Unlike the Visual Studio generator, Ninja reads CMAKE_C_COMPILER / CMAKE_CXX_COMPILER, so naming the compiler here works and is the recommended form.",
       "generator": "Ninja",
       "condition": {
         "type": "equals",
         "lhs": "${hostSystemName}",
         "rhs": "Linux"
       },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "gcc",
+        "CMAKE_CXX_COMPILER": "g++"
+      }
+    },
+    {
+      "name": "macos",
+      "hidden": true,
+      "inherits": "base",
+      "description": "macOS. clang, which is what Node.js upstream builds with on this platform, and the only toolchain the platform's own SDK is validated against.",
+      "generator": "Ninja",
+      "condition": {
+        "type": "equals",
+        "lhs": "${hostSystemName}",
+        "rhs": "Darwin"
+      },
+      "cacheVariables": {
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+
+    {
+      "name": "x64-windows-static",
+      "inherits": "windows-clang",
+      "displayName": "Windows x64, static library, /MT (x64-windows-static)",
+      "description": "The static CRT. Node.js recommends /MD, so x64-windows-static-md is the closer match to upstream; both are built and tested by CI, and this one stays the recommended preset because it is what this repository's Windows legs have always built.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "x64-windows-static-msvc",
+      "inherits": "windows",
+      "displayName": "Windows x64, static library, /MT, consumer built with cl.exe (advanced)",
+      "description": "The mixed case, spelled out because it is what happens when no toolset is named rather than something anyone opts into: the port still builds Node.js with clang-cl, and this executable is built with cl.exe. A legal MSVC-ABI mix, and the one this repository's CI used before ADR 0007 - but not the recommended choice, and not covered by any promise: a mixed toolchain is an advanced user's own experiment.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "x64-windows-static-md",
+      "inherits": "windows-clang",
+      "displayName": "Windows x64, static library, /MD (x64-windows-static-md)",
+      "description": "The dynamic CRT, which is what Node.js recommends for its own builds. A stock vcpkg triplet, like every triplet named in this file.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "x64-windows-static-md-msvc",
+      "inherits": "windows",
+      "displayName": "Windows x64, static library, /MD, consumer built with cl.exe (advanced)",
+      "description": "The mixed case for the dynamic CRT: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "x64-windows",
+      "inherits": "windows-clang",
+      "displayName": "Windows x64, dynamic library, /MD (x64-windows)",
+      "description": "A shared libnode. The runtime then has to find the DLL: vcpkg installs it into bin/, and CMake copies it next to the executable for the build tree (the test project does that for its own targets).",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "x64-windows-msvc",
+      "inherits": "windows",
+      "displayName": "Windows x64, dynamic library, /MD, consumer built with cl.exe (advanced)",
+      "description": "The mixed case for a shared libnode: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+
+    {
+      "name": "arm64-windows-static",
+      "inherits": "windows-clang",
+      "displayName": "Windows arm64, static library, /MT (arm64-windows-static)",
+      "description": "The arm64 counterpart of x64-windows-static. The machine type follows the machine, so this preset is for an arm64 machine rather than a cross build from x64. Node.js builds Windows arm64 with a native arm64 clang-cl, and the port refuses an x64 clang-cl on an arm64 host because that combination produces the wrong machine type.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "arm64-windows-static-msvc",
+      "inherits": "windows",
+      "displayName": "Windows arm64, static library, /MT, consumer built with cl.exe (advanced)",
+      "description": "The mixed case on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "arm64-windows-static-md",
+      "inherits": "windows-clang",
+      "displayName": "Windows arm64, static library, /MD (arm64-windows-static-md)",
+      "description": "The dynamic CRT on arm64, which is what Node.js recommends for its own builds.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "arm64-windows-static-md-msvc",
+      "inherits": "windows",
+      "displayName": "Windows arm64, static library, /MD, consumer built with cl.exe (advanced)",
+      "description": "The mixed case for the dynamic CRT on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "arm64-windows",
+      "inherits": "windows-clang",
+      "displayName": "Windows arm64, dynamic library, /MD (arm64-windows)",
+      "description": "A shared libnode on arm64.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "arm64-windows-msvc",
+      "inherits": "windows",
+      "displayName": "Windows arm64, dynamic library, /MD, consumer built with cl.exe (advanced)",
+      "description": "The mixed case for a shared libnode on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+
+    {
+      "name": "x64-linux",
+      "inherits": "linux",
+      "displayName": "Linux x64, static library (x64-linux)",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-linux"
       }
     },
     {
+      "name": "x64-linux-dynamic",
+      "inherits": "linux",
+      "displayName": "Linux x64, shared library (x64-linux-dynamic)",
+      "description": "A shared libnode. vcpkg installs it into lib/, and the consumer's executable has to find it at run time - the test project sets a relative RPATH.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-linux-dynamic"
+      }
+    },
+    {
       "name": "arm64-linux",
-      "inherits": "base",
-      "displayName": "Linux arm64 (arm64-linux)",
-      "generator": "Ninja",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Linux"
-      },
+      "inherits": "linux",
+      "displayName": "Linux arm64, static library (arm64-linux)",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-linux"
       }
     },
     {
+      "name": "arm64-linux-dynamic",
+      "inherits": "linux",
+      "displayName": "Linux arm64, shared library (arm64-linux-dynamic)",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-linux-dynamic"
+      }
+    },
+
+    {
       "name": "arm64-osx",
-      "inherits": "base",
-      "displayName": "macOS arm64 (arm64-osx)",
-      "generator": "Ninja",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      },
+      "inherits": "macos",
+      "displayName": "macOS arm64, static library (arm64-osx)",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-osx"
       }
     },
     {
+      "name": "arm64-osx-dynamic",
+      "inherits": "macos",
+      "displayName": "macOS arm64, shared library (arm64-osx-dynamic)",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-osx-dynamic"
+      }
+    },
+    {
       "name": "x64-osx",
-      "inherits": "base",
-      "displayName": "macOS x64 (x64-osx)",
-      "description": "x86_64 on an arm64 runner: CMAKE_OSX_ARCHITECTURES makes the consumer build the same machine type the triplet asks vcpkg for, and vcpkg reads it back to pick the triplet. The binaries the build runs are then x86_64 and need Rosetta 2, which the CI leg provides - a plain arm64 macOS machine does not necessarily have it.",
-      "generator": "Ninja",
-      "condition": {
-        "type": "equals",
-        "lhs": "${hostSystemName}",
-        "rhs": "Darwin"
-      },
+      "inherits": "macos",
+      "displayName": "macOS x64, static library (x64-osx)",
+      "description": "x86_64 on an arm64 machine: CMAKE_OSX_ARCHITECTURES makes the consumer build the same machine type the triplet asks vcpkg for, and vcpkg reads it back to pick the triplet. The binaries the build runs are then x86_64 and need Rosetta 2, which the CI leg provides - a plain arm64 macOS machine does not necessarily have it.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-osx",
+        "CMAKE_OSX_ARCHITECTURES": "x86_64"
+      }
+    },
+    {
+      "name": "x64-osx-dynamic",
+      "inherits": "macos",
+      "displayName": "macOS x64, shared library (x64-osx-dynamic)",
+      "description": "The shared-library counterpart of x64-osx, and a cross build for the same reason.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-osx-dynamic",
         "CMAKE_OSX_ARCHITECTURES": "x86_64"
       }
     }
@@ -114,24 +274,80 @@
       "configurePreset": "x64-windows-static"
     },
     {
+      "name": "x64-windows-static-msvc",
+      "configurePreset": "x64-windows-static-msvc"
+    },
+    {
+      "name": "x64-windows-static-md",
+      "configurePreset": "x64-windows-static-md"
+    },
+    {
+      "name": "x64-windows-static-md-msvc",
+      "configurePreset": "x64-windows-static-md-msvc"
+    },
+    {
+      "name": "x64-windows",
+      "configurePreset": "x64-windows"
+    },
+    {
+      "name": "x64-windows-msvc",
+      "configurePreset": "x64-windows-msvc"
+    },
+    {
       "name": "arm64-windows-static",
       "configurePreset": "arm64-windows-static"
+    },
+    {
+      "name": "arm64-windows-static-msvc",
+      "configurePreset": "arm64-windows-static-msvc"
+    },
+    {
+      "name": "arm64-windows-static-md",
+      "configurePreset": "arm64-windows-static-md"
+    },
+    {
+      "name": "arm64-windows-static-md-msvc",
+      "configurePreset": "arm64-windows-static-md-msvc"
+    },
+    {
+      "name": "arm64-windows",
+      "configurePreset": "arm64-windows"
+    },
+    {
+      "name": "arm64-windows-msvc",
+      "configurePreset": "arm64-windows-msvc"
     },
     {
       "name": "x64-linux",
       "configurePreset": "x64-linux"
     },
     {
+      "name": "x64-linux-dynamic",
+      "configurePreset": "x64-linux-dynamic"
+    },
+    {
       "name": "arm64-linux",
       "configurePreset": "arm64-linux"
+    },
+    {
+      "name": "arm64-linux-dynamic",
+      "configurePreset": "arm64-linux-dynamic"
     },
     {
       "name": "arm64-osx",
       "configurePreset": "arm64-osx"
     },
     {
+      "name": "arm64-osx-dynamic",
+      "configurePreset": "arm64-osx-dynamic"
+    },
+    {
       "name": "x64-osx",
       "configurePreset": "x64-osx"
+    },
+    {
+      "name": "x64-osx-dynamic",
+      "configurePreset": "x64-osx-dynamic"
     }
   ]
 }

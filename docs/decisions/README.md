@@ -12,3 +12,4 @@ a change of mind gets a new ADR that supersedes the old one, so the history stay
 | [0004](0004-continuous-integration.md) | CI lives in GitHub Actions, builds through the consumer, and gates in two tiers | Accepted | 2026-10-16 |
 | [0005](0005-vcpkg-pin-without-a-manifest-baseline.md) | Pin vcpkg by the checkout, not by a manifest baseline | Accepted | 2026-10-17 |
 | [0006](0006-versioning-and-branch-policy.md) | Date-versioned releases, LTS-tracking `main`, and branch-per-line | Accepted | 2026-10-18 |
+| [0007](0007-toolchain-configuration-and-linkage-policy.md) | One toolchain per platform, three configurations, both linkages and both CRTs, all proven in CI | Accepted | 2026-10-18 |
