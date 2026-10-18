@@ -55,7 +55,7 @@ jobs:
       triplet: arm64-windows-static-release
       config: Release
       expect-arch: ARM64
-      experimental: true
+
       ctest-options: -LE node-suite
 
   linux:
@@ -66,7 +66,7 @@ jobs:
       preset: x64-linux
       triplet: x64-linux-release
       config: Release
-      experimental: true
+
       ctest-options: -LE node-suite
 
   linux-arm64:
@@ -77,7 +77,7 @@ jobs:
       preset: arm64-linux
       triplet: arm64-linux-release
       config: Release
-      experimental: true
+
       ctest-options: -LE node-suite
 
   macos:
@@ -100,7 +100,7 @@ jobs:
       triplet: x64-osx-release
       config: Release
       expect-arch: x86_64
-      experimental: true
+
       ctest-options: -LE node-suite
 
   # One archive with every leg's logs, instead of one artifact per platform.
