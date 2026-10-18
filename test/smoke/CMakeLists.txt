@@ -14,6 +14,14 @@ set_tests_properties(smoke.externalization.embedder PROPERTIES
   TIMEOUT 180
   LABELS "smoke")
 
+# The startup snapshot is a build artefact nothing else asserts, and losing it is silent: the
+# runtime still works, it just compiles the builtins at every startup.
+add_test(NAME smoke.snapshot.embedder
+         COMMAND node_embedder "${CMAKE_CURRENT_SOURCE_DIR}/snapshot.mjs")
+set_tests_properties(smoke.snapshot.embedder PROPERTIES
+  TIMEOUT 180
+  LABELS "smoke")
+
 if(NOT DEFINED node_EXECUTABLE OR NOT EXISTS "${node_EXECUTABLE}")
   message(STATUS
     "no node executable installed (the node port's tools feature is off) - "
@@ -24,6 +32,12 @@ endif()
 add_test(NAME smoke.externalization.tools COMMAND "${node_EXECUTABLE}" "${_externalization}")
 set_tests_properties(smoke.externalization.tools PROPERTIES
   ENVIRONMENT "NODE_PORT_EXPECTED_VERSION=${unofficial-node_VERSION}"
+  TIMEOUT 180
+  LABELS "smoke")
+
+add_test(NAME smoke.snapshot.tools
+         COMMAND "${node_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/snapshot.mjs")
+set_tests_properties(smoke.snapshot.tools PROPERTIES
   TIMEOUT 180
   LABELS "smoke")
 
