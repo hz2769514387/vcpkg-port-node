@@ -269,7 +269,17 @@ foreach(_suite IN LISTS _suites)
     set_tests_properties("${_test_name}" PROPERTIES
       TIMEOUT "${NODE_TEST_SUITE_TIMEOUT}"
       LABELS "node-suite"
-      ENVIRONMENT "NODE_TEST_KNOWN_SHELL=${_suite_shell_kind}")
+      ENVIRONMENT "NODE_TEST_KNOWN_SHELL=${_suite_shell_kind}"
+      # The working directory has to be the suite root, not ctest's default of
+      # this binary directory. The driver hands the shell
+      # `--test-reporter=./test/common/test-error-reporter.js`, which is
+      # relative, so it is resolved against whatever the process was started
+      # in: left alone, every case that uses the reporter dies with
+      # ERR_MODULE_NOT_FOUND pointing at <build dir>/official_suite/test/...,
+      # a path that exists nowhere. The suite's own files are found through
+      # --test-root either way, which is why only some cases failed and the
+      # rest passed - the misleading half of the symptom.
+      WORKING_DIRECTORY "${node_TEST_SUITE_DIR}")
   endforeach()
 endforeach()
 

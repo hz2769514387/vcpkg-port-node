@@ -1382,8 +1382,17 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "endif()\n"
         "target_link_libraries(unofficial::node::node INTERFACE\n"
         "  winmm ntdll bcrypt crypt32 ws2_32 unofficial::node::clang_rt_builtins)\n")
+endif()  # VCPKG_TARGET_IS_WINDOWS (the static link line's own extras)
 endif()  # NOT _node_shared_build (the static link line)
 
+# The stack reserve and the Windows manifest are properties of the executable
+# that hosts Node.js, not of the library, so a shared build needs them too -
+# which is why they are outside the block above.
+#
+# They are also MSVC linker options, and passing /STACK to g++ or to Apple's
+# ld is a hard error. Getting the guard wrong here is what put "/STACK:0x800000"
+# on a Linux link line.
+if(VCPKG_TARGET_IS_WINDOWS)
     # Stack size: upstream node.gyp sets StackReserveSize 0x800000, but that only
     # applies to the executable gyp builds. A consumer's executable (built by
     # its own CMake) would otherwise get the linker default of 1 MiB, which is
