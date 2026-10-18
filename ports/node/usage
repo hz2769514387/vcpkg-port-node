@@ -13,7 +13,21 @@ Usage (CMake):
     target_link_libraries(<your target> PRIVATE unofficial::node::node)
 
 `unofficial::node::node` brings in the whole implementation and every
-third-party dependency, together with the include directories.
+third-party dependency, together with the include directories. The config also
+exports the ABI a prebuilt addon has to match:
+`node_MODULE_VERSION` (NODE_MODULE_VERSION, 147 for this version) and
+`node_NAPI_VERSION`.
+
+## What the machine needs
+
+This port builds the Node.js source tree, so the machine needs more than a
+compiler: `cargo` (Node.js's Rust crates; the port fails at configure time
+without it), a Python 3 (configure.py and the code generators), and on Windows
+the clang-cl component of Visual Studio 2022 or newer. A cross build needs one
+more, and it is easy to miss: the Rust standard library for the *target*
+architecture, because `cargo --target` builds those crates and rustup ships the
+standard library only for the architecture it was installed for - on an arm64
+machine building `x64-osx`, `rustup target add x86_64-apple-darwin`.
 
 ## Two things to know before using it
 
@@ -41,10 +55,12 @@ third-party dependency, together with the include directories.
   * Static delivery only: requesting VCPKG_LIBRARY_LINKAGE=dynamic is rejected.
   * The third-party libraries Node.js and V8 use (openssl / zlib / libuv / icu /
     sqlite3 / brotli / zstd / simdjson / simdutf / ada / ngtcp2 / nghttp2 /
-    c-ares / llhttp / hdr-histogram / abseil / highway) all come from vcpkg as
-    transitive dependencies; you do not find_package them yourself. In
-    particular abseil, highway, simdutf and the Chromium zlib are externalized,
-    so exactly one copy of each ends up in your process.
+    c-ares / llhttp / hdr-histogram / abseil / highway, plus LIEF and libffi and
+    LIEF's own chain: mbedtls, spdlog, fmt, nlohmann-json, frozen, tl-expected,
+    utf8cpp, tcb-span) all come from vcpkg as transitive dependencies; you do
+    not find_package them yourself. In particular abseil, highway, simdutf and
+    the Chromium zlib are externalized, so exactly one copy of each ends up in
+    your process.
   * `unofficial::node::node` already lists that whole set, so do not link any of
     it again on your own target. nghttp2 is one of them - it ships no CMake
     package config, so this port creates `unofficial::node::nghttp2` and wires

@@ -110,6 +110,13 @@ Where things go:
   ships no CMake config of its own.
 - Editing anything under `ports/node` invalidates the version-tree hash: rerun
   `tools/version_tree.py`, and let CI's `--check` catch it if you forget.
+- **A packaging change bumps `port-version`.** vcpkg's package identity comes from the
+  manifest, not from the portfile text: fix a portfile option, add a patch, change an install
+  rule — and move `"port-version"` in the same commit (0 is implicit, so the first packaging
+  revision is `1`). Without it, an installed tree or a binary-cache entry built from the old
+  portfile can still count as current, and the fix silently does not reach anyone until some
+  other input changes. An upstream version bump does not need it; a build-flag or packaging
+  change under a released version does.
 - Node.js sources are downloaded and hash-verified by the port. Never vendor a Node.js tree
   into this repository.
 

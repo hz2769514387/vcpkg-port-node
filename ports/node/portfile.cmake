@@ -952,10 +952,30 @@ foreach(_dep "OpenSSL" "libuv CONFIG" "llhttp CONFIG" "c-ares CONFIG"
     string(APPEND _cfg "find_dependency(${_dep})\n")
 endforeach()
 unset(_dep)
+
+# The module and napi ABI versions a consumer compares its prebuilt addons against.
+# NODE_MODULE_VERSION can be overridden by an embedder at compile time
+# (NODE_EMBEDDER_MODULE_VERSION in the consuming build), so what is exported here is the
+# default this library was built with.
+file(STRINGS "${SOURCE_PATH}/src/node_version.h" _node_module_version_line
+     REGEX "^#define NODE_MODULE_VERSION [0-9]+$")
+string(REGEX MATCH "[0-9]+" _node_module_version "${_node_module_version_line}")
+file(STRINGS "${SOURCE_PATH}/src/js_native_api_types.h" _node_napi_version_line
+     REGEX "^#define NAPI_VERSION [0-9]+$")
+string(REGEX MATCH "[0-9]+" _node_napi_version "${_node_napi_version_line}")
+if(NOT _node_module_version OR NOT _node_napi_version)
+    message(FATAL_ERROR
+        "could not read NODE_MODULE_VERSION / NAPI_VERSION from the Node.js source tree "
+        "(module='${_node_module_version}', napi='${_node_napi_version}'); update the "
+        "regexes in ports/node/portfile.cmake to match the new headers.")
+endif()
+
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
     "set(_node_lib \"\${_node_prefix}/lib\")\n"
-    "set(node_INSTALLED_LIBRARIES \"${_node_installed_libs}\")\n")
+    "set(node_INSTALLED_LIBRARIES \"${_node_installed_libs}\")\n"
+    "set(node_MODULE_VERSION \"${_node_module_version}\")\n"
+    "set(node_NAPI_VERSION \"${_node_napi_version}\")\n")
 
 # release-only install + a Debug consumer: fail at configure time rather than
 # link time (LNK2038 RuntimeLibrary).
@@ -1041,9 +1061,22 @@ unset(_file)
 # abseil ships one archive per component and its vcpkg config exposes them as
 # individual absl::<component> targets with no aggregate, so import them by file
 # name here. That stays correct across abseil versions without tracking target
-# names, and the archives always sit in the same prefix as this port.
+# names, and the archives always sit in the same prefix as this port. An empty
+# glob is a configure error rather than a link error far away.
 string(APPEND _cfg
     "file(GLOB _node_absl_libs \"\${_node_lib}/absl_*.lib\" \"\${_node_lib}/libabsl_*.a\")\n"
+    "if(NOT _node_absl_libs)\n"
+    "  message(FATAL_ERROR\n"
+    "    \"no abseil archives found under '\${_node_lib}' (looked for absl_*.lib and libabsl_*.a).\\n\"\n"
+    "    \"This config imports abseil's component archives by filename because vcpkg's abseil\\n\"\n"
+    "    \"exposes no aggregate target; if abseil renamed or re-split its libraries, update\\n\"\n"
+    "    \"the glob in ports/node/portfile.cmake.\")\n"
+    "endif()\n")
+if("Debug" IN_LIST _node_configs)
+    string(APPEND _cfg
+        "file(GLOB _node_absl_debug_libs \"\${_node_prefix}/debug/lib/absl_*.lib\" \"\${_node_prefix}/debug/lib/libabsl_*.a\")\n")
+endif()
+string(APPEND _cfg
     "foreach(_l IN LISTS _node_absl_libs)\n"
     "  get_filename_component(_n \"\${_l}\" NAME_WE)\n"
     "  string(REGEX REPLACE \"^lib\" \"\" _n \"\${_n}\")\n"
@@ -1051,17 +1084,23 @@ string(APPEND _cfg
     "    add_library(unofficial::node::\${_n} STATIC IMPORTED)\n"
     "    set_target_properties(unofficial::node::\${_n} PROPERTIES IMPORTED_LOCATION \"\${_l}\")\n")
 if("Debug" IN_LIST _node_configs)
+    # Derive the debug location from the debug directory itself instead of guessing a
+    # filename: the archives were enumerated above, so match on the same stem.
     string(APPEND _cfg
-        "    if(EXISTS \"\${_node_prefix}/debug/lib/\${_n}.lib\")\n"
-        "      set_target_properties(unofficial::node::\${_n} PROPERTIES IMPORTED_LOCATION_DEBUG \"\${_node_prefix}/debug/lib/\${_n}.lib\")\n"
-        "    elseif(EXISTS \"\${_node_prefix}/debug/lib/lib\${_n}.a\")\n"
-        "      set_target_properties(unofficial::node::\${_n} PROPERTIES IMPORTED_LOCATION_DEBUG \"\${_node_prefix}/debug/lib/lib\${_n}.a\")\n"
-        "    endif()\n")
+        "    foreach(_d IN LISTS _node_absl_debug_libs)\n"
+        "      get_filename_component(_dn \"\${_d}\" NAME_WE)\n"
+        "      string(REGEX REPLACE \"^lib\" \"\" _dn \"\${_dn}\")\n"
+        "      if(_dn STREQUAL _n)\n"
+        "        set_target_properties(unofficial::node::\${_n} PROPERTIES IMPORTED_LOCATION_DEBUG \"\${_d}\")\n"
+        "      endif()\n"
+        "    endforeach()\n")
 endif()
 string(APPEND _cfg
     "  endif()\n"
     "  list(APPEND _node_absl_links unofficial::node::\${_n})\n"
-    "endforeach()\n")
+    "endforeach()\n"
+    "unset(_node_absl_libs)\n"
+    "unset(_node_absl_debug_libs)\n")
 
 string(APPEND _cfg
     "add_library(unofficial::node::node INTERFACE IMPORTED)\n"
@@ -1076,9 +1115,16 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "endif()\n")
 endif()
 
-# nghttp2 ships no CMake config; build an imported target for it.
+# nghttp2 ships no CMake config; build an imported target for it. find_library can fall
+# back to a system copy, which would be built with a different CRT - refuse to.
 string(APPEND _cfg
     "find_library(_nghttp2_lib nghttp2 HINTS \${_node_lib} REQUIRED)\n"
+    "string(FIND \"\${_nghttp2_lib}\" \"\${_node_prefix}\" _nghttp2_pos)\n"
+    "if(NOT _nghttp2_pos EQUAL 0)\n"
+    "  message(FATAL_ERROR\n"
+    "    \"nghttp2 resolved to '\${_nghttp2_lib}', which is outside this install prefix\\n\"\n"
+    "    \"('\${_node_prefix}'). A system copy would be built with a different CRT.\")\n"
+    "endif()\n"
     "if(NOT TARGET unofficial::node::nghttp2)\n"
     "  add_library(unofficial::node::nghttp2 STATIC IMPORTED)\n"
     "  set_target_properties(unofficial::node::nghttp2 PROPERTIES IMPORTED_LOCATION \"\${_nghttp2_lib}\")\n")
@@ -1091,9 +1137,16 @@ endif()
 string(APPEND _cfg "endif()\n")
 
 # libffi ships no CMake config either (autotools), so import its archive the
-# same way. vcpkg names it ffi.lib / libffi.a on Windows / Unix.
+# same way. vcpkg names it ffi.lib / libffi.a on Windows / Unix. The prefix check
+# keeps find_library from silently picking up a system libffi.
 string(APPEND _cfg
     "find_library(_node_ffi_lib ffi HINTS \${_node_lib} REQUIRED)\n"
+    "string(FIND \"\${_node_ffi_lib}\" \"\${_node_prefix}\" _node_ffi_pos)\n"
+    "if(NOT _node_ffi_pos EQUAL 0)\n"
+    "  message(FATAL_ERROR\n"
+    "    \"libffi resolved to '\${_node_ffi_lib}', which is outside this install prefix\\n\"\n"
+    "    \"('\${_node_prefix}'). A system copy would be built with a different CRT.\")\n"
+    "endif()\n"
     "if(NOT TARGET unofficial::node::ffi)\n"
     "  add_library(unofficial::node::ffi STATIC IMPORTED)\n"
     "  set_target_properties(unofficial::node::ffi PROPERTIES IMPORTED_LOCATION \"\${_node_ffi_lib}\")\n")
