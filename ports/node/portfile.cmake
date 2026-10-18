@@ -1215,4 +1215,10 @@ file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config
 file(INSTALL "${CMAKE_CURRENT_LIST_DIR}/usage"
     DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
 
+# Node.js's own LICENSE is already the aggregate: it is ~2900 lines carrying the
+# licence texts of everything in the source tree (V8, npm, and the rest of
+# deps/), which is what Node.js ships as the licence of its binaries. The
+# libraries this port externalizes are separate vcpkg packages and each one
+# installs its own share/<port>/copyright into the consumer's tree, so nothing
+# is missing here - listing them again would duplicate other packages' notices.
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
