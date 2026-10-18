@@ -15,6 +15,7 @@
     "hdr-histogram",
     "highway",
     "icu",
+    "libffi",
     "libuv",
     "llhttp",
     "nghttp2",

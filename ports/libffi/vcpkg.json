@@ -1,0 +1,17 @@
+{
+  "name": "libffi",
+  "version": "3.8.0",
+  "description": "Portable, high level programming interface to various calling conventions (overlay: pinned to the version Node.js v26.12.0 ships, which is ahead of the vcpkg baseline 2026.07.29)",
+  "homepage": "https://github.com/libffi/libffi",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake-get-vars",
+      "host": true
+    },
+    {
+      "name": "vcpkg-make",
+      "host": true
+    }
+  ]
+}
