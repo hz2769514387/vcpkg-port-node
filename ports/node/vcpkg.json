@@ -17,6 +17,7 @@
     "icu",
     "libffi",
     "libuv",
+    "lief",
     "llhttp",
     "nghttp2",
     "nghttp3",

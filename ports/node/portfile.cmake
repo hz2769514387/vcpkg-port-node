@@ -602,7 +602,8 @@ function(_node_shared_args _out _libdir)
         "abseil|${_absl_libnames}"
         "highway|${_hwy_lib}"
         "ffi|ffi"
-        "perfetto|perfetto")
+        "perfetto|perfetto"
+        "lief|LIEF")
         string(REPLACE "|" ";" _pair "${_spec}")
         list(GET _pair 0 _opt)
         list(GET _pair 1 _libnames)
