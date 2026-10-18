@@ -131,7 +131,10 @@ Preparing a release is a checklist, and the lint covers half of it:
 3. the README's Status table (the human mirror of the pins) still matches `versions.json`;
 4. `tools/version_tree.py` and `tools/check_repo.py` pass — the second one is what catches a
    half-finished Node.js or vcpkg bump;
-5. tag, release, and make sure the release body names the CI run.
+5. a benchmark comparison against the official Node.js binary of the same version has been run
+   on one leg and recorded with its CI link (issue #19): startup, and a slice of Node.js's own
+   `benchmark/` directory. Numbers live in the run, not in `docs/`, as everywhere else here;
+6. tag, release, and make sure the release body names the CI run.
 
 ## 5. What `main` tracking means
 

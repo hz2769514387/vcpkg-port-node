@@ -53,6 +53,14 @@ machine building `x64-osx`, `rustup target add x86_64-apple-darwin`.
     on POSIX, libnode.lib / node_base.lib on Windows. The consumer config
     already accounts for this; you do not have to.
   * Static delivery only: requesting VCPKG_LIBRARY_LINKAGE=dynamic is rejected.
+  * Native addons (.node) are loaded at run time, so they resolve the node symbols
+    from the process that loads them - your executable. On POSIX an addon with
+    undefined node symbols loads into a statically linked host as usual; on Windows
+    a .node DLL has to resolve its imports at link time, and a static libnode has no
+    import library (linking the addon against libnode.lib would put a second copy of
+    the runtime in the process). Prebuilt addons therefore work on POSIX hosts and
+    need a shared node on Windows. node_MODULE_VERSION, exported by this config,
+    says which ABI a prebuilt addon has to target.
   * The third-party libraries Node.js and V8 use (openssl / zlib / libuv / icu /
     sqlite3 / brotli / zstd / simdjson / simdutf / ada / ngtcp2 / nghttp2 /
     c-ares / llhttp / hdr-histogram / abseil / highway, plus LIEF and libffi and
