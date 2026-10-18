@@ -1,4 +1,4 @@
-node provides a linkable static build of the whole Node.js v26.11.1 tree:
+node provides a linkable static build of the whole Node.js v26.12.0 tree:
 
   * headers: <prefix>/include/node/ (embedding headers) and
     <prefix>/include/node-v8/ (public V8 headers)

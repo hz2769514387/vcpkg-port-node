@@ -1,4 +1,4 @@
-# node - build the Node.js v26.11.1 source tree (V8 included) into a linkable
+# node - build the Node.js v26.12.0 source tree (V8 included) into a linkable
 # static library, using Node.js's own gyp -> ninja route.
 #
 # Why gyp -> ninja and not a CMake translation: upstream's only build entry
@@ -53,9 +53,9 @@ else()
 endif()
 
 vcpkg_download_distfile(NODE_ARCHIVE
-    URLS "https://nodejs.org/dist/v26.11.1/node-v26.11.1.tar.xz"
-    SHA512 a98c245732fef21dc6c0bafaa032ab1331a5efaed8d7758310dd65bf9d2bd16d5305ab06e1149b7fffe0ad0f0d945b874e30e1b9a72069a0ab064f357a225294
-    FILENAME node-v26.11.1.tar.xz
+    URLS "https://nodejs.org/dist/v26.12.0/node-v26.12.0.tar.xz"
+    SHA512 c3c41462198c6bedc1f2136a7f421a7cc757996ae49486c4c82b7ee75b2294b298c14f7e838b83da04a789f50722247ab448dd3bac8a07ac0d49047ee33c1c05
+    FILENAME node-v26.12.0.tar.xz
 )
 
 # The patch set fixes defects in gyp's ninja/MSVC emulation that upstream never
@@ -63,7 +63,7 @@ vcpkg_download_distfile(NODE_ARCHIVE
 # plus the v26 crates target and the externalization of simdutf/zlib.
 vcpkg_extract_source_archive(SOURCE_PATH
     ARCHIVE "${NODE_ARCHIVE}"
-    SOURCE_BASE node-v26.11.1
+    SOURCE_BASE node-v26.12.0
     PATCHES
         "${CMAKE_CURRENT_LIST_DIR}/patches/0001-icu-system-add-icudata.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0002-gyp-ninja-clang-cl-libpath-asm.patch"
@@ -1134,7 +1134,7 @@ endif()
 
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config.cmake" "${_cfg}")
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config-version.cmake"
-"set(PACKAGE_VERSION \"26.11.1\")\n"
+"set(PACKAGE_VERSION \"26.12.0\")\n"
 "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n"
 "  set(PACKAGE_VERSION_COMPATIBLE FALSE)\n"
 "else()\n"

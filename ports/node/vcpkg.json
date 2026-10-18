@@ -1,8 +1,8 @@
 {
   "name": "node",
-  "version": "26.11.1",
+  "version": "26.12.0",
   "description": [
-    "Builds the Node.js v26.11.1 source tree (V8 included) into a linkable static library with Node's own gyp -> ninja route, and installs the headers plus a CMake consumer config.",
+    "Builds the Node.js v26.12.0 source tree (V8 included) into a linkable static library with Node's own gyp -> ninja route, and installs the headers plus a CMake consumer config.",
     "Contract: (1) the bundled V8 is the one Node.js ships, not vcpkg's `v8` port; (2) the delivered form is a static library only - requesting VCPKG_LIBRARY_LINKAGE=dynamic is rejected; (3) on Windows Node.js must be compiled with clang-cl (Node.js 24+ upstream rule), and the compiler plus the MSVC command-line environment are provided by this port, so a stock triplet is enough; (4) the build follows the triplet: an unset VCPKG_BUILD_TYPE (dual triplet) builds Release and Debug, VCPKG_CRT_LINKAGE selects the static (/MT) or dynamic (/MD) CRT; (5) Node.js's own dependencies come from vcpkg through the official --shared-* channels, and the four third-party libraries V8 would otherwise compile into the artifacts (abseil, highway, simdutf, zlib) are externalized too; (6) consumers need C++20 - declared on the INTERFACE by this port (MSVC also gets /Zc:__cplusplus automatically)."
   ],
   "license": "MIT",

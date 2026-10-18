@@ -76,13 +76,13 @@
 +                                   'clang_rt.builtins-x86_64')],
 +}
 +
- def configure_library(lib, output, pkgname=None):
+ def configure_library(lib, output, pkgname=None, libraries_key='libraries'):
    shared_lib = 'shared_' + lib
    output['variables']['node_' + shared_lib] = b(getattr(options, shared_lib))
-@@ -2227,6 +2274,14 @@
-       output['libraries'] += [f'-l{l}' for l in default_libs.split(',')]
+@@ -2228,6 +2275,14 @@
+       libraries += [f'-l{l}' for l in default_libs.split(',')]
      elif pkg_libs:
-       output['libraries'] += pkg_libs.split()
+       libraries += pkg_libs.split()
 +
 +    # Re-add the Windows system import libraries that the vendored dependency's
 +    # own gyp file would have contributed (see the table above).  Ordered after
@@ -90,7 +90,7 @@
 +    # still works.
 +    if flavor == 'win':
 +      for syslib in shared_lib_windows_system_libs.get(lib, []):
-+        output['libraries'] += [f'-l{syslib}']
++        libraries += [f'-l{syslib}']
  
  
  def configure_v8(o, configs):
