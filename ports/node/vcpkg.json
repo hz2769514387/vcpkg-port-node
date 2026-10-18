@@ -22,6 +22,7 @@
     "nghttp3",
     "ngtcp2",
     "openssl",
+    "perfetto",
     "simdjson",
     "simdutf",
     {
