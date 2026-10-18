@@ -93,3 +93,19 @@ set_tests_properties(embedding.thread_loop PROPERTIES
   FAIL_REGULAR_EXPRESSION "thread_loop:"
   TIMEOUT 180
   LABELS "smoke")
+
+# --- the host owns the loop and pumps it itself --------------------------------
+# The UI-toolkit arrangement: node::SpinEventLoop hands the loop to the runtime, so a host
+# with its own main loop drives uv_run(UV_RUN_NOWAIT) instead. The interesting assertion is
+# that the script's timer fired *inside* one of the host's iterations.
+add_executable(host_loop host_loop/main.cpp)
+target_compile_features(host_loop PRIVATE cxx_std_20)
+target_link_libraries(host_loop PRIVATE unofficial::node::node Threads::Threads)
+
+add_test(NAME embedding.host_loop
+  COMMAND host_loop "${_embedding}/host_loop/host_loop.js")
+set_tests_properties(embedding.host_loop PROPERTIES
+  PASS_REGULAR_EXPRESSION "host: timer fired in host iteration [0-9]+ of"
+  FAIL_REGULAR_EXPRESSION "host_loop:|host: timer never fired|host: timer fired at iteration"
+  TIMEOUT 180
+  LABELS "smoke")
