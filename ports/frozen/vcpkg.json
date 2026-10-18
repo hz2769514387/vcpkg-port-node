@@ -1,0 +1,21 @@
+{
+  "name": "frozen",
+  "version": "1.2.0",
+  "port-version": 1,
+  "description": [
+    "A header-only, constexpr alternative to gperf for C++14 users (overlay: pinned to the post-1.2.0 commit that LIEF 1.0.0 vendors).",
+    "Why an overlay exists: the vcpkg baseline ships the v1.2.0 tag (2024-06-02); LIEF 1.0.0's tree vendors commit 61dce5a (2025-07-29), whose headers differ in six files (constexpr assertions in carray, constexpr_assert, pmh, map, set, string, unordered_map). Per the alignment rule the overlay carries the commit LIEF ships. port-version 1 records that this is a post-release snapshot rather than a packaging revision of v1.2.0."
+  ],
+  "homepage": "https://github.com/serge-sans-paille/frozen",
+  "license": "MIT",
+  "dependencies": [
+    {
+      "name": "vcpkg-cmake",
+      "host": true
+    },
+    {
+      "name": "vcpkg-cmake-config",
+      "host": true
+    }
+  ]
+}

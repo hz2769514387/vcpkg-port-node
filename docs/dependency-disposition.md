@@ -25,6 +25,17 @@ There is a second, independent rule that protects consumers:
 > which implementation wins depends on link order. This is what moves `abseil`, `highway`,
 > `simdutf` and `zlib` from "vendored" to "must be externalized" — see §4.
 
+The version comparison is **transitive**. When a dependency Node pulls in carries
+third-party dependencies of its own — LIEF is the case in point — the same rule applies
+to those, with "node's version" read as *the version that dependency vendors*: vcpkg at
+or ahead of it means the vcpkg port is used as-is (plus the dependency's own patches, if
+any); vcpkg behind it means an overlay pinned to the vendored version. And because of the
+exactly-once rule above, "leave it embedded in the dependency" is never an option: an
+embedded copy would put a second version of the library into the consumer's graph the
+moment the consumer links the vcpkg port of the same name. Watch the names, too — they do
+not always match (LIEF's `expected` is `tl-expected`, a different library from the
+registry's `expected-lite`). LIEF's own dependency set is dispositioned in §3.1.
+
 ## 2. How these numbers were produced
 
 - **Node.js side**: the official `node-v26.12.0.tar.xz` release tarball (the same archive
@@ -102,6 +113,40 @@ Two entries deserve a correction note:
   commit suffix. Any statement about "the Chromium fork commit node pins" needs another
   source than this tree (§7).
 
+### 3.1 LIEF's own dependencies (the rule applied transitively)
+
+LIEF 1.0.0 can populate its third-party set with FetchContent from zips inside its own
+source tree, and the vcpkg baseline's lief port (0.17.6) externalizes all of them. Per §1
+neither route is acceptable unchanged: the baseline's port is the wrong version, and
+FetchContent would embed copies that collide with the vcpkg ports. So every dependency is
+externalized through LIEF's own `*_EXTERNAL` switches, each decided by the same version
+comparison. "LIEF tree" is the version vendored inside Node.js v26.12.0's
+`deps/LIEF/third-party/`; "vcpkg" is release 2026.07.29.
+
+| Dependency | LIEF tree | vcpkg | Channel | Verdict |
+|---|---|---|---|---|
+| nlohmann json | 3.12.0 | 3.12.0 | `LIEF_OPT_NLOHMANN_JSON_EXTERNAL` | equal → registry port |
+| spdlog | 1.17.0 | 1.17.0 | `LIEF_EXTERNAL_SPDLOG` | equal → registry port (LIEF requires exactly 1.17.0) |
+| tl::expected | 1.3.1 | 1.3.1 | `LIEF_EXTERNAL_EXPECTED` | equal → registry port (**not** `expected-lite`, a different library) |
+| utfcpp | 4.0.9 | 4.1.1 | `LIEF_OPT_UTFCPP_EXTERNAL` | vcpkg ahead → registry port, no downgrade |
+| frozen | commit `61dce5a` (2025-07-29) | 1.2.0 (2024-06-02) | `LIEF_OPT_FROZEN_EXTERNAL` | vcpkg behind → overlay pin `61dce5a` (six headers differ) |
+| tcb-span | commit `b70b0ff` | 2022-06-15 snapshot | `LIEF_EXTERNAL_SPAN_DIR` | vcpkg behind → overlay: same upstream commit as the baseline **plus** the no-exceptions include fix LIEF's tree carries (see below) |
+| mbedtls | 4.0.0 snapshot `ec4044008d` (2025-10-13) | 3.6.5 | `LIEF_OPT_MBEDTLS_EXTERNAL` | vcpkg behind → overlay pin the snapshot. Required, not just policy: LIEF's external branch runs `find_package(MbedTLS 4.0.0)` and links `MbedTLS::tfpsacrypto` / `MbedTLS::mbedx509`, which only exist in the 4.0 line |
+
+Two entries deserve a note:
+
+- **frozen** is header-only and enabled whenever the compiler supports C++14 (always
+  here). The delta between the v1.2.0 tag and LIEF's commit touches six headers, so the
+  overlay pins the commit rather than trusting the release tag.
+- **tcb-span**: LIEF builds its core library with exceptions disabled
+  (`LIEF_DISABLE_EXCEPTIONS` defaults ON), which activates span's
+  `TCB_SPAN_NO_EXCEPTIONS` branch. That branch calls `std::terminate()`, and the
+  `#include <exception>` it needs exists only in LIEF's `b70b0ff` — a commit reachable
+  from **no ref in tcbrindle/span** (verified against `git ls-remote` and the compare
+  API), i.e. it lives only inside LIEF's vendored copy. The overlay therefore applies
+  that two-line fix to the same upstream commit the baseline pins; upstream master today
+  still lacks it.
+
 ## 4. What V8 compiles into the artifacts we ship
 
 The question "is this library vendored or externalized" is only interesting when the
@@ -175,6 +220,7 @@ tree, and the choice needs a provenance source for the commit (§7).
 | Overlay: pin the version Node.js ships, add its patches | libuv, brotli, nghttp2, llhttp, simdjson, ada-url (+ simdutf feature), hdr-histogram, libffi, LIEF, perfetto, sqlite3 |
 | Overlay: replace the upstream source entirely | zlib → Chromium fork (issue #3) |
 | Externalize from V8's tree (the must-unify four) | abseil, highway (issue #1), simdutf (issue #2), zlib (issue #3) |
+| LIEF's own third-party set — all externalized, none embedded (§3.1) | registry: nlohmann-json, spdlog, tl-expected, utfcpp; overlays: frozen, mbedtls, tcb-span |
 | Vendor | V8; jsoncpp, fast_float, fp16, rapidhash, dragonbox, wasm-api, utf8-decoder, re2 (produce no symbols); googletest (test only); uvwasi, merve, nbytes, ncrypto, postject, inspector_protocol, temporal_capi (no vcpkg port); npm, undici, acorn, minimatch, amaro, crates (other ecosystems) |
 
 ## 7. Open verifications

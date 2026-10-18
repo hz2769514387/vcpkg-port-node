@@ -69,9 +69,28 @@ file(RENAME "${FRAMEWORK_PATH}" "${SOURCE_PATH}/framework")
 file(RENAME "${TF_PSA_CRYPTO_PATH}" "${SOURCE_PATH}/tf-psa-crypto")
 file(COPY "${SOURCE_PATH}/framework" DESTINATION "${SOURCE_PATH}/tf-psa-crypto")
 
-# The generated files a release tree carries (see the header comment). They are
-# laid over the source tree so the build needs neither perl nor python.
-file(COPY "${CMAKE_CURRENT_LIST_DIR}/generated/" DESTINATION "${SOURCE_PATH}")
+# The files a release tree carries that the pinned development commit does not
+# (see the header comment). They are laid over the source tree so the build
+# needs neither perl nor python. If the pin moves and the generator output
+# changes, this list changes with it - a stale entry fails the build with a
+# missing source file rather than silently compiling the wrong thing.
+file(COPY
+    "${CMAKE_CURRENT_LIST_DIR}/generated/library/error.c"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/library/version_features.c"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/library/ssl_debug_helpers_generated.c"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/library/mbedtls_config_check_before.h"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/library/mbedtls_config_check_final.h"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/library/mbedtls_config_check_user.h"
+    DESTINATION "${SOURCE_PATH}/library"
+)
+file(COPY
+    "${CMAKE_CURRENT_LIST_DIR}/generated/tf-psa-crypto/core/psa_crypto_driver_wrappers.h"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/tf-psa-crypto/core/psa_crypto_driver_wrappers_no_static.c"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/tf-psa-crypto/core/tf_psa_crypto_config_check_before.h"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/tf-psa-crypto/core/tf_psa_crypto_config_check_final.h"
+    "${CMAKE_CURRENT_LIST_DIR}/generated/tf-psa-crypto/core/tf_psa_crypto_config_check_user.h"
+    DESTINATION "${SOURCE_PATH}/tf-psa-crypto/core"
+)
 
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "dynamic" USE_SHARED_MBEDTLS_LIBRARY)
 string(COMPARE EQUAL "${VCPKG_LIBRARY_LINKAGE}" "static" USE_STATIC_MBEDTLS_LIBRARY)

@@ -1,0 +1,11 @@
+--- a/include/tcb/span.hpp
++++ b/include/tcb/span.hpp
+@@ -27,6 +27,8 @@
+ #ifndef TCB_SPAN_NO_EXCEPTIONS
+ #include <cstdio>
+ #include <stdexcept>
++#else
++#include <exception> // for std::terminate
+ #endif
+ 
+ // Various feature test macros
