@@ -15,6 +15,7 @@ here ([0002](decisions/0002-node-version-policy.md), [0003](decisions/0003-vcpkg
 | `debug.yml` | weekly (Monday 04:47 UTC), manual | about an hour per leg | the same, for the **Debug** configuration |
 | `node-suite.yml` | weekly (Monday 03:17 UTC), manual | about an hour per leg | what was built is **still Node.js** |
 | `node-release-watch.yml` | daily (06:23 UTC), manual | seconds | whether upstream has published a newer Node.js release (ADR 0002) |
+| `vcpkg-release-watch.yml` | daily (06:53 UTC), manual | seconds | whether upstream has published a newer vcpkg release (docs/versioning.md) |
 
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
 place the build steps exist. They differ in which `preset`, `triplet` and `config` they pass,
@@ -254,6 +255,18 @@ pinned line with `ports/node/vcpkg.json`, and makes sure exactly one open issue 
 is available. Without a token it prints its finding and writes nothing, so it is safe to run
 locally. A new *major* line is reported as a separate issue, because crossing one is a project
 rather than a version bump.
+
+`vcpkg-release-watch.yml` is the same idea for the other pin. `tools/vcpkg_release_watch.py`
+asks GitHub's API for the latest `microsoft/vcpkg` release, compares its date tag with
+`vcpkg.release` in `versions.json`, and - only when something newer exists - makes one more
+request for that release's commit, because that is the `vcpkg-commit` value the upgrade has to
+put in the workflows. The issue body lists the three places the bump moves together. The tool
+never edits a pin: ADR 0003 makes the upgrade a reviewed change.
+
+Both watchers share `tools/release_watch_common.py`, which is the part that talks to this
+repository (`gh` only, `origin` only, nothing without a token), so the safety rules cannot
+drift apart between them. `lint.yml` runs both with `--dry-run` on every push, which is what
+catches an upstream API change before the daily run does.
 
 ## 8. What CI does not do
 

@@ -5,10 +5,9 @@ against a *specific* vcpkg release — so its own "version" cannot mean what it 
 library. It is three numbers in a fixed relationship, and the rules below exist to keep the
 relationship visible: which Node.js, which vcpkg, and which build of this repository.
 
-Status: **draft policy** (development period). The formats and the enforcement in
-[§7](#7-what-is-enforced-and-what-is-not) are implemented; the open questions at the end are
-for the maintainer to decide before the first tag. The decision to adopt this scheme is
-[ADR 0006](decisions/0006-versioning-and-branch-policy.md).
+Status: **active**. The formats, the enforcement in [§7](#7-what-is-enforced-and-what-is-not)
+and the three decisions that were open in the first draft (§8) are settled; the decision to
+adopt the scheme is [ADR 0006](decisions/0006-versioning-and-branch-policy.md).
 
 ## 1. The three numbers
 
@@ -80,8 +79,11 @@ Rules:
 | `legacy/…` | whatever it was | nothing — read-only | none. It may not build; it is kept for reference |
 
 - **A branch's name is its lineage, not a live contract.** It records the (Node.js, vcpkg)
-  pair `main` was on when the line was opened. A backport that bumps an overlay dependency's
-  version is allowed and is recorded in that branch's `versions.json`; the name does not move.
+  pair `main` was on when the line was opened. **Backports on a maintained branch may bump a
+  dependency version** — a security fix in an overlay port, typically — and the bump is recorded
+  in that branch's `versions.json`, tagged, and released like any other change. The name does
+  not move: it is what the line was cut from, not a promise about every commit on it. What a
+  branch does not do is follow a new Node.js line or a new vcpkg release; that is `main`'s job.
 - **`main` is the only branch that upgrades.** That is the whole point of the split: a
   consumer who pins a branch gets reproducibility, a consumer who pins `main` gets the newest
   LTS.
@@ -117,6 +119,9 @@ Rules:
   decides when the first one is worth cutting); the format applies from then on.
 - Tags are cut for **every maintained-branch backport too** — the branch name stays, the tag
   identifies the exact state.
+- **Cutting a tag and publishing a release is the maintainer's decision, never an automated
+  step.** The watchers report, CI verifies, and the checklist below says what has to be true;
+  none of them tags anything. No tag exists while the repository is in its development period.
 
 Preparing a release is a checklist, and the lint covers half of it:
 
@@ -143,9 +148,12 @@ Preparing a release is a checklist, and the lint covers half of it:
   ships a dependency the Node.js line cannot use, `main` stays on the previous release and the
   reason goes in the pin's ADR or an issue — never a silent lag.
 
-Where the watching actually happens today: `.github/workflows/node-release-watch.yml` polls
-`nodejs.org/dist/index.json` daily and files an issue when a new version appears. There is no
-equivalent for vcpkg releases yet (open question, §8).
+Where the watching actually happens: `.github/workflows/node-release-watch.yml` polls
+`nodejs.org/dist/index.json` daily, and `.github/workflows/vcpkg-release-watch.yml` asks
+GitHub's API for the latest `microsoft/vcpkg` release daily. Each makes one request per run
+(the vcpkg one makes a second only when a newer release exists, to fetch its commit for the
+upgrade) and files or updates exactly one issue per finding. Neither one edits a pin: a
+watcher says what is available, a reviewed change moves it.
 
 ## 6. Support window
 
@@ -164,15 +172,21 @@ from Node's release schedule by hand.
 | a packaging change bumps `port-version` | AGENTS.md, review (not a tool) |
 | tags are immutable, releases carry a CI link | review |
 | a maintained branch still builds | CI on `*_vcpkg-*` |
+| an upstream release does not go unnoticed | the two watchers (§5); Lint runs both in `--dry-run` so a broken parser fails there first |
 
-## 8. Open questions for the maintainer
+## 8. Decisions taken on the first draft
 
-1. **Backports on a maintained branch**: may they bump an overlay dependency's version for a
-   security fix (recorded in that branch's `versions.json`), or is a branch frozen at every
-   version, Node.js and dependency alike? This document assumes the former.
-2. **vcpkg release watching**: add a watcher like the Node.js one, or keep vcpkg bumps manual
-   (they are monthly, and ADR 0003 makes them deliberate anyway)?
-3. **First tag**: which (Node.js, vcpkg) pair and which release version is the first one? The
-   development period has none; this document assumes the first tag is cut only once the matrix
-   has been green on all six legs at least once and the port has been consumed by someone
-   outside this repository.
+The first draft of this policy left three things open; the maintainer settled them on
+2026-10-18, and they are folded into the sections above:
+
+1. **Backports may bump dependency versions** (§3). A maintained branch is not frozen at every
+   version: a security fix in an overlay port is a backport, it is recorded in that branch's
+   `versions.json`, and it is tagged. What a branch does *not* take is a new Node.js line or a
+   new vcpkg release.
+2. **vcpkg releases are watched** (§5). `.github/workflows/vcpkg-release-watch.yml` runs daily
+   against GitHub's API, files one issue per available release with the commit the upgrade
+   needs, and never edits a pin itself.
+3. **Tags and releases are the maintainer's explicit decision** (§4). No automation creates
+   them: not the watchers, not CI. The checklist above is what has to be true first; cutting
+   the tag is a human act, and that is deliberate — a tag is the only immutable statement this
+   repository makes.

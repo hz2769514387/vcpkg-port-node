@@ -26,7 +26,7 @@ versioned with the code and reviewed in pull requests.
 | [zlib-fork.md](zlib-fork.md) | The zlib overlay port: which fork, pinned at which commit, verified how, what it costs consumers, and what it measures | active |
 | [ci.md](ci.md) | Workflows, the platform matrix, what each gate decides, caching, the release watcher | active |
 | [node-suite.md](node-suite.md) | How Node.js's own test suite is run, how to read a result, and what may be allowed to fail | active |
-| [versioning.md](versioning.md) | Versions (release date, Node.js, vcpkg), `versions.json`, branches, tags, and the support window | draft |
+| [versioning.md](versioning.md) | Versions (release date, Node.js, vcpkg), `versions.json`, branches, tags, and the support window | active |
 | [overlay-replacements.md](overlay-replacements.md) | Every port under `ports/` that replaces a registry port, and what that changes for a consumer's graph | active |
 
 ## Where work items live

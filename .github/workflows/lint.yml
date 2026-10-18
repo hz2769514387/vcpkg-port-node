@@ -33,3 +33,6 @@ jobs:
 
       - name: The release watcher still parses the upstream feed
         run: python3 tools/node_release_watch.py --dry-run
+
+      - name: The vcpkg release watcher still parses the upstream API
+        run: python3 tools/vcpkg_release_watch.py --dry-run

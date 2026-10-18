@@ -44,15 +44,12 @@ import subprocess
 import sys
 import urllib.request
 
+from release_watch_common import ensure_issue, emit_outputs, fail, github_repo
+
 INDEX_URL = "https://nodejs.org/dist/index.json"
 MANIFEST = "ports/node/vcpkg.json"
-ISSUE_LABEL = "dependencies"
 VERSION_RE = re.compile(r"^v?(\d+)\.(\d+)\.(\d+)$")
 
-
-def fail(message, code=2):
-    sys.stderr.write("%s\n" % message)
-    raise SystemExit(code)
 
 
 def read_pinned_version(root):
@@ -119,23 +116,6 @@ def classify(pinned, releases):
     return same_line, newest_line
 
 
-def github_repo(root):
-    """Read owner/name from the origin remote, refusing anything that is not GitHub."""
-    proc = subprocess.run(
-        ["git", "config", "--get", "remote.origin.url"],
-        cwd=root,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    url = proc.stdout.strip()
-    if not url:
-        fail("no 'origin' remote in this checkout", 2)
-    match = re.match(r"^(?:https://github\.com/|git@github\.com:)([\w.-]+/[\w.-]+?)(?:\.git)?$", url)
-    if not match:
-        fail("origin is not a GitHub repository: %s (this tool writes nowhere else)" % url, 2)
-    return match.group(1)
-
 
 def issue_title(kind, version, pinned):
     """One stable title per finding, so reruns update the issue instead of duplicating it."""
@@ -189,77 +169,6 @@ def render_body(kind, pinned, finding, extra):
     )
 
 
-def ensure_issue(repo, title, body, dry_run):
-    """Create the issue, or rewrite the body if one with this title is already open."""
-    if dry_run:
-        # Deliberately before any `gh` call: a dry run has to work without credentials, or
-        # the lint job that checks this tool every push fails on nothing but a missing token.
-        return "would file %r in %s" % (title, repo)
-
-    listed = subprocess.run(
-        ["gh", "issue", "list", "--repo", repo, "--state", "open",
-         "--limit", "200", "--search", title, "--json", "number,title"],
-        capture_output=True, text=True, check=False,
-    )
-    if listed.returncode != 0:
-        return "gh issue list failed: %s" % listed.stderr.strip()
-    existing = None
-    try:
-        for issue in json.loads(listed.stdout or "[]"):
-            if issue.get("title") == title:
-                existing = issue["number"]
-                break
-    except json.JSONDecodeError:
-        pass
-
-    if dry_run:
-        return "would %s issue %r in %s" % (
-            "update" if existing else "open", title, repo)
-
-    if existing is not None:
-        proc = subprocess.run(
-            ["gh", "issue", "edit", str(existing), "--repo", repo, "--body", body],
-            capture_output=True, text=True, check=False,
-        )
-        return "updated issue #%d" % existing if proc.returncode == 0 else (
-            "gh issue edit failed: %s" % proc.stderr.strip())
-
-    labelled = subprocess.run(
-        ["gh", "issue", "create", "--repo", repo, "--title", title, "--body", body,
-         "--label", ISSUE_LABEL],
-        capture_output=True, text=True, check=False,
-    )
-    if labelled.returncode == 0:
-        return "opened %s" % (labelled.stdout.strip() or "issue")
-
-    if "label" not in labelled.stderr.lower():
-        return "gh issue create failed: %s" % labelled.stderr.strip()
-
-    # A label that does not exist in this repository is not a reason to lose the finding:
-    # open the issue without it and say so, so the missing label is visible rather than fatal.
-    bare = subprocess.run(
-        ["gh", "issue", "create", "--repo", repo, "--title", title, "--body", body],
-        capture_output=True, text=True, check=False,
-    )
-    if bare.returncode != 0:
-        return "gh issue create failed: %s" % bare.stderr.strip()
-    return "opened %s (without the label %r: create it with 'gh label create %s' if wanted)" % (
-        bare.stdout.strip() or "issue", ISSUE_LABEL, ISSUE_LABEL)
-
-
-def emit_outputs(payload):
-    """Feed `$GITHUB_OUTPUT` / `$GITHUB_STEP_SUMMARY` when running inside Actions."""
-    output_path = os.environ.get("GITHUB_OUTPUT")
-    if output_path:
-        with open(output_path, "a", encoding="utf-8") as fh:
-            for key, value in payload.items():
-                fh.write("%s=%s\n" % (key, value))
-    summary_path = os.environ.get("GITHUB_STEP_SUMMARY")
-    if summary_path:
-        with open(summary_path, "a", encoding="utf-8") as fh:
-            fh.write("### Node.js release watch\n")
-            for key, value in payload.items():
-                fh.write("- `%s`: %s\n" % (key, value))
 
 
 def main(argv=None):
@@ -315,7 +224,7 @@ def main(argv=None):
     }
 
     if not findings:
-        emit_outputs(report)
+        emit_outputs("Node.js release watch", report)
         if args.as_json:
             print(json.dumps(report, indent=2))
         else:
@@ -330,7 +239,7 @@ def main(argv=None):
     try:
         repo = github_repo(root)
     except SystemExit as exc:
-        emit_outputs(report)
+        emit_outputs("Node.js release watch", report)
         raise exc
 
     for kind, title, body in findings:
@@ -339,9 +248,9 @@ def main(argv=None):
     for line in results:
         print(line)
         if "failed" in line:
-            emit_outputs(report)
+            emit_outputs("Node.js release watch", report)
             return 1
-    emit_outputs(report)
+    emit_outputs("Node.js release watch", report)
     return 0
 
 

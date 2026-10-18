@@ -1,0 +1,34 @@
+name: vcpkg release watch
+
+# docs/versioning.md: main tracks the newest vcpkg release, and ADR 0003 makes the upgrade an
+# explicit reviewed change. Nothing else tells us when upstream publishes - vcpkg has no
+# Dependabot manager either - so the watcher runs here, once a day.
+#
+# The tool makes one request per run, plus one more only when a newer release exists (it needs
+# that release's commit for the upgrade), and writes nowhere except this repository.
+
+on:
+  schedule:
+    # Deliberately not the same minute as the Node.js watch: two independent schedules that
+    # fire together make it look like one job failed when it is the other.
+    - cron: '53 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  issues: write
+
+jobs:
+  watch:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Compare the pinned vcpkg release with GitHub
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 tools/vcpkg_release_watch.py
