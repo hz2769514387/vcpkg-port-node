@@ -239,6 +239,101 @@ def check_overlay_disclosure(report, root, ports):
             )
 
 
+def check_versions_json(report, root):
+    """versions.json has to agree with the files it summarises.
+
+    It is the repository's own record of the three numbers (release date, Node.js version,
+    vcpkg release - docs/versioning.md). Every field except `port` is derived from somewhere
+    else, so the check is a drift detector: the portfile's source archive hash, the manifest
+    version, and the workflows' vcpkg pin all have to be the same values it records.
+    """
+    path = os.path.join(root, "versions.json")
+    if not os.path.isfile(path):
+        report.error(
+            "versions.json",
+            "missing: it records the current Node.js and vcpkg pins (docs/versioning.md)",
+        )
+        return
+    with open(path, "r", encoding="utf-8") as fh:
+        try:
+            data = json.load(fh)
+        except ValueError as exc:
+            report.error("versions.json", "is not valid JSON: %s" % exc)
+            return
+
+    port = data.get("port") or {}
+    node = data.get("node") or {}
+    vcpkg = data.get("vcpkg") or {}
+
+    release = str(port.get("version", ""))
+    if not re.match(r"^\d{8}(\.\d+)?$", release):
+        report.error(
+            "versions.json",
+            "port.version '%s' is neither YYYYMMDD nor YYYYMMDD.N" % release,
+        )
+    if not isinstance(port.get("released"), bool):
+        report.error("versions.json", "port.released has to be true or false")
+
+    manifest_path = os.path.join(root, "ports", "node", "vcpkg.json")
+    if os.path.isfile(manifest_path):
+        with open(manifest_path, "r", encoding="utf-8") as fh:
+            manifest = json.load(fh)
+        if node.get("version") != manifest.get("version"):
+            report.error(
+                "versions.json",
+                "node.version '%s' does not match ports/node/vcpkg.json '%s'"
+                % (node.get("version"), manifest.get("version")),
+            )
+        if port.get("manifest_version") != manifest.get("version"):
+            report.error(
+                "versions.json",
+                "port.manifest_version '%s' does not match ports/node/vcpkg.json '%s'"
+                % (port.get("manifest_version"), manifest.get("version")),
+            )
+        if int(port.get("manifest_port_version", 0)) != int(
+            manifest.get("port-version", 0)
+        ):
+            report.error(
+                "versions.json",
+                "port.manifest_port_version %s does not match ports/node/vcpkg.json %s"
+                % (port.get("manifest_port_version"), manifest.get("port-version", 0)),
+            )
+
+    portfile_path = os.path.join(root, "ports", "node", "portfile.cmake")
+    if os.path.isfile(portfile_path):
+        with open(portfile_path, "r", encoding="utf-8") as fh:
+            portfile = fh.read()
+        archive = re.search(r"SHA512\s+([0-9a-f]{128})", portfile)
+        if not archive:
+            report.error(
+                "ports/node/portfile.cmake",
+                "no SHA512 for the Node.js source archive",
+            )
+        elif node.get("sha512") != archive.group(1):
+            report.error(
+                "versions.json",
+                "node.sha512 does not match the Node.js archive hash in "
+                "ports/node/portfile.cmake (one of them was bumped without the other)",
+            )
+
+    workflow_path = os.path.join(root, ".github", "workflows", "build-test.yml")
+    if os.path.isfile(workflow_path):
+        with open(workflow_path, "r", encoding="utf-8") as fh:
+            workflow = fh.read()
+        pin = re.search(r"vcpkg-commit:.*?default:\s*([0-9a-f]{40})", workflow, re.S)
+        if not pin:
+            report.error(
+                ".github/workflows/build-test.yml",
+                "no default commit under the vcpkg-commit input",
+            )
+        elif vcpkg.get("commit") != pin.group(1):
+            report.error(
+                "versions.json",
+                "vcpkg.commit does not match the workflows' vcpkg-commit default "
+                "(ADR 0003: they move together)",
+            )
+
+
 def main(argv=None):
     cwd = os.getcwd()
     root = repo_root(cwd)
@@ -251,6 +346,7 @@ def main(argv=None):
     check_port_patches(report, root, ports)
     check_port_versions(report, root, ports)
     check_overlay_disclosure(report, root, ports)
+    check_versions_json(report, root)
 
     for line in report.warnings:
         print(line)

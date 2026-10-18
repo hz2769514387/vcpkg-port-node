@@ -11,6 +11,10 @@ on:
   push:
     branches:
       - main
+      # Maintained lines (docs/versioning.md): a branch that is still supported has to be
+      # still built. `legacy/*` is deliberately absent - those are frozen, unmaintained, and
+      # may not build at all.
+      - "*_vcpkg-*"
   pull_request:
   workflow_dispatch:
 

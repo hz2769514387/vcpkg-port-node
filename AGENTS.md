@@ -119,6 +119,11 @@ Where things go:
   change under a released version does.
 - Node.js sources are downloaded and hash-verified by the port. Never vendor a Node.js tree
   into this repository.
+- **Versions, branches and tags follow [docs/versioning.md](docs/versioning.md)** (decision:
+  ADR 0006). The release version is a date, the port's manifest version stays the Node.js
+  version, `main` is the only branch that upgrades Node.js or vcpkg, and tags are
+  `<release>_<node>_vcpkg-<vcpkg>`. `versions.json` records the pins and
+  `tools/check_repo.py` fails when it drifts from the portfile, the manifest or the CI pin.
 
 ## 7. Before you say "done"
 

@@ -20,6 +20,10 @@ Early development: there is no release yet, no tag, and no stable interface.
 | Build route | `configure.py` → `gyp -f ninja` → `ninja` |
 | Delivery | static library + CMake config, as overlay ports |
 
+The machine-readable record of these pins — plus V8's version, `NODE_MODULE_VERSION` and
+Node.js's LTS dates — is [versions.json](versions.json), and
+[docs/versioning.md](docs/versioning.md) explains how versions, branches and tags relate.
+
 ## Why an overlay port
 
 V8 is a Node.js-maintained fork and Node.js offers no externalize channel for it, so the
