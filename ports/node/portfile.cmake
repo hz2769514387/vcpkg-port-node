@@ -582,7 +582,21 @@ endif()
 # ---------------------------------------------------------------------------
 function(_node_shared_args _out _libdir _is_debug)
     if(VCPKG_TARGET_IS_WINDOWS)
-        set(_zlib_lib    "zs")
+        # This repository's zlib overlay installs the Chromium fork as `zs.lib`
+        # when it is built statically and as `zlib.lib` when it is built as a
+        # DLL (it renames the static output to keep it from colliding with the
+        # registry port's file). configure.py needs the real file name, so the
+        # name follows the linkage rather than being a constant - hard-coding
+        # `zs` is what made a shared libnode fail with
+        # `LINK : fatal error LNK1181: cannot open input file 'zs.lib'`.
+        # The fork's own CMakeLists: shared is OUTPUT_NAME z, static is
+        # z${zlib_static_suffix} (zs on Windows). gyp appends the debug `d`
+        # itself, so what is handed over is always the release stem.
+        if(_node_shared_build)
+            set(_zlib_lib    "z")
+        else()
+            set(_zlib_lib    "zs")
+        endif()
         set(_openssl_lib "libcrypto,libssl")
         set(_libuv_lib   "libuv")
         set(_absl_prefix "absl_")
@@ -679,6 +693,57 @@ function(_node_shared_args _out _libdir _is_debug)
         string(REPLACE "|" ";" _pair "${_spec}")
         list(GET _pair 0 _opt)
         list(GET _pair 1 _libnames)
+        # A name that is wrong here surfaces as LNK1181 "cannot open input file"
+        # several thousand lines later, once every dependency has been built and
+        # the first host tool is linked - an hour into a leg, and the message
+        # names neither the dependency nor what was expected. Checking the names
+        # against the directory they came from costs nothing and fails in
+        # seconds with the missing names and what is actually there.
+        # _libnames is comma-separated because that is the separator
+        # --shared-<dep>-libname takes; CMake needs semicolons to iterate it.
+        set(_missing "")
+        string(REPLACE "," ";" _libnames_list "${_libnames}")
+        foreach(_n IN LISTS _libnames_list)
+            if(VCPKG_TARGET_IS_WINDOWS)
+                set(_candidates "${_libdir}/${_n}.lib")
+                # gyp appends the debug `d` itself, so the debug tree holds
+                # zsd.lib for a name of zs. Accepting only the bare stem here
+                # would reject the Debug build that already works.
+                if(_is_debug)
+                    list(APPEND _candidates "${_libdir}/${_n}d.lib")
+                endif()
+            else()
+                set(_candidates "${_libdir}/lib${_n}.a"
+                                "${_libdir}/lib${_n}.so"
+                                "${_libdir}/lib${_n}.dylib")
+            endif()
+            file(GLOB _hit ${_candidates})
+            if(NOT _hit)
+                list(APPEND _missing "${_n}")
+            endif()
+            unset(_hit)
+            unset(_candidates)
+        endforeach()
+        unset(_n)
+        if(_missing)
+            file(GLOB _present "${_libdir}/*")
+            list(TRANSFORM _present REPLACE "^.*/" "")
+            list(LENGTH _present _present_count)
+            if(_present_count GREATER 60)
+                list(SUBLIST _present 0 60 _present)
+                list(APPEND _present "...")
+            endif()
+            string(REPLACE ";" "\n  " _missing_txt "${_missing}")
+            string(REPLACE ";" "\n  " _present_txt "${_present}")
+            message(FATAL_ERROR
+                "node port: --shared-${_opt}-libname names libraries that are not in "
+                "${_libdir}:\n  ${_missing_txt}\n"
+                "A wrong name here used to reach the linker as LNK1181 an hour later. "
+                "What that directory actually holds:\n  ${_present_txt}")
+        endif()
+        unset(_missing)
+        unset(_present)
+        unset(_present_count)
         list(APPEND _args
             "--shared-${_opt}"
             "--shared-${_opt}-includes=${CURRENT_INSTALLED_DIR}/include"
