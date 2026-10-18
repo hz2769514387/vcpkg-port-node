@@ -20,7 +20,36 @@
 # externalized too, because two copies of the same symbols in one process is
 # exactly what must not happen.
 
-vcpkg_check_linkage(ONLY_STATIC_LIBRARY)
+# ---------------------------------------------------------------------------
+# Library linkage: static and dynamic are both supported (ADR 0007).
+#
+# Static was the only kind for a long time, and `vcpkg_check_linkage(
+# ONLY_STATIC_LIBRARY)` used to say so - without any evidence that a shared
+# libnode cannot be built, which is what it takes for a restriction to belong
+# in the README's *Known limits* rather than in an issue. Read from the
+# Node.js v26.12.0 tree: `--shared` is a first-class configure.py option; on
+# Windows the DLL is linked once and then relinked against a module-definition
+# file derived from its own export table, so the export set is whatever the
+# DLL already exported (node.gyp, tools/gen_node_def.cc) and
+# common.gypi marks V8's embedding API __declspec(dllexport); on Unix the
+# obvious way to hide symbols is commented out in node.gyp. Nothing blocks it.
+#
+# The two forms do differ for a consumer, and the differences are written down
+# rather than smoothed over:
+#   * a shared libnode already contains the externalized dependencies, so a
+#     consumer must NOT link them a second time;
+#   * the library has to be found at run time;
+#   * the definitions this port hands a consumer (/STACK, the manifest) are
+#     properties of the executable that hosts Node.js, so they still apply.
+# ---------------------------------------------------------------------------
+vcpkg_check_linkage()
+if(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+    set(_node_shared_build TRUE)
+    message(STATUS "node port: VCPKG_LIBRARY_LINKAGE=dynamic -> building a shared libnode")
+else()
+    set(_node_shared_build FALSE)
+    message(STATUS "node port: VCPKG_LIBRARY_LINKAGE=static -> building a static libnode")
+endif()
 
 # ---------------------------------------------------------------------------
 # Build scope follows VCPKG_BUILD_TYPE, the standard vcpkg rule for ports that
@@ -691,11 +720,20 @@ foreach(_node_cfg IN LISTS _node_configs)
 
     _node_shared_args(_node_shared_args "${_node_lib_dir}" "${_node_is_debug}")
 
+    # --shared makes node.gyp build libnode as a shared_library and link the
+    # node executable against it.
+    if(_node_shared_build)
+        set(_node_shared_build_arg "--shared")
+    else()
+        set(_node_shared_build_arg "")
+    endif()
+
     vcpkg_execute_required_process(
         COMMAND "${PYTHON3}" configure.py
             --ninja
             ${_node_cfg_arg}
             ${_node_clang_cl_arg}
+            ${_node_shared_build_arg}
             ${_node_dest_cpu_args}
             --with-intl=system-icu
             ${_node_shared_args}
@@ -756,9 +794,37 @@ foreach(_node_cfg IN LISTS _node_configs)
     if(_node_cfg STREQUAL "Debug")
         set(_node_out_dir "${SOURCE_PATH}/out/Debug")
         set(_node_pkg_lib_dir "${CURRENT_PACKAGES_DIR}/debug/lib")
+        set(_node_pkg_bin_dir "${CURRENT_PACKAGES_DIR}/debug/bin")
     else()
         set(_node_out_dir "${SOURCE_PATH}/out/Release")
         set(_node_pkg_lib_dir "${CURRENT_PACKAGES_DIR}/lib")
+        set(_node_pkg_bin_dir "${CURRENT_PACKAGES_DIR}/bin")
+    endif()
+
+    if(_node_shared_build)
+        # Where gyp's ninja generator puts a shared_library, read out of
+        # ComputeOutput (tools/gyp/pylib/gyp/generator/ninja.py): the output
+        # root on Windows and macOS, lib/ on Linux. gyp names the Windows
+        # import library "<dll>.lib", which is not a name anyone would guess.
+        if(VCPKG_TARGET_IS_WINDOWS)
+            set(_node_shlib "${_node_out_dir}/libnode.dll")
+            set(_node_implib "${_node_shlib}.lib")
+            file(INSTALL "${_node_shlib}" DESTINATION "${_node_pkg_bin_dir}")
+            file(INSTALL "${_node_implib}" DESTINATION "${_node_pkg_lib_dir}")
+        elseif(VCPKG_TARGET_IS_OSX)
+            file(INSTALL "${_node_out_dir}/libnode.dylib" DESTINATION "${_node_pkg_lib_dir}")
+        else()
+            file(INSTALL "${_node_out_dir}/lib/libnode.so" DESTINATION "${_node_pkg_lib_dir}")
+        endif()
+        # Nothing else is a deliverable: the component archives are inputs the
+        # shared library already absorbed, and linking them again from a
+        # consumer would put a second copy of every symbol into the process.
+        unset(_node_shlib)
+        unset(_node_implib)
+        unset(_node_out_dir)
+        unset(_node_pkg_lib_dir)
+        unset(_node_pkg_bin_dir)
+        continue()
     endif()
 
     # Windows/macOS: gyp puts static libraries under obj/ (recursively) and, on
@@ -797,6 +863,7 @@ foreach(_node_cfg IN LISTS _node_configs)
 endforeach()
 unset(_node_out_dir)
 unset(_node_pkg_lib_dir)
+unset(_node_pkg_bin_dir)
 
 if(VCPKG_TARGET_IS_WINDOWS)
     file(INSTALL "${SOURCE_PATH}/src/res/node.exe.extra.manifest"
@@ -814,6 +881,23 @@ if("tools" IN_LIST FEATURES)
         file(INSTALL "${SOURCE_PATH}/out/Release/node" DESTINATION "${_node_tools}"
             FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                             GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
+    endif()
+    # A shared build needs its library beside the executable. node.gyp gives
+    # the Linux binary `-rpath $ORIGIN/../lib` and the macOS one
+    # `@rpath/libnode.dylib` with `@loader_path` and `@loader_path/../lib`,
+    # so both spellings are covered: next to the binary, and one level up
+    # under lib/. Windows looks next to the binary and nowhere else.
+    if(_node_shared_build)
+        if(VCPKG_TARGET_IS_WINDOWS)
+            set(_node_tool_shlib "${SOURCE_PATH}/out/Release/libnode.dll")
+        elseif(VCPKG_TARGET_IS_OSX)
+            set(_node_tool_shlib "${SOURCE_PATH}/out/Release/libnode.dylib")
+        else()
+            set(_node_tool_shlib "${SOURCE_PATH}/out/Release/lib/libnode.so")
+        endif()
+        file(INSTALL "${_node_tool_shlib}" DESTINATION "${_node_tools}")
+        file(INSTALL "${_node_tool_shlib}" DESTINATION "${CURRENT_PACKAGES_DIR}/tools/lib")
+        unset(_node_tool_shlib)
     endif()
     file(INSTALL "${SOURCE_PATH}/deps/npm/" DESTINATION "${_node_tools}/node_modules/npm"
         USE_SOURCE_PERMISSIONS)
@@ -1055,10 +1139,27 @@ if("tools" IN_LIST FEATURES)
     endif()
 endif()
 
+if(_node_shared_build)
+    if(VCPKG_TARGET_IS_WINDOWS)
+        set(_node_shlib_file "libnode.dll")
+        # gyp names the import library "<dll>.lib"; see the install step above.
+        set(_node_implib_file "libnode.dll.lib")
+    elseif(VCPKG_TARGET_IS_OSX)
+        set(_node_shlib_file "libnode.dylib")
+    else()
+        set(_node_shlib_file "libnode.so")
+    endif()
+endif()
+
 # Everything gyp produces for a Node.js build. abseil/highway/simdutf/zlib come
 # from vcpkg; v8_zlib remains (patched down to compression_utils_portable.cc, so
 # it defines no zlib core symbols). LIEF and libffi are vcpkg packages now and
 # are wired below as their own imported targets (LIEF::LIEF, unofficial::node::ffi).
+#
+# A shared build has none of this to import: the shared library already contains
+# every one of these archives, and a consumer linking them again would put a
+# second copy of each symbol into the process.
+if(NOT _node_shared_build)
 set(_node_all_archives
     libnode node_base
     v8_base_without_compiler v8_compiler v8_init v8_initializers
@@ -1082,7 +1183,9 @@ foreach(_a IN LISTS _node_all_archives)
 endforeach()
 unset(_a)
 unset(_file)
+endif()  # NOT _node_shared_build (archives)
 
+if(NOT _node_shared_build)
 # abseil ships one archive per component and its vcpkg config exposes them as
 # individual absl::<component> targets with no aggregate, so import them by file
 # name here. That stays correct across abseil versions without tracking target
@@ -1126,6 +1229,7 @@ string(APPEND _cfg
     "endforeach()\n"
     "unset(_node_absl_libs)\n"
     "unset(_node_absl_debug_libs)\n")
+endif()  # NOT _node_shared_build (abseil)
 
 string(APPEND _cfg
     "add_library(unofficial::node::node INTERFACE IMPORTED)\n"
@@ -1140,6 +1244,48 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "endif()\n")
 endif()
 
+if(_node_shared_build)
+    # A shared libnode: one imported SHARED target, and nothing else on the
+    # consumer's link line. Every externalized dependency is already inside the
+    # library, and linking it again would put a second copy of each symbol into
+    # the process; the system libraries the library needs are the library's own
+    # business, not the consumer's.
+    string(APPEND _cfg
+        "set(node_LIBRARY_KIND \"shared\")\n"
+        "if(NOT TARGET unofficial::node::libnode)\n"
+        "  add_library(unofficial::node::libnode SHARED IMPORTED)\n")
+    if(VCPKG_TARGET_IS_WINDOWS)
+        string(APPEND _cfg
+            "  set_target_properties(unofficial::node::libnode PROPERTIES\n"
+            "    IMPORTED_IMPLIB \"\${_node_lib}/${_node_implib_file}\"\n"
+            "    IMPORTED_LOCATION \"\${_node_prefix}/bin/${_node_shlib_file}\")\n"
+            "  set(node_SHARED_LIBRARY \"\${_node_prefix}/bin/${_node_shlib_file}\")\n")
+    else()
+        string(APPEND _cfg
+            "  set_target_properties(unofficial::node::libnode PROPERTIES\n"
+            "    IMPORTED_LOCATION \"\${_node_lib}/${_node_shlib_file}\")\n"
+            "  set(node_SHARED_LIBRARY \"\${_node_lib}/${_node_shlib_file}\")\n")
+    endif()
+    if("Debug" IN_LIST _node_configs)
+        if(VCPKG_TARGET_IS_WINDOWS)
+            string(APPEND _cfg
+                "  set_target_properties(unofficial::node::libnode PROPERTIES\n"
+                "    IMPORTED_IMPLIB_DEBUG \"\${_node_prefix}/debug/lib/${_node_implib_file}\"\n"
+                "    IMPORTED_LOCATION_DEBUG \"\${_node_prefix}/debug/bin/${_node_shlib_file}\")\n")
+        else()
+            string(APPEND _cfg
+                "  set_target_properties(unofficial::node::libnode PROPERTIES\n"
+                "    IMPORTED_LOCATION_DEBUG \"\${_node_prefix}/debug/lib/${_node_shlib_file}\")\n")
+        endif()
+    endif()
+    string(APPEND _cfg
+        "endif()\n"
+        "target_link_libraries(unofficial::node::node INTERFACE unofficial::node::libnode)\n")
+else()
+    string(APPEND _cfg "set(node_LIBRARY_KIND \"static\")\n")
+endif()
+
+if(NOT _node_shared_build)
 # nghttp2 ships no CMake config; build an imported target for it. find_library can fall
 # back to a system copy, which would be built with a different CRT - refuse to.
 string(APPEND _cfg
@@ -1236,6 +1382,7 @@ if(VCPKG_TARGET_IS_WINDOWS)
         "endif()\n"
         "target_link_libraries(unofficial::node::node INTERFACE\n"
         "  winmm ntdll bcrypt crypt32 ws2_32 unofficial::node::clang_rt_builtins)\n")
+endif()  # NOT _node_shared_build (the static link line)
 
     # Stack size: upstream node.gyp sets StackReserveSize 0x800000, but that only
     # applies to the executable gyp builds. A consumer's executable (built by

@@ -104,12 +104,47 @@ if(NOT TARGET ZLIB::ZLIB AND TARGET ZLIB::ZLIBSTATIC)
   set_target_properties(ZLIB::ZLIB PROPERTIES INTERFACE_LINK_LIBRARIES ZLIB::ZLIBSTATIC)
 endif()
 
+# A shared libnode has to be findable when the thing that links it runs, and
+# that is the consumer's job rather than the port's - so this project does it
+# the way a consumer has to, and the README says so.
+#
+# Windows: the DLL is copied next to the executable. $<TARGET_RUNTIME_DLLS> is
+# used rather than a path built by hand because the location is per
+# configuration (bin/ versus debug/bin/), and it also covers anything else in
+# the graph that turns out to be a DLL.
+# Unix: the library's directory goes into the build RPATH, which is what
+# libnode's own install name asks for (\$ORIGIN on Linux, @rpath on macOS).
+function(node_test_runtime_libs _target)
+  if(NOT DEFINED node_LIBRARY_KIND OR NOT node_LIBRARY_KIND STREQUAL "shared")
+    return()
+  endif()
+  if(WIN32)
+    add_custom_command(TARGET ${_target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_if_different
+              $<TARGET_RUNTIME_DLLS:${_target}> $<TARGET_FILE_DIR:${_target}>
+      COMMAND_EXPAND_LISTS)
+  else()
+    get_filename_component(_node_shlib_dir "${node_SHARED_LIBRARY}" DIRECTORY)
+    get_filename_component(_node_prefix "${_node_shlib_dir}" DIRECTORY)
+    set_property(TARGET ${_target} PROPERTY BUILD_RPATH
+                 "${_node_prefix}/lib;${_node_prefix}/debug/lib")
+  endif()
+endfunction()
+
 add_subdirectory(embedder)
 add_subdirectory(embedding)
 add_subdirectory(smoke)
 add_subdirectory(zlib)
 add_subdirectory(symbols)
 add_subdirectory(official_suite)
+
+foreach(_node_exe IN ITEMS node_embedder coexist_consumer thread_loop host_loop
+                           layered_app layered_cli)
+  if(TARGET ${_node_exe})
+    node_test_runtime_libs(${_node_exe})
+  endif()
+endforeach()
+unset(_node_exe)
 
 message(STATUS "node consumer test project")
 message(STATUS "  node version      : ${unofficial-node_VERSION} (from share/unofficial-node)")
