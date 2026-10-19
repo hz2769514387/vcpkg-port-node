@@ -46,7 +46,7 @@ jobs:
     with:
       runner: windows-2022
       preset: x64-windows-static
-      triplet: x64-windows-static
+      triplet: x64-windows-static-clang
       consumer-configs: Debug
       suite-configs: Debug
       expect-arch: x64
@@ -58,7 +58,7 @@ jobs:
     with:
       runner: windows-11-arm
       preset: arm64-windows-static
-      triplet: arm64-windows-static
+      triplet: arm64-windows-static-clang
       consumer-configs: Debug
       suite-configs: Debug
       expect-arch: ARM64

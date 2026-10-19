@@ -43,7 +43,7 @@ jobs:
     with:
       runner: windows-2022
       preset: x64-windows-static-md
-      triplet: x64-windows-static-md
+      triplet: x64-windows-static-md-clang
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       expect-arch: x64
@@ -56,7 +56,7 @@ jobs:
     with:
       runner: windows-11-arm
       preset: arm64-windows-static-md
-      triplet: arm64-windows-static-md
+      triplet: arm64-windows-static-md-clang
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       expect-arch: ARM64
@@ -69,7 +69,7 @@ jobs:
     with:
       runner: windows-2022
       preset: x64-windows
-      triplet: x64-windows
+      triplet: x64-windows-clang
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: x64
@@ -82,7 +82,7 @@ jobs:
     with:
       runner: windows-11-arm
       preset: arm64-windows
-      triplet: arm64-windows
+      triplet: arm64-windows-clang
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: ARM64

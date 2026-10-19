@@ -9,11 +9,12 @@
     {
       "name": "base",
       "hidden": true,
-      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout. Every visible preset is named after the vcpkg triplet it selects, and that triplet ships with vcpkg itself - this repository carries no triplet file, which is the whole point of the port. A preset with no suffix is this repository's recommended choice for its platform; a suffix names one deliberate deviation from it (see test/README.md). An unset VCPKG_BUILD_TYPE builds both Release and Debug, so a Debug consumer links the Debug library.",
+      "description": "Shared settings. VCPKG_ROOT must point at a bootstrapped vcpkg checkout. Every visible preset is named after the vcpkg triplet it selects. On Windows that triplet is one this repository carries (cmake/triplets/*-clang.cmake): it is the stock triplet with every dependency built by clang-cl instead of cl.exe, because Node.js builds with clang-cl on Windows and the port, its dependencies and the consumer are meant to use one compiler. That is the only Windows compiler configuration this repository tests; a mixed or MSVC-only build is for advanced consumers to explore and is neither blocked nor supported. Everywhere else the triplet ships with vcpkg itself. A preset with no suffix is this repository's recommended choice for its platform; a suffix names one deliberate deviation from it (see test/README.md). An unset VCPKG_BUILD_TYPE builds both Release and Debug, so a Debug consumer links the Debug library.",
       "binaryDir": "${sourceDir}/build/${presetName}",
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets",
         "NODE_TEST_JOBS": "$env{VCPKG_MAX_CONCURRENCY}"
       }
     },
@@ -81,7 +82,7 @@
       "displayName": "Windows x64, static library, /MT (x64-windows-static)",
       "description": "The static CRT. Node.js recommends /MD, so x64-windows-static-md is the closer match to upstream; both are built and tested by CI, and this one stays the recommended preset because it is what this repository's Windows legs have always built.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     },
@@ -91,7 +92,7 @@
       "displayName": "Windows x64, static library, /MT, consumer built with cl.exe (advanced)",
       "description": "The mixed case, spelled out because it is what happens when no toolset is named rather than something anyone opts into: the port still builds Node.js with clang-cl, and this executable is built with cl.exe. A legal MSVC-ABI mix, and the one this repository's CI used before ADR 0007 - but not the recommended choice, and not covered by any promise: a mixed toolchain is an advanced user's own experiment.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     },
@@ -101,7 +102,7 @@
       "displayName": "Windows x64, static library, /MD (x64-windows-static-md)",
       "description": "The dynamic CRT, which is what Node.js recommends for its own builds. A stock vcpkg triplet, like every triplet named in this file.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
@@ -111,7 +112,7 @@
       "displayName": "Windows x64, static library, /MD, consumer built with cl.exe (advanced)",
       "description": "The mixed case for the dynamic CRT: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
@@ -121,7 +122,7 @@
       "displayName": "Windows x64, dynamic library, /MD (x64-windows)",
       "description": "A shared libnode. The runtime then has to find the DLL: vcpkg installs it into bin/, and CMake copies it next to the executable for the build tree (the test project does that for its own targets).",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
@@ -131,7 +132,7 @@
       "displayName": "Windows x64, dynamic library, /MD, consumer built with cl.exe (advanced)",
       "description": "The mixed case for a shared libnode: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "x64-windows",
+        "VCPKG_TARGET_TRIPLET": "x64-windows-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
@@ -142,7 +143,7 @@
       "displayName": "Windows arm64, static library, /MT (arm64-windows-static)",
       "description": "The arm64 counterpart of x64-windows-static. The machine type follows the machine, so this preset is for an arm64 machine rather than a cross build from x64. Node.js builds Windows arm64 with a native arm64 clang-cl, and the port refuses an x64 clang-cl on an arm64 host because that combination produces the wrong machine type.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows-static",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     },
@@ -152,7 +153,7 @@
       "displayName": "Windows arm64, static library, /MT, consumer built with cl.exe (advanced)",
       "description": "The mixed case on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows-static",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
       }
     },
@@ -162,7 +163,7 @@
       "displayName": "Windows arm64, static library, /MD (arm64-windows-static-md)",
       "description": "The dynamic CRT on arm64, which is what Node.js recommends for its own builds.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
@@ -172,7 +173,7 @@
       "displayName": "Windows arm64, static library, /MD, consumer built with cl.exe (advanced)",
       "description": "The mixed case for the dynamic CRT on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
@@ -182,7 +183,7 @@
       "displayName": "Windows arm64, dynamic library, /MD (arm64-windows)",
       "description": "A shared libnode on arm64.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
@@ -192,7 +193,7 @@
       "displayName": "Windows arm64, dynamic library, /MD, consumer built with cl.exe (advanced)",
       "description": "The mixed case for a shared libnode on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
-        "VCPKG_TARGET_TRIPLET": "arm64-windows",
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-clang",
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },

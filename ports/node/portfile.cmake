@@ -114,6 +114,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0018-macos-deployment-target-from-the-build.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0019-libffi-win-arm64-asm-reaches-ninja.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0020-crates-debug-rust-target.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0021-test-py-print-exit-code.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
