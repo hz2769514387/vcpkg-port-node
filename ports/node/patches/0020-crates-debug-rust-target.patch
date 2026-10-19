@@ -1,0 +1,26 @@
+diff --git a/deps/crates/crates.gyp b/deps/crates/crates.gyp
+--- a/deps/crates/crates.gyp
++++ b/deps/crates/crates.gyp
+@@ -33,6 +33,22 @@
+         'cargo_build_flags': [],
+       },
+       'conditions': [
++        ['OS!="win" and cargo_rust_target!=""', {
++          'variables': {
++            # The Debug branch never passed the target, while the Release branch
++            # just above does when cargo_rust_target is set. cargo then builds for
++            # the host and writes gen/debug/libnode_crates.a, but
++            # node_crates_libpath - and every link line built from it - names
++            # gen/<cargo_rust_target>/debug/libnode_crates.a, so mksnapshot dies
++            # with "no such file or directory: gen/x86_64-apple-darwin/debug/
++            # libnode_crates.a". macOS x64 is the one non-Windows place
++            # configure.py sets cargo_rust_target (for Rosetta), and Debug is a
++            # configuration upstream does not build in CI, which is why this went
++            # unnoticed. Windows is left alone: its Debug action goes through
++            # cargo_build.py, which already takes the architecture as an argument.
++            'cargo_build_flags': ['--target', '<(cargo_rust_target)'],
++          }
++        }],
+         ['OS=="win"', {
+           'variables': {
+             'node_crates_libpath': '<(SHARED_INTERMEDIATE_DIR)/<(target_arch)/debug/node_crates.lib',

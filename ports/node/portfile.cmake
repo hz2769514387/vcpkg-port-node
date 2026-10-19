@@ -113,6 +113,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0017-js2c-fallback-simdutf-convert.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0018-macos-deployment-target-from-the-build.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0019-libffi-win-arm64-asm-reaches-ninja.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0020-crates-debug-rust-target.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
@@ -584,6 +585,10 @@ endif()
 #    _ITERATOR_DEBUG_LEVEL does not match.
 # ---------------------------------------------------------------------------
 function(_node_shared_args _out _libdir _is_debug)
+    # Filled while the options are built and reported once at the end, so one run
+    # names every wrong library name instead of the first.
+    set(_missing_report "")
+    set(_present_txt "")
     if(VCPKG_TARGET_IS_WINDOWS)
         # This repository's zlib overlay installs the Chromium fork as `zs.lib`
         # when it is built statically and as `zlib.lib` when it is built as a
@@ -664,11 +669,14 @@ function(_node_shared_args _out _libdir _is_debug)
     # hdr-histogram's own CMake exports hdr_histogram_static when it is built as
     # a static library and hdr_histogram when it is not - the _static suffix is
     # a static-linkage convention, not part of the name.
-    if(_node_shared_build)
-        set(_hdrhist_lib "hdr_histogram")
-    else()
-        set(_hdrhist_lib "hdr_histogram_static")
-    endif()
+    #
+    # The suffix is always there here, because this repository's hdr-histogram
+    # overlay forces a static library on every triplet (the upstream project
+    # does not support a DLL). Keying the name off the node build's own linkage
+    # was wrong in exactly the case a dynamic triplet builds a shared libnode:
+    # the precheck wanted hdr_histogram.lib and the install held
+    # hdr_histogram_static.lib.
+    set(_hdrhist_lib "hdr_histogram_static")
     set(_args "")
     foreach(_spec
         "openssl|${_openssl_lib}"
@@ -752,6 +760,11 @@ function(_node_shared_args _out _libdir _is_debug)
             endif()
             file(GLOB _hit ${_candidates})
             if(NOT _hit)
+                # Collected rather than reported here: this check has cost one CI
+                # round per wrong name (zlib, then libuv, then hdr-histogram),
+                # because each round reported only the first option it tripped over
+                # and the next round then failed on the next one. One pass over every
+                # option, one report.
                 list(APPEND _missing "${_n}")
             endif()
             unset(_hit)
@@ -759,24 +772,24 @@ function(_node_shared_args _out _libdir _is_debug)
         endforeach()
         unset(_n)
         if(_missing)
-            file(GLOB _present "${_libdir}/*")
-            list(TRANSFORM _present REPLACE "^.*/" "")
-            list(LENGTH _present _present_count)
-            if(_present_count GREATER 60)
-                list(SUBLIST _present 0 60 _present)
-                list(APPEND _present "...")
+            foreach(_m IN LISTS _missing)
+                string(APPEND _missing_report "\n  --shared-${_opt}-libname ${_m}")
+            endforeach()
+            unset(_m)
+            if(NOT _present_txt)
+                file(GLOB _present "${_libdir}/*")
+                list(TRANSFORM _present REPLACE "^.*/" "")
+                list(LENGTH _present _present_count)
+                if(_present_count GREATER 60)
+                    list(SUBLIST _present 0 60 _present)
+                    list(APPEND _present "...")
+                endif()
+                string(REPLACE ";" "\n  " _present_txt "${_present}")
+                unset(_present)
+                unset(_present_count)
             endif()
-            string(REPLACE ";" "\n  " _missing_txt "${_missing}")
-            string(REPLACE ";" "\n  " _present_txt "${_present}")
-            message(FATAL_ERROR
-                "node port: --shared-${_opt}-libname names libraries that are not in "
-                "${_libdir}:\n  ${_missing_txt}\n"
-                "A wrong name here used to reach the linker as LNK1181 an hour later. "
-                "What that directory actually holds:\n  ${_present_txt}")
         endif()
         unset(_missing)
-        unset(_present)
-        unset(_present_count)
         list(APPEND _args
             "--shared-${_opt}"
             "--shared-${_opt}-includes=${CURRENT_INSTALLED_DIR}/include"
@@ -787,6 +800,15 @@ function(_node_shared_args _out _libdir _is_debug)
     unset(_pair)
     unset(_opt)
     unset(_libnames)
+    if(_missing_report)
+        message(FATAL_ERROR
+            "node port: these --shared-*-libname entries name libraries that are not in "
+            "${_libdir}:${_missing_report}\n\n"
+            "A wrong name here used to reach the linker as LNK1181 an hour later. "
+            "What that directory actually holds:\n  ${_present_txt}")
+    endif()
+    unset(_missing_report)
+    unset(_present_txt)
     set(${_out} "${_args}" PARENT_SCOPE)
 endfunction()
 
@@ -1017,6 +1039,31 @@ else()
     set(_node_lib_suffix ".a")
 endif()
 
+# A shared libnode's file name carries the NODE_MODULE_VERSION on Unix. node.gyp
+# sets `product_extension` to <(shlib_suffix) for a shared library off Windows,
+# and configure.py fills that in with the module version: `libnode.147.dylib` on
+# macOS, `libnode.so.147` on Linux. "libnode.dylib" and "libnode.so" are names
+# the build never produces, which is what the first shared leg to reach the
+# install step found out. The name is read out of the built tree once, from the
+# Release configuration, and reused by the install step, the tools/ copy and the
+# exported config, so nothing here has to track the module version itself.
+if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
+    if(VCPKG_TARGET_IS_OSX)
+        file(GLOB _node_shlib_candidates "${SOURCE_PATH}/out/Release/libnode*.dylib")
+    else()
+        file(GLOB _node_shlib_candidates "${SOURCE_PATH}/out/Release/lib/libnode.so*")
+    endif()
+    if(NOT _node_shlib_candidates)
+        message(FATAL_ERROR
+            "node port: the Release build produced no shared libnode under "
+            "${SOURCE_PATH}/out/Release")
+    endif()
+    list(GET _node_shlib_candidates 0 _node_shlib_path)
+    get_filename_component(_node_shlib_name "${_node_shlib_path}" NAME)
+    unset(_node_shlib_candidates)
+    unset(_node_shlib_path)
+endif()
+
 foreach(_node_cfg IN LISTS _node_configs)
     if(_node_cfg STREQUAL "Debug")
         set(_node_out_dir "${SOURCE_PATH}/out/Debug")
@@ -1039,9 +1086,9 @@ foreach(_node_cfg IN LISTS _node_configs)
             file(INSTALL "${_node_shlib}" DESTINATION "${_node_pkg_bin_dir}")
             file(INSTALL "${_node_implib}" DESTINATION "${_node_pkg_lib_dir}")
         elseif(VCPKG_TARGET_IS_OSX)
-            file(INSTALL "${_node_out_dir}/libnode.dylib" DESTINATION "${_node_pkg_lib_dir}")
+            file(INSTALL "${_node_out_dir}/${_node_shlib_name}" DESTINATION "${_node_pkg_lib_dir}")
         else()
-            file(INSTALL "${_node_out_dir}/lib/libnode.so" DESTINATION "${_node_pkg_lib_dir}")
+            file(INSTALL "${_node_out_dir}/lib/${_node_shlib_name}" DESTINATION "${_node_pkg_lib_dir}")
         endif()
         # Nothing else is a deliverable: the component archives are inputs the
         # shared library already absorbed, and linking them again from a
@@ -1118,9 +1165,9 @@ if("tools" IN_LIST FEATURES)
         if(VCPKG_TARGET_IS_WINDOWS)
             set(_node_tool_shlib "${SOURCE_PATH}/out/Release/libnode.dll")
         elseif(VCPKG_TARGET_IS_OSX)
-            set(_node_tool_shlib "${SOURCE_PATH}/out/Release/libnode.dylib")
+            set(_node_tool_shlib "${SOURCE_PATH}/out/Release/${_node_shlib_name}")
         else()
-            set(_node_tool_shlib "${SOURCE_PATH}/out/Release/lib/libnode.so")
+            set(_node_tool_shlib "${SOURCE_PATH}/out/Release/lib/${_node_shlib_name}")
         endif()
         file(INSTALL "${_node_tool_shlib}" DESTINATION "${_node_tools}")
         file(INSTALL "${_node_tool_shlib}" DESTINATION "${CURRENT_PACKAGES_DIR}/tools/lib")
@@ -1371,10 +1418,10 @@ if(_node_shared_build)
         set(_node_shlib_file "libnode.dll")
         # gyp names the import library "<dll>.lib"; see the install step above.
         set(_node_implib_file "libnode.dll.lib")
-    elseif(VCPKG_TARGET_IS_OSX)
-        set(_node_shlib_file "libnode.dylib")
     else()
-        set(_node_shlib_file "libnode.so")
+        # libnode.147.dylib / libnode.so.147 - globbed from the build tree above,
+        # because the module version is part of the name.
+        set(_node_shlib_file "${_node_shlib_name}")
     endif()
 endif()
 

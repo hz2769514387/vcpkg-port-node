@@ -40,6 +40,12 @@ const externalized = [
 const failed = [];
 
 function check(name, body) {
+  // Printed before the body, not only after it: one Debug consumer of the -md
+  // triplet hung on this file for the whole ctest timeout with every "ok" before
+  // it already on screen, which names the last check that *passed* rather than
+  // the one that hung. The "run" line makes the hanging check the last line of
+  // output.
+  console.log(`run  ${name}`);
   try {
     body();
     console.log(`ok   ${name}`);
@@ -61,10 +67,16 @@ for (const name of externalized) {
   });
 }
 
+// Split in two on purpose: the first half only reads process.config, the second
+// one initialises ICU and loads locale and timezone data. When a run hangs, the
+// split says whether it is the externalisation or ICU's own data that hangs.
 check('ICU came from vcpkg (system-icu, full data)', () => {
   assert.equal(config.variables.icu_system, true);
   assert.equal(config.variables.icu_small, false);
   assert.ok(Number(config.variables.icu_ver_major) >= 70, 'ICU major version looks wrong');
+});
+
+check('ICU has the data full ICU ships (number and date formatting)', () => {
   // Only full ICU has locale data for locales outside the small set.
   assert.equal(new Intl.NumberFormat('de-DE').format(1234.5), '1.234,5');
   assert.match(new Intl.DateTimeFormat('en-US', { timeZone: 'UTC' }).format(new Date(0)), /1970/);
