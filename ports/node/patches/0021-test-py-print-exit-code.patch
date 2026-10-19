@@ -1,0 +1,34 @@
+diff --git a/tools/test.py b/tools/test.py
+--- a/tools/test.py
++++ b/tools/test.py
+@@ -127,6 +127,15 @@
+       output += ["--- stdout ---"]
+       output += [failure.output.stdout.strip()]
+     output += ["Command: %s" % failure.test.GetFailureCommand(failure.command)]
++    # Print the exit code unconditionally. Upstream reports it only for crashes
++    # and timeouts, so a case that dies quietly - empty stdout and stderr, plain
++    # non-zero exit - leaves nothing to diagnose with. That is exactly the shape
++    # of the 250 arm64-Windows crashes in issue #22: on Windows the code is an
++    # NTSTATUS (0xC0000005 access violation, 0xC000001D illegal instruction,
++    # 0xC00000FD stack overflow) and each one points somewhere different, while
++    # the driver threw all of them away. Hex because NTSTATUS is only readable
++    # that way.
++    output += ["--- exit code: %s ---" % FormatExitCode(failure.output.exit_code)]
+     if failure.HasCrashed():
+       output += ["--- %s ---" % PrintCrashed(failure.output.exit_code)]
+     if failure.HasTimedOut():
+@@ -1598,6 +1607,14 @@
+     return "CRASHED (Signal: %d)" % -code
+ 
+ 
++def FormatExitCode(code):
++  # See GetFailureOutput. `code` is None when the process never started at all,
++  # hence the isinstance() guard; on POSIX a negative value is -signal.
++  if isinstance(code, int):
++    return "%d (0x%08X)" % (code, code & 0xFFFFFFFF)
++  return "%s" % code
++
++
+ # these suites represent special cases that should not be run as part of the
+ # default JavaScript test-run, e.g., internet/ requires a network connection,
+ # addons/ requires compilation.
