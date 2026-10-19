@@ -28,6 +28,7 @@ receives.
 | `tcb-span` | 2022-06-15 | same upstream commit plus a two-line no-exceptions `#include` fix | additive: the fix only makes the header compile with exceptions disabled |
 | `lief` | 0.17.6 | 1.0.0 | major version jump (0.x to 1.0); the C++ and C APIs both moved. All of LIEF's own dependencies are separate vcpkg packages, so those still resolve to the versions listed here |
 | `perfetto` | 53.0 | 58.2 | build-only for now: the node port does not wire `--shared-perfetto` (issue #12), so nothing links it unless you ask for it |
+| `openssl` | 3.6.3 | 3.6.3, and on **Windows arm64 without assembly** (`VC-WIN64-ARM` + `no-asm`, Node.js's own configuration for that platform) | same version everywhere; the Windows arm64 binary is a different build of the same source. Issue #22: the baseline's assembly build (`VC-WIN64-CLANGASM-ARM`) crashes in 248 silent TLS cases on the arm64 leg, where the official Node.js binary - a no-asm build - crashes in none (run 39201696549). A consumer on Windows arm64 gets the no-asm library, which is what Node.js itself ships |
 | `node` | - (not in the registry) | Node.js v26.12.0 built as a static library | not a replacement: the curated registry cannot host this port (V8 is a Node.js-maintained fork, so the tree is always built here). Listed because the check requires a row for every port |
 
 

@@ -22,53 +22,66 @@
 #
 # Every entry is re-examined whenever the pinned Node.js version changes.
 
-# -- Pending an official-binary cross-check ------------------------------------
+# -- Cross-checked against the official Node.js binary -------------------------
 #
 # The five entries below are the residual failures of the first run that put
-# Node.js's own suite on every push (2026-10-18: 5003 passed, 5 failed). Four of
-# them are Windows ACL cases and one is a shell-name case; each is written down
-# with what was measured rather than with a theory.
+# Node.js's own suite on every push (2026-10-18: 5003 passed, 5 failed). They have
+# now been cross-checked the way this file's header asks for: upstream's own
+# binary, upstream's own suite, the same GitHub-hosted runners.
 #
-# They are not proven to be the runner's rather than this repository's. The
-# discipline this file asks for is a cross-check against the official Node.js
-# binary on the same runner - official passes and ours fails is the only thing
-# that makes one of these ours - and that cross-check now lives in CI:
-# .github/workflows/official-binary-baseline.yml runs upstream's own binary
-# through upstream's own suite on both Windows runners and reports what it fails
-# and crashes (run 39199872497, 2026-10-19, is the first). Until its result is
-# recorded here, treat these five as the known-open set; the work item itself is
-# issue #21. Partial evidence already: on an ordinary (non-elevated) Windows
-# machine the official binary passes all five, which is consistent with the
-# runner's elevation and its set of installed shells being the difference.
+# Run 39201696549 (2026-10-19, official-binary-baseline.yml, the parallel suite on
+# windows-2022 and windows-11-arm, zero crashes on both):
+#
+#   * the official binary fails three of them on both runners -
+#     test-fs-rm, test-fs-mkdir-recursive-eaccess and
+#     test-child-process-exec-any-shells-windows - plus test-snapshot-typescript,
+#     and passes everything else;
+#   * it passes test-snapshot-warning, which is the confirmation that this one is
+#     ours by design: the test hardcodes the executable's name in the warning
+#     hint, and the official binary is named node.exe while this repository's
+#     shell is an embedding executable;
+#   * it also passes test-fs-rmSync-special-char-additional-error, which failed
+#     here once (2026-10-18) and has not been reproduced since. That one is not
+#     explained yet - the candidate is the embedder's own argv handling of a
+#     non-ASCII path, not the runner - and it stays in this list only because the
+#     entry has not been re-tested with the port's own binary since.
+#
+# So three are the runner's, one is ours by design, and one is open. Everything is
+# re-examined when the pinned Node.js version changes, and the cross-check is
+# re-runnable from the Actions tab.
 
 # The case asserts that the warning hint contains the literal text
 # "Use `node --trace-warnings". Node.js builds that hint from the executable's
 # own name, and the shell here is node_embed, so the hint says node_embed and the
-# assertion's match comes back null. This one is ours by design rather than a
-# defect: the alternative is naming the embedding executable `node`, which is
-# what upstream's suite assumes throughout.
+# assertion's match comes back null. Confirmed by run 39201696549: the official
+# binary passes it, and the cause is the name rather than the environment. This
+# one is ours by design rather than a defect: the alternative is naming the
+# embedding executable `node`, which is what upstream's suite assumes throughout.
 test-snapshot-warning | all | asserts the hint literally names node; this shell is node_embed
 
 # All four below drive icacls to deny themselves access and then assert EPERM,
-# or hand icacls a path it has to survive. They pass on an ordinary Windows
-# machine with this port's executable and fail on a GitHub-hosted Windows
-# runner, which runs the job as an account in the Administrators group - a deny
-# ACE is not the same obstacle for an elevated process.
+# or hand icacls a path it has to survive. The official binary fails them on both
+# GitHub-hosted Windows runners (run 39201696549) and they pass on an ordinary
+# machine, which is the runner running the job as an account in the Administrators
+# group - a deny ACE is not the same obstacle for an elevated process.
 test-fs-rm | windows | icacls /deny does not stop an elevated process, so the expected EPERM never comes
-test-fs-mkdir-recursive-eaccess | windows | same icacls mechanism; measured passing locally as an ordinary user
-test-fs-rmSync-special-char-additional-error | windows | icacls is handed a non-ASCII path and reports it as not found
+test-fs-mkdir-recursive-eaccess | windows | same icacls mechanism; the official binary fails it on the runner and passes it locally
+# Open, not explained: failed here on 2026-10-18 and passes with the official
+# binary on the same runners (run 39201696549). See the section header.
+test-fs-rmSync-special-char-additional-error | windows | icacls is handed a non-ASCII path and reports it as not found; not reproduced by the official binary
 
 # Exercises whatever shells the machine has - cmd, PowerShell, and any bash on
-# PATH - by symlinking each into a directory whose name contains spaces. On a
-# GitHub-hosted runner one of them returns exit status 1 for "echo foo bar".
-# Already in the symlink skip list, because on a machine without that privilege
-# it never gets as far as the shells.
-test-child-process-exec-any-shells-windows | windows | depends on the shells installed; "echo foo bar" exits 1 on the runner
+# PATH - by symlinking each into a directory whose name contains spaces. The
+# official binary fails it with exit status 1 for "echo foo bar" on the runner
+# (run 39201696549). Already in the symlink skip list, because on a machine
+# without that privilege it never gets as far as the shells.
+test-child-process-exec-any-shells-windows | windows | depends on the shells installed; "echo foo bar" exits 1 on the runner, for the official binary too
 
 # -- Windows ------------------------------------------------------------------
 # The TypeScript compiler emits CRLF on Windows while the fixture expects LF. Upstream test
-# bug, reproduced here with the port-built executable; the mechanism is the "line endings in
-# generated output" category in docs/node-suite.md, section 4.
+# bug, and confirmed environment-shaped by run 39201696549: the official binary fails it on
+# both Windows runners too. The mechanism is the "line endings in generated output"
+# category in docs/node-suite.md, section 4.
 test-snapshot-typescript | windows | tsc emits CRLF on Windows, the fixture compares against LF
 
 # The test asserts empty stderr and the environment carries both NO_COLOR and FORCE_COLOR,
