@@ -1321,6 +1321,27 @@ string(APPEND _cfg
     " INTERFACE_INCLUDE_DIRECTORIES"
     " \"\${_node_prefix}/include;\${_node_prefix}/include/node;\${_node_prefix}/include/node-v8\")\n"
     "set_property(TARGET unofficial::node::node PROPERTY INTERFACE_COMPILE_FEATURES cxx_std_20)\n")
+
+# V8 compares four of its own build-time switches against the embedder's at
+# InitializePlatform startup (deps/v8/src/api/api.cc, "Embedder-vs-V8 build
+# configuration mismatch") and refuses to run if they disagree. Three of them -
+# pointer compression, the sandbox, the target OS - are the same for both
+# configurations of this port. The fourth is not: configure.py sets
+# v8_enable_v8_checks to 1 for Debug and 0 for Release, so a consumer whose code
+# is compiled Debug has to define V8_ENABLE_CHECKS to match the Debug library,
+# and must not define it against the Release one. The generator expression says
+# exactly that, which is what keeps a multi-config consumer building both
+# configurations out of one project correct.
+#
+# Measured as the failure of embedding.thread_loop and embedding.host_loop in
+# the first Debug leg: "On embedder side V8_ENABLE_CHECKS is DISABLED while on
+# V8 side it's ENABLED", with 28 of 30 cases - the official suite included -
+# passing around it.
+if("Debug" IN_LIST _node_configs)
+    string(APPEND _cfg
+        "set_property(TARGET unofficial::node::node APPEND PROPERTY\n"
+        "  INTERFACE_COMPILE_DEFINITIONS \"\$<\$<CONFIG:Debug>:V8_ENABLE_CHECKS>\")\n")
+endif()
 if(VCPKG_TARGET_IS_WINDOWS)
     string(APPEND _cfg
         "if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES \"Clang\")\n"
