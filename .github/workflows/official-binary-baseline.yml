@@ -1,0 +1,54 @@
+name: Official binary baseline
+
+# Issue #21 and issue #22 are the same measurement: what does upstream's own binary do on
+# the runner this repository's legs fail on?
+#
+# #21: the skip list carries five Windows entries from the first suite run - four icacls
+# cases that need an *ineffective* deny ACE and one that asserts the warning hint names
+# `node` literally while the shell here is `node_embed` - and none of them has been shown
+# to be the runner's rather than this repository's. The runner is the only machine where
+# they fail, so the runner is where the comparison has to happen.
+#
+# #22: a quarter of the TLS surface crashes silently on arm64 Windows (5003 pass, 248
+# crash on the first suite run) while x64 Windows and arm64 macOS on the same commit are
+# clean. Upstream does not run the suite on Windows arm64, so there is no baseline at all -
+# and a native crash stays this repository's problem until the official binary is shown to
+# do the same thing.
+#
+# One leg per Windows cell, on demand: a baseline is a measurement, not a gate, and the
+# full suite costs the better part of an hour per leg. Trigger it from the Actions tab
+# when a skip entry or a crash population needs its verdict.
+
+on:
+  workflow_dispatch:
+    inputs:
+      suites:
+        description: Space-separated suite directories under test/, e.g. "parallel".
+        required: false
+        type: string
+        default: parallel
+
+permissions:
+  contents: read
+
+jobs:
+  # One job per cell rather than a matrix - a job that calls a reusable workflow accepts
+  # neither a matrix nor continue-on-error (it is accepted and then produces a run with
+  # zero jobs), which is why every other workflow in this repository is written this way.
+  windows-x64:
+    uses: ./.github/workflows/official-baseline-leg.yml
+    secrets: inherit
+    with:
+      runner: windows-2022
+      arch: x64
+      suites: ${{ inputs.suites }}
+      timeout-minutes: 150
+
+  windows-arm64:
+    uses: ./.github/workflows/official-baseline-leg.yml
+    secrets: inherit
+    with:
+      runner: windows-11-arm
+      arch: arm64
+      suites: ${{ inputs.suites }}
+      timeout-minutes: 150

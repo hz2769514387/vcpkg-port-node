@@ -1,0 +1,150 @@
+name: Official binary baseline (one leg)
+
+# The reusable body of the baseline: upstream's own binary, upstream's own test suite for
+# the pinned version, one GitHub-hosted Windows runner. What fails there is the answer to
+# "is this the runner, or is it us" - the question the skip list (issue #21) and the arm64
+# TLS crashes (issue #22) are both waiting on.
+#
+# Nothing here builds the port, and nothing here is a gate: the job's product is the step
+# summary, which lists exactly what the official binary fails and crashes. The port's own
+# legs stay the gate.
+#
+# The suite is the test/ and tools/ trees from the source tarball, which is byte for byte
+# what the port installs into share/node/test-suite, so the two runs are comparable. The
+# driver is run the way the port's own suite registration runs it - --flaky-tests=dontcare
+# included, so an upstream flake does not read as a difference - and from the suite root,
+# because the driver hands the shell a relative --test-reporter path.
+
+on:
+  workflow_call:
+    inputs:
+      runner:
+        description: Runner image to use.
+        required: true
+        type: string
+      arch:
+        description: "Architecture part of the distribution file name: x64 / arm64."
+        required: true
+        type: string
+      suites:
+        description: Space-separated suite directories under test/, e.g. "parallel".
+        required: false
+        type: string
+        default: parallel
+      timeout-minutes:
+        description: The full parallel suite is the better part of an hour.
+        required: false
+        type: number
+        default: 150
+
+permissions:
+  contents: read
+
+jobs:
+  baseline:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.13'
+
+      - name: Read the pinned Node.js version
+        id: pins
+        shell: bash
+        run: |
+          set -euo pipefail
+          # versions.json is the single source of truth for what this repository builds
+          # against; a baseline of any other version would answer a different question.
+          version="$(python -c 'import json;print(json.load(open("versions.json"))["node"]["version"])')"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "official baseline: node v$version, ${{ inputs.arch }}"
+
+      - name: Download the official binary and the suite
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="${{ steps.pins.outputs.version }}"
+          root="$RUNNER_TEMP/baseline"
+          mkdir -p "$root"
+          curl -fsSL -o "$root/node.zip" \
+            "https://nodejs.org/dist/v$version/node-v$version-win-${{ inputs.arch }}.zip"
+          curl -fsSL -o "$root/node.tar.xz" \
+            "https://nodejs.org/dist/v$version/node-v$version.tar.xz"
+          # Python extracts the .tar.xz because Git Bash's tar has no xz on every image,
+          # and only the two trees the driver reads: test/ is the suite, tools/ is the
+          # driver itself. The driver's other references to the source root are output
+          # formatting (tools/test.py, GetAnnotationInfo), not file reads.
+          python - "$root" "$version" <<'PY'
+          import os, sys, tarfile, zipfile
+          root, version = sys.argv[1], sys.argv[2]
+          with zipfile.ZipFile(os.path.join(root, "node.zip")) as z:
+              z.extractall(os.path.join(root, "binary"))
+          prefix = "node-v%s/" % version
+          dest = os.path.join(root, "suite")
+          with tarfile.open(os.path.join(root, "node.tar.xz")) as t:
+              members = [m for m in t.getmembers()
+                         if m.name.startswith(prefix)
+                         and (m.name[len(prefix):].startswith(("test/", "tools/"))
+                              or m.name[len(prefix):] in ("test", "tools"))]
+              t.extractall(dest, members=members, filter="data")
+          print("extracted %d suite entries" % len(members))
+          PY
+          ls "$root/binary" "$root/suite"
+
+      - name: Run the suite with the official binary
+        shell: bash
+        run: |
+          set -uo pipefail
+          root="$RUNNER_TEMP/baseline"
+          version="${{ steps.pins.outputs.version }}"
+          shell_bin="$root/binary/node-v$version-win-${{ inputs.arch }}/node.exe"
+          # The working directory has to be the suite root, not this checkout: the driver
+          # hands the shell `--test-reporter=./test/common/test-error-reporter.js`, a
+          # relative path, so anything else resolves it against the wrong directory and
+          # the reporter cases fail for a reason that has nothing to do with the binary.
+          cd "$root/suite/node-v$version"
+          # The exit code is deliberately not this step's: a failing suite is the
+          # measurement, not an infrastructure error, and the summary step below is where
+          # the result is read.
+          python tools/test.py --shell="$shell_bin" --test-root=test \
+            --flaky-tests=dontcare ${{ inputs.suites }} 2>&1 \
+            | tee "$root/run.log"
+          echo "driver exit code: ${PIPESTATUS[0]}"
+
+      - name: Summarize the run
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          log="$RUNNER_TEMP/baseline/run.log"
+          {
+            echo "## Official node v${{ steps.pins.outputs.version }} on ${{ inputs.runner }} (${{ inputs.arch }})"
+            echo ""
+            echo '```'
+            # The driver ends with one of "All tests passed." or "Failed tests:" plus a
+            # command line per failure (tools/test.py, Main), and it prints one
+            # "--- CRASHED ---" per crashed case. The progress line's trailing
+            # "[+N|-N]" carries the pass and fail counts.
+            tr '\r' '\n' < "$log" | grep -E "^\[[0-9:]+\|[% 0-9]+\|[+ 0-9]+\|- *[0-9]+\]" | tail -1 || true
+            if grep -qE "^All tests passed\.$|^Failed tests:$" "$log"; then
+              grep -E "^All tests passed\.$|^Failed tests:$" "$log"
+            else
+              # Neither line means the driver did not get as far as running tests - a
+              # bad download, a missing interpreter - and the log's tail says which.
+              echo "(the driver printed neither; it did not get as far as running tests)"
+              tail -n 20 "$log"
+            fi
+            echo "crashed: $(grep -c -- "--- CRASHED ---" "$log" || true)"
+            echo '```'
+            echo ""
+            echo "### Cases the official binary failed or crashed"
+            echo '```'
+            # The driver prints one "=== <label> ===" header followed by a "Path:" line
+            # per failing case - the same shape as its own summary lines, which are
+            # never followed by a Path, which is what separates the two here.
+            awk '/^=== .* ===$/ { label = $0; getline; if ($0 ~ /^Path: /) print label }' "$log"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
