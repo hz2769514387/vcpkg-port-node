@@ -73,24 +73,20 @@ jobs:
             "https://nodejs.org/dist/v$version/node-v$version-win-${{ inputs.arch }}.zip"
           curl -fsSL -o "$root/node.tar.xz" \
             "https://nodejs.org/dist/v$version/node-v$version.tar.xz"
-          # Python extracts the .tar.xz because Git Bash's tar has no xz on every image,
-          # and only the two trees the driver reads: test/ is the suite, tools/ is the
-          # driver itself. The driver's other references to the source root are output
-          # formatting (tools/test.py, GetAnnotationInfo), not file reads.
-          python - "$root" "$version" <<'PY'
+          # Python extracts the .tar.xz because Git Bash's tar has no xz on every image.
+          # The whole tree, not just test/ and tools/: the suite reads files from all over
+          # the source root - benchmark/compare.js, doc/api/cli.md, deps/npm/bin,
+          # deps/v8 headers - and a partial extraction turns those into failures that
+          # have nothing to do with the binary being measured (the first run failed 18
+          # cases this way, 13 of them pure artifacts).
+          python - "$root" <<'PY'
           import os, sys, tarfile, zipfile
-          root, version = sys.argv[1], sys.argv[2]
+          root = sys.argv[1]
           with zipfile.ZipFile(os.path.join(root, "node.zip")) as z:
               z.extractall(os.path.join(root, "binary"))
-          prefix = "node-v%s/" % version
-          dest = os.path.join(root, "suite")
           with tarfile.open(os.path.join(root, "node.tar.xz")) as t:
-              members = [m for m in t.getmembers()
-                         if m.name.startswith(prefix)
-                         and (m.name[len(prefix):].startswith(("test/", "tools/"))
-                              or m.name[len(prefix):] in ("test", "tools"))]
-              t.extractall(dest, members=members, filter="data")
-          print("extracted %d suite entries" % len(members))
+              t.extractall(os.path.join(root, "suite"), filter="data")
+          print("suite tree extracted")
           PY
           ls "$root/binary" "$root/suite"
 
@@ -108,7 +104,10 @@ jobs:
           cd "$root/suite/node-v$version"
           # The exit code is deliberately not this step's: a failing suite is the
           # measurement, not an infrastructure error, and the summary step below is where
-          # the result is read.
+          # the result is read. `set +e` is not redundant with the script's own settings -
+          # GitHub runs every bash step with -e already on the command line, so without
+          # this the first failing test aborts the step and the log stops mid-suite.
+          set +e
           python tools/test.py --shell="$shell_bin" --test-root=test \
             --flaky-tests=dontcare ${{ inputs.suites }} 2>&1 \
             | tee "$root/run.log"
