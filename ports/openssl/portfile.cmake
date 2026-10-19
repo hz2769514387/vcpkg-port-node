@@ -14,8 +14,11 @@
 # Everything below this point is derived from the openssl port of the pinned
 # vcpkg baseline (2026.07.29), so the conventions vcpkg expects - the install
 # layout, the debug suffixes, the pkg-config files, the exported CMake config -
-# stay exactly what consumers already get. Re-diff against the baseline when the
-# pin moves.
+# stay exactly what consumers already get. There is exactly one other edit:
+# unix/portfile.cmake sets the executable bit on the configure wrapper at build
+# time, because this repository's git cannot record one (core.fileMode is false)
+# and the wrapper is invoked as `./vcpkg/configure`, directly. Re-diff against
+# the baseline when the pin moves.
 if(EXISTS "${CURRENT_INSTALLED_DIR}/share/libressl/copyright"
     OR EXISTS "${CURRENT_INSTALLED_DIR}/share/boringssl/copyright")
     message(FATAL_ERROR "Can't build openssl if libressl/boringssl is installed. Please remove libressl/boringssl, and try install openssl again if you need it.")

@@ -124,6 +124,15 @@ endif()
 
 file(MAKE_DIRECTORY "${SOURCE_PATH}/vcpkg")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/configure" DESTINATION "${SOURCE_PATH}/vcpkg")
+# vcpkg_configure_make invokes the configure step as `./vcpkg/configure`, directly, so the
+# script has to carry the executable bit. This repository's git cannot record one
+# (core.fileMode is false and no tracked file has the bit), and a bit that exists only in
+# one contributor's index would also make the version-tree hash depend on how it was
+# staged - so the port sets it at build time instead, to the mode git would have recorded.
+file(CHMOD "${SOURCE_PATH}/vcpkg/configure" PERMISSIONS
+    OWNER_READ OWNER_WRITE OWNER_EXECUTE
+    GROUP_READ GROUP_EXECUTE
+    WORLD_READ WORLD_EXECUTE)
 vcpkg_configure_make(
     SOURCE_PATH "${SOURCE_PATH}"
     PROJECT_SUBPATH "vcpkg"
