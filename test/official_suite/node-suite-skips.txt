@@ -32,10 +32,14 @@
 # They are not proven to be the runner's rather than this repository's. The
 # discipline this file asks for is a cross-check against the official Node.js
 # binary on the same runner - official passes and ours fails is the only thing
-# that makes one of these ours - and that cross-check is not wired into CI yet.
-# Until it is, treat these five as the known-open set. The cross-check itself is
-# tracked as an issue (#21), because it is a work item with a closing condition
-# rather than a fact.
+# that makes one of these ours - and that cross-check now lives in CI:
+# .github/workflows/official-binary-baseline.yml runs upstream's own binary
+# through upstream's own suite on both Windows runners and reports what it fails
+# and crashes (run 39199872497, 2026-10-19, is the first). Until its result is
+# recorded here, treat these five as the known-open set; the work item itself is
+# issue #21. Partial evidence already: on an ordinary (non-elevated) Windows
+# machine the official binary passes all five, which is consistent with the
+# runner's elevation and its set of installed shells being the difference.
 
 # The case asserts that the warning hint contains the literal text
 # "Use `node --trace-warnings". Node.js builds that hint from the executable's
