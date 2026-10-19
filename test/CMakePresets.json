@@ -102,7 +102,7 @@
       "description": "The dynamic CRT, which is what Node.js recommends for its own builds. A stock vcpkg triplet, like every triplet named in this file.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
     {
@@ -112,7 +112,7 @@
       "description": "The mixed case for the dynamic CRT: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows-static-md",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
     {
@@ -122,7 +122,7 @@
       "description": "A shared libnode. The runtime then has to find the DLL: vcpkg installs it into bin/, and CMake copies it next to the executable for the build tree (the test project does that for its own targets).",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
     {
@@ -132,7 +132,7 @@
       "description": "The mixed case for a shared libnode: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "x64-windows",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
 
@@ -163,7 +163,7 @@
       "description": "The dynamic CRT on arm64, which is what Node.js recommends for its own builds.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
     {
@@ -173,7 +173,7 @@
       "description": "The mixed case for the dynamic CRT on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
     {
@@ -183,7 +183,7 @@
       "description": "A shared libnode on arm64.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-windows",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
     {
@@ -193,7 +193,7 @@
       "description": "The mixed case for a shared libnode on arm64: consumer cl.exe, port clang-cl. Legal, not recommended, not covered by a promise.",
       "cacheVariables": {
         "VCPKG_TARGET_TRIPLET": "arm64-windows",
-        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreadedDLL$<$<CONFIG:Debug>:Debug>"
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
 

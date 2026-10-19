@@ -347,3 +347,85 @@ forward slashes; the ninja generator hands it native ones. Patch
 by rebuilding the `torque` tool, regenerating one CSA file and compiling it: the emitted path
 becomes `../../deps/v8/src/builtins/aggregate-error.tq`, and that translation unit compiles
 without a single warning.
+
+## 7. Shared libnode: making the shared objects findable (measured)
+
+A dynamic triplet turns every dependency into a shared object, and three separate consumers
+of those objects then need help finding them. Each failure below was measured on a CI leg,
+and each one is silent about its cause: the messages name neither the tool nor the missing
+library.
+
+### 7.1 The port's own host tools
+
+`torque`, `mksnapshot`, `node_mksnapshot` and `bytecode_builtins_list_generator` **run**
+during the build - they generate the sources everything else compiles - and they are linked
+against the dependencies. gyp puts every executable in the output root (`out/<config>/`,
+`ComputeOutput`: "Some products go into the output root"), where nothing findable sits, so
+the first one to run dies with
+
+```
+out/Release/torque: error while loading shared libraries: libada.so.4: cannot open shared object file
+dyld: Library not loaded: @rpath/libz.1.3.2.1.dylib
+```
+
+an hour into the leg. Fix, both halves in `portfile.cmake`: a **relative** rpath on every
+link (`$ORIGIN` / `@loader_path`, plus `.../../lib` for the node executable's post-install
+layout), and one symlink per dependency in the output root, so `$ORIGIN` has something to
+point at. `LDFLAGS_host` is deliberately not used for this: gyp's ninja generator only
+honours a separate host toolset when cross-compiling (`gyp.common.CrossCompileRequested`),
+and the port passes `--no-cross-compiling` everywhere, so every link - host tools included -
+reads `LDFLAGS`.
+
+An absolute rpath is never an option, not even for the transient host tools: the GitHub
+runner path shape (`/home/runner/work/<repo>/<repo>/vcpkg/installed/<triplet>/lib`) is the
+same on every machine, so it would not be inert on a consumer's machine - it would find
+whatever some other build left at that path.
+
+The rpath spelling has to survive two layers: the ninja generator writes `LDFLAGS` verbatim
+into `build.ninja`, and the command is run through `sh`. `$` is ninja's escape character and
+`sh` would expand `$ORIGIN` to nothing, so the value must be spelled `\$$ORIGIN` (ninja:
+`$$` -> `$`; sh: `\$` -> `$`). `node.gyp` spells its own the same way
+(`'-Wl,-rpath,\$$ORIGIN/../lib'`). `@loader_path` has no `$` and needs no such care.
+
+### 7.2 The installed artifacts
+
+The exported config links libnode itself and nothing else (a consumer that linked the
+dependencies again would get two copies of every symbol), so libnode.so finds its
+dependencies through its own rpath: they are installed next to it in `<prefix>/lib`, and
+`$ORIGIN` / `@loader_path` names that directory without naming this machine. The installed
+`node` executable lives in `<prefix>/tools/node` and needs `$ORIGIN/../lib`.
+
+### 7.3 The consumer side (what the test project does, and why)
+
+Windows has no rpath. The loader searches the executable's own directory and then PATH -
+**not** the directory of the DLL whose import is being resolved. Measured, because the
+intuition says otherwise: an executable in one directory loading a DLL from another, with
+that DLL's dependency sitting right beside it, fails with `ERROR_MOD_NOT_FOUND` (126) until
+the dependency is either next to the executable or on PATH. So the test project copies the
+whole `bin/` directory next to every consumer executable (`node_test_runtime_libs`), and the
+same set next to `tools/node/node.exe`, which is not a CMake target and cannot be handed its
+DLLs at build time.
+
+Two traps in that mechanism, both measured:
+
+* A **bare** generator expression in a `POST_BUILD` command is written into a Visual Studio
+  project as `$<0:...>` / `$<1:...>` and reaches the command line as literal text ("The
+  system cannot find the path specified"). Quoting the expression is what makes it evaluate
+  per configuration; `COMMAND_EXPAND_LISTS` then turns the semicolons into separate
+  arguments. (The repository's Windows presets use Ninja, where the bare form also works -
+  the quoted form works on both.)
+* ctest splits the `ENVIRONMENT` property on semicolons, so a `PATH` value with more than
+  one directory is truncated at the first one and the inherited PATH is lost with it. That
+  is why the tools executable gets the DLLs copied next to it instead of a `PATH` entry.
+
+### 7.4 `MultiThreadedDebugDLL` is the value; `MultiThreadedDLLDebug` is not
+
+CMake's four `CMAKE_MSVC_RUNTIME_LIBRARY` values are `MultiThreaded`, `MultiThreadedDLL`,
+`MultiThreadedDebug` and `MultiThreadedDebugDLL` - Debug before DLL. The test presets for
+the dynamic-CRT triplets spelled it `MultiThreadedDLL$<$<CONFIG:Debug>:Debug>`, which is
+valid for Release and RelWithDebInfo and evaluates to the nonexistent
+`MultiThreadedDLLDebug` for Debug, where CMake rejects it ("MSVC_RUNTIME_LIBRARY value
+'MultiThreadedDLLDebug' not known for this CXX compiler") during the compiler-ABI
+try-compile - a message that names neither the preset nor the value's origin. The correct
+spelling, the one vcpkg's own `windows.cmake` uses, is
+`MultiThreaded$<$<CONFIG:Debug>:Debug>DLL`. Verified with clang-cl locally before the fix.

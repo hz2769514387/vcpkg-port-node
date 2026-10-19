@@ -353,14 +353,17 @@ set(ENV{CXX} "${_node_cxx}")
 # too, for the port's own host tools (LDFLAGS) and for consumers (the config).
 #
 # The ninja generator reads LDFLAGS / LDFLAGS_host from the environment when gyp
-# runs, which is inside configure.py, so setting them here is enough.
+# runs, which is inside configure.py, so setting them here is enough. The build
+# loop below re-states them per configuration, because the shared-linkage rpath
+# it adds differs between the release and the debug tree.
 #
 # VCPKG_TARGET_IS_OSX rather than APPLE: in port script mode a bare APPLE is
 # ambiguous about target versus host, and vcpkg says so on every configure.
 # ---------------------------------------------------------------------------
 if(VCPKG_TARGET_IS_OSX)
-    set(ENV{LDFLAGS} "-framework CoreFoundation -framework Security")
-    set(ENV{LDFLAGS_host} "-framework CoreFoundation -framework Security")
+    set(_node_ldflags_base "-framework CoreFoundation -framework Security")
+else()
+    set(_node_ldflags_base "")
 endif()
 
 # ---------------------------------------------------------------------------
@@ -598,7 +601,18 @@ function(_node_shared_args _out _libdir _is_debug)
             set(_zlib_lib    "zs")
         endif()
         set(_openssl_lib "libcrypto,libssl")
-        set(_libuv_lib   "libuv")
+        # vcpkg's libuv names its Windows output after the linkage: the static
+        # archive is target uv_a with OUTPUT_NAME "uv" and PREFIX "lib", which
+        # is libuv.lib, while the dynamic build's import library is target uv
+        # with OUTPUT_NAME "uv" and no prefix - plain uv.lib. Unix is uv in
+        # both linkages. Hard-coding libuv for Windows is what made every
+        # *-windows (dynamic) leg fail the up-front name check below with
+        # "libuv ... not in .../lib".
+        if(_node_shared_build)
+            set(_libuv_lib   "uv")
+        else()
+            set(_libuv_lib   "libuv")
+        endif()
         set(_absl_prefix "absl_")
         set(_absl_suffix ".lib")
         set(_hwy_lib     "hwy")
@@ -804,6 +818,70 @@ foreach(_node_cfg IN LISTS _node_configs)
 
     _node_shared_args(_node_shared_args "${_node_lib_dir}" "${_node_is_debug}")
 
+    # -----------------------------------------------------------------------
+    # Where the port's own host tools, and later the installed artifacts, find
+    # the shared libraries they were linked against.
+    #
+    # A dynamic triplet makes every dependency a shared object, and two
+    # consumers of them have nothing to help them:
+    #
+    # 1. The host tools (torque, mksnapshot, node_mksnapshot,
+    #    bytecode_builtins_list_generator, ...) *run* during this build - they
+    #    generate the sources everything else compiles - and they are linked
+    #    against the dependencies. gyp puts them in the output root next to
+    #    nothing that helps: the first one to run dies with "error while
+    #    loading shared libraries: libada.so.4" (Linux) or "dyld: Library not
+    #    loaded: @rpath/libz.1.3.2.1.dylib" (macOS), an hour into the leg and
+    #    naming neither the tool nor the cause.
+    # 2. The installed artifacts. The exported config links libnode itself and
+    #    nothing else, so libnode.so has to find its dependencies on its own -
+    #    they are installed next to it in <prefix>/lib - and the installed node
+    #    executable has to find libnode, which sits in <prefix>/lib while the
+    #    executable lives in <prefix>/tools/node.
+    #
+    # Both are answered with a *relative* rpath, never an absolute one: the
+    # GitHub runner path shape (/home/runner/work/<repo>/<repo>/vcpkg/installed/
+    # <triplet>/lib) is the same on every machine, so an absolute rpath would
+    # not be inert on a consumer's machine - it would find whatever some other
+    # build left at that path. A relative rpath names nothing and still works.
+    #
+    # The ninja generator writes LDFLAGS verbatim into build.ninja, and the
+    # resulting command is run through sh. `$` is ninja's escape character and
+    # sh would expand `$ORIGIN` to nothing, so a literal $ORIGIN only reaches
+    # the linker if it is spelled `\$$ORIGIN` here (ninja: $$ -> $; sh: \$ ->
+    # $). node.gyp spells its own rpath the same way. @loader_path has no `$`
+    # and needs no such care.
+    #
+    # LDFLAGS_host is deliberately not used for the host tools: gyp's ninja
+    # generator only honours a separate host toolset when cross-compiling
+    # (gyp.common.CrossCompileRequested), and this port passes
+    # --no-cross-compiling on every platform, so every link - host tools
+    # included - is a target-toolset link that reads LDFLAGS.
+    #
+    # On Windows there is no rpath: the loader searches the executable's own
+    # directory and then PATH, so the install tree's bin/ goes onto PATH for
+    # the build. The host tools are never installed, and the consumer side
+    # handles its own executables (node_test_runtime_libs in the test project).
+    # -----------------------------------------------------------------------
+    if(VCPKG_TARGET_IS_LINUX OR VCPKG_TARGET_IS_OSX)
+        if(_node_shared_build)
+            if(VCPKG_TARGET_IS_OSX)
+                set(_node_ldflags_target
+                    "${_node_ldflags_base} -Wl,-rpath,@loader_path -Wl,-rpath,@loader_path/../lib")
+            else()
+                set(_node_ldflags_target
+                    "${_node_ldflags_base} -Wl,-rpath,\\$$ORIGIN -Wl,-rpath,\\$$ORIGIN/../lib")
+            endif()
+        else()
+            set(_node_ldflags_target "${_node_ldflags_base}")
+        endif()
+        set(ENV{LDFLAGS} "${_node_ldflags_target}")
+        set(ENV{LDFLAGS_host} "${_node_ldflags_base}")
+    elseif(VCPKG_TARGET_IS_WINDOWS AND _node_shared_build)
+        get_filename_component(_node_bin_dir "${_node_lib_dir}/../bin" ABSOLUTE)
+        set(ENV{PATH} "${_node_bin_dir};$ENV{PATH}")
+    endif()
+
     # --shared makes node.gyp build libnode as a shared_library and link the
     # node executable against it.
     if(_node_shared_build)
@@ -826,6 +904,49 @@ foreach(_node_cfg IN LISTS _node_configs)
         LOGNAME "configure-${_node_cfg}"
     )
 
+    # -----------------------------------------------------------------------
+    # Shared linkage, Unix: put the dependencies where the host tools can load
+    # them from.
+    #
+    # gyp puts every executable it links in the output root (out/<config>/)
+    # and, on Linux, shared libraries one level down in lib/. The host tools
+    # run from the output root and carry the relative rpath added above, so a
+    # symlink per dependency name in the output root is all the loader needs
+    # to find them: $ORIGIN / @loader_path already points there. lib/ gets
+    # them too, because that is where libnode.so lives on Linux and where its
+    # own $ORIGIN resolves - nothing loads it during this build, but a future
+    # build step that does would otherwise fail the same silent way.
+    #
+    # Symlinks rather than copies: the libraries are hundreds of megabytes and
+    # the build tree is transient. COPY_ON_ERROR covers a filesystem without
+    # symlink support by falling back to a real copy.
+    # -----------------------------------------------------------------------
+    if(_node_shared_build AND (VCPKG_TARGET_IS_LINUX OR VCPKG_TARGET_IS_OSX))
+        if(VCPKG_TARGET_IS_OSX)
+            file(GLOB _node_shared_deps "${_node_lib_dir}/*.dylib")
+        else()
+            file(GLOB _node_shared_deps "${_node_lib_dir}/lib*.so*")
+        endif()
+        foreach(_node_out_subdir IN ITEMS "" "lib")
+            set(_node_out_dir "${SOURCE_PATH}/out/${_node_cfg}")
+            if(NOT _node_out_subdir STREQUAL "")
+                set(_node_out_dir "${_node_out_dir}/${_node_out_subdir}")
+                file(MAKE_DIRECTORY "${_node_out_dir}")
+            endif()
+            foreach(_node_dep IN LISTS _node_shared_deps)
+                get_filename_component(_node_dep_name "${_node_dep}" NAME)
+                file(CREATE_LINK "${_node_dep}"
+                     "${_node_out_dir}/${_node_dep_name}"
+                     SYMBOLIC COPY_ON_ERROR)
+            endforeach()
+            unset(_node_dep)
+            unset(_node_dep_name)
+            unset(_node_out_dir)
+        endforeach()
+        unset(_node_out_subdir)
+        unset(_node_shared_deps)
+    endif()
+
     set(_node_ninja_targets libnode)
     if(_node_cfg STREQUAL "Release" AND "tools" IN_LIST FEATURES)
         list(APPEND _node_ninja_targets node)
@@ -836,6 +957,28 @@ foreach(_node_cfg IN LISTS _node_configs)
         WORKING_DIRECTORY "${SOURCE_PATH}"
         LOGNAME "build-${_node_cfg}"
     )
+
+    # -----------------------------------------------------------------------
+    # Free this configuration's object files.
+    #
+    # Nothing after the link needs them: the archives the install step globs
+    # are separate files in the same tree, the vendored-build check below
+    # reads build.ninja and not the objects, and no step relinks. A
+    # dual-configuration triplet builds both trees in one source directory,
+    # so the second configuration starts with the first one's objects still
+    # on disk - and a macOS x64 Debug leg ran out of space exactly there,
+    # 1253 edges into the second build, with a message ("can't write to
+    # output file (No space left on device)") that names neither the
+    # configuration nor the cause. Deleting the objects costs nothing and is
+    # what makes two trees fit on a runner that fits one.
+    # -----------------------------------------------------------------------
+    file(GLOB_RECURSE _node_config_objects
+         "${SOURCE_PATH}/out/${_node_cfg}/obj/*.o"
+         "${SOURCE_PATH}/out/${_node_cfg}/obj/*.obj")
+    if(_node_config_objects)
+        file(REMOVE ${_node_config_objects})
+    endif()
+    unset(_node_config_objects)
 
     # -----------------------------------------------------------------------
     # Ask the generated build graph whether any library this port externalizes
