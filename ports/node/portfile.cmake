@@ -666,17 +666,27 @@ function(_node_shared_args _out _libdir _is_debug)
     unset(_f)
     list(JOIN _absl_libnames "," _absl_libnames)
 
-    # hdr-histogram's own CMake exports hdr_histogram_static when it is built as
-    # a static library and hdr_histogram when it is not - the _static suffix is
-    # a static-linkage convention, not part of the name.
+    # hdr-histogram's own CMake names the static library hdr_histogram_static and
+    # the shared one hdr_histogram - the _static suffix is a linkage convention,
+    # not part of the name. Which one exists depends on two separate decisions:
     #
-    # The suffix is always there here, because this repository's hdr-histogram
-    # overlay forces a static library on every triplet (the upstream project
-    # does not support a DLL). Keying the name off the node build's own linkage
-    # was wrong in exactly the case a dynamic triplet builds a shared libnode:
-    # the precheck wanted hdr_histogram.lib and the install held
-    # hdr_histogram_static.lib.
-    set(_hdrhist_lib "hdr_histogram_static")
+    #   * Windows: the overlay forces a static library on every triplet (the
+    #     upstream build's DLL is not used here), so it is always the suffixed
+    #     name - and a dynamic triplet holding a shared libnode is exactly the
+    #     case that made the precheck want hdr_histogram.lib;
+    #   * everywhere else the overlay leaves the choice to the triplet, so a
+    #     dynamic triplet installs libhdr_histogram.so with the version suffix
+    #     and a static one installs libhdr_histogram_static.a.
+    #
+    # Keyed off the triplet, not off libnode's own linkage: the package's
+    # linkage is the triplet's business.
+    if(VCPKG_TARGET_IS_WINDOWS)
+        set(_hdrhist_lib "hdr_histogram_static")
+    elseif(VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+        set(_hdrhist_lib "hdr_histogram")
+    else()
+        set(_hdrhist_lib "hdr_histogram_static")
+    endif()
     set(_args "")
     foreach(_spec
         "openssl|${_openssl_lib}"
