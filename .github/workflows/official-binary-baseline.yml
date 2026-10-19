@@ -52,3 +52,26 @@ jobs:
       arch: arm64
       suites: ${{ inputs.suites }}
       timeout-minutes: 150
+
+  # The macOS legs exist for the same reason and answer the same question as the Windows
+  # ones, and one of them is now worth asking: the port's x64 macOS leg builds and runs
+  # x64 on arm64 hardware under Rosetta 2, and `test-process-execve-throws` died there with
+  # SIGBUS once. Is that this repository's build, or is it Rosetta? Upstream does not run
+  # the suite there either, so the official binary on the same image is the only baseline.
+  macos-x64:
+    uses: ./.github/workflows/official-baseline-leg.yml
+    secrets: inherit
+    with:
+      runner: macos-15
+      arch: x64
+      suites: ${{ inputs.suites }}
+      timeout-minutes: 150
+
+  macos-arm64:
+    uses: ./.github/workflows/official-baseline-leg.yml
+    secrets: inherit
+    with:
+      runner: macos-latest
+      arch: arm64
+      suites: ${{ inputs.suites }}
+      timeout-minutes: 150

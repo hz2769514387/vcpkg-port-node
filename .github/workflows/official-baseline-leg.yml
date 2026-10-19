@@ -69,8 +69,18 @@ jobs:
           version="${{ steps.pins.outputs.version }}"
           root="$RUNNER_TEMP/baseline"
           mkdir -p "$root"
-          curl -fsSL -o "$root/node.zip" \
-            "https://nodejs.org/dist/v$version/node-v$version-win-${{ inputs.arch }}.zip"
+          # The package is named after the host platform, not the architecture: darwin-x64
+          # for the macOS x64 leg, even though that runner is arm64 hardware executing the
+          # binary under Rosetta 2 - which is exactly the kind of cell a baseline has to
+          # measure rather than assume (issue: test-process-execve-throws died there with
+          # SIGBUS once, and the question is whether that is this repository or Rosetta).
+          case "${{ runner.os }}" in
+            macOS)   pkg="node-v$version-darwin-${{ inputs.arch }}.tar.gz" ;;
+            Windows) pkg="node-v$version-win-${{ inputs.arch }}.zip" ;;
+            *) echo "official baseline: unsupported runner OS ${{ runner.os }}"; exit 1 ;;
+          esac
+          curl -fsSL -o "$root/node.pkg" \
+            "https://nodejs.org/dist/v$version/$pkg"
           curl -fsSL -o "$root/node.tar.xz" \
             "https://nodejs.org/dist/v$version/node-v$version.tar.xz"
           # Python extracts the .tar.xz because Git Bash's tar has no xz on every image.
@@ -82,11 +92,17 @@ jobs:
           python - "$root" <<'PY'
           import os, sys, tarfile, zipfile
           root = sys.argv[1]
-          with zipfile.ZipFile(os.path.join(root, "node.zip")) as z:
-              z.extractall(os.path.join(root, "binary"))
+          pkg = os.path.join(root, "node.pkg")
+          # zip on Windows, tar.gz on macOS - the archive follows the host platform.
+          if zipfile.is_zipfile(pkg):
+              with zipfile.ZipFile(pkg) as z:
+                  z.extractall(os.path.join(root, "binary"))
+          else:
+              with tarfile.open(pkg) as t:
+                  t.extractall(os.path.join(root, "binary"), filter="data")
           with tarfile.open(os.path.join(root, "node.tar.xz")) as t:
               t.extractall(os.path.join(root, "suite"), filter="data")
-          print("suite tree extracted")
+          print("binary and suite extracted")
           PY
           ls "$root/binary" "$root/suite"
 
@@ -96,7 +112,10 @@ jobs:
           set -uo pipefail
           root="$RUNNER_TEMP/baseline"
           version="${{ steps.pins.outputs.version }}"
-          shell_bin="$root/binary/node-v$version-win-${{ inputs.arch }}/node.exe"
+          case "${{ runner.os }}" in
+            macOS)   shell_bin="$root/binary/node-v$version-darwin-${{ inputs.arch }}/bin/node" ;;
+            Windows) shell_bin="$root/binary/node-v$version-win-${{ inputs.arch }}/node.exe" ;;
+          esac
           # The working directory has to be the suite root, not this checkout: the driver
           # hands the shell `--test-reporter=./test/common/test-error-reporter.js`, a
           # relative path, so anything else resolves it against the wrong directory and
