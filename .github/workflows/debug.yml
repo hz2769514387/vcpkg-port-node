@@ -48,9 +48,9 @@ jobs:
       preset: x64-windows-static
       triplet: x64-windows-static
       consumer-configs: Debug
-      suite-configs: Debug
+      suite-configs: ""
       expect-arch: x64
-      timeout-minutes: 420
+      timeout-minutes: 330
 
   windows-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -60,9 +60,9 @@ jobs:
       preset: arm64-windows-static
       triplet: arm64-windows-static
       consumer-configs: Debug
-      suite-configs: Debug
+      suite-configs: ""
       expect-arch: ARM64
-      timeout-minutes: 420
+      timeout-minutes: 330
 
   linux:
     uses: ./.github/workflows/build-test.yml
@@ -72,8 +72,8 @@ jobs:
       preset: x64-linux
       triplet: x64-linux
       consumer-configs: Debug
-      suite-configs: Debug
-      timeout-minutes: 420
+      suite-configs: ""
+      timeout-minutes: 330
 
   linux-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -83,8 +83,8 @@ jobs:
       preset: arm64-linux
       triplet: arm64-linux
       consumer-configs: Debug
-      suite-configs: Debug
-      timeout-minutes: 420
+      suite-configs: ""
+      timeout-minutes: 330
 
   macos:
     uses: ./.github/workflows/build-test.yml
@@ -94,9 +94,9 @@ jobs:
       preset: arm64-osx
       triplet: arm64-osx
       consumer-configs: Debug
-      suite-configs: Debug
+      suite-configs: ""
       expect-arch: arm64
-      timeout-minutes: 420
+      timeout-minutes: 330
 
   macos-x64:
     uses: ./.github/workflows/build-test.yml
@@ -106,9 +106,9 @@ jobs:
       preset: x64-osx
       triplet: x64-osx
       consumer-configs: Debug
-      suite-configs: Debug
+      suite-configs: ""
       expect-arch: x86_64
-      timeout-minutes: 420
+      timeout-minutes: 330
 
   logs:
     needs: [windows, windows-arm64, linux, linux-arm64, macos, macos-x64]

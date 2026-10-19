@@ -43,12 +43,12 @@ jobs:
     with:
       runner: windows-2022
       preset: x64-windows-static-md
-      triplet: x64-windows-static-md
+      triplet: x64-windows-static-md-release
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       expect-arch: x64
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   windows-md-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -56,12 +56,12 @@ jobs:
     with:
       runner: windows-11-arm
       preset: arm64-windows-static-md
-      triplet: arm64-windows-static-md
+      triplet: arm64-windows-static-md-release
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       expect-arch: ARM64
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   windows-shared:
     uses: ./.github/workflows/build-test.yml
@@ -69,12 +69,12 @@ jobs:
     with:
       runner: windows-2022
       preset: x64-windows
-      triplet: x64-windows
+      triplet: x64-windows-release
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: x64
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   windows-shared-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -82,12 +82,12 @@ jobs:
     with:
       runner: windows-11-arm
       preset: arm64-windows
-      triplet: arm64-windows
+      triplet: arm64-windows-release
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: ARM64
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   linux-shared:
     uses: ./.github/workflows/build-test.yml
@@ -95,11 +95,11 @@ jobs:
     with:
       runner: ubuntu-latest
       preset: x64-linux-dynamic
-      triplet: x64-linux-dynamic
+      triplet: x64-linux-dynamic-release
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   linux-shared-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -107,11 +107,11 @@ jobs:
     with:
       runner: ubuntu-24.04-arm
       preset: arm64-linux-dynamic
-      triplet: arm64-linux-dynamic
+      triplet: arm64-linux-dynamic-release
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   macos-shared:
     uses: ./.github/workflows/build-test.yml
@@ -119,12 +119,12 @@ jobs:
     with:
       runner: macos-latest
       preset: arm64-osx-dynamic
-      triplet: arm64-osx-dynamic
+      triplet: arm64-osx-dynamic-release
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       expect-arch: arm64
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   macos-shared-x64:
     uses: ./.github/workflows/build-test.yml
@@ -132,12 +132,12 @@ jobs:
     with:
       runner: macos-15
       preset: x64-osx-dynamic
-      triplet: x64-osx-dynamic
+      triplet: x64-osx-dynamic-release
       consumer-configs: Release,RelWithDebInfo,Debug
       suite-configs: Release
       expect-arch: x86_64
       experimental: true
-      timeout-minutes: 420
+      timeout-minutes: 240
 
   logs:
     needs: [windows-md, windows-md-arm64, windows-shared, windows-shared-arm64,

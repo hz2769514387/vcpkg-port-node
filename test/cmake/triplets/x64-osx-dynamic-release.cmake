@@ -1,0 +1,15 @@
+# The stock `x64-osx-dynamic` triplet, Release only.
+#
+# The matrix legs (issue #11) build this cell Release-only: with the stock dual triplet
+# the port is built twice and the slowest legs - a four-core arm64 Linux runner - ran
+# past GitHub's six-hour job limit (measured: linux-shared-arm64 spent its whole
+# six hours inside the install, still compiling libnode). Release-only halves that,
+# and the Debug dimension stays covered by the Debug workflow on the static triplets.
+set(VCPKG_BUILD_TYPE release)
+
+set(VCPKG_TARGET_ARCHITECTURE x64)
+set(VCPKG_CRT_LINKAGE dynamic)
+set(VCPKG_LIBRARY_LINKAGE dynamic)
+
+set(VCPKG_CMAKE_SYSTEM_NAME Darwin)
+set(VCPKG_OSX_ARCHITECTURES x86_64)

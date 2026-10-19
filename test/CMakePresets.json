@@ -14,10 +14,10 @@
       "cacheVariables": {
         "CMAKE_BUILD_TYPE": "Release",
         "CMAKE_TOOLCHAIN_FILE": "$env{VCPKG_ROOT}/scripts/buildsystems/vcpkg.cmake",
-        "NODE_TEST_JOBS": "$env{VCPKG_MAX_CONCURRENCY}"
+        "NODE_TEST_JOBS": "$env{VCPKG_MAX_CONCURRENCY}",
+        "VCPKG_OVERLAY_TRIPLETS": "${sourceDir}/cmake/triplets"
       }
     },
-
     {
       "name": "windows",
       "hidden": true,
@@ -74,7 +74,6 @@
         "CMAKE_CXX_COMPILER": "clang++"
       }
     },
-
     {
       "name": "x64-windows-static",
       "inherits": "windows-clang",
@@ -135,7 +134,6 @@
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
-
     {
       "name": "arm64-windows-static",
       "inherits": "windows-clang",
@@ -196,7 +194,6 @@
         "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
       }
     },
-
     {
       "name": "x64-linux",
       "inherits": "linux",
@@ -230,7 +227,6 @@
         "VCPKG_TARGET_TRIPLET": "arm64-linux-dynamic"
       }
     },
-
     {
       "name": "arm64-osx",
       "inherits": "macos",
