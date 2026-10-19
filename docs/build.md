@@ -174,7 +174,27 @@ effect.
 With `CC=CXX=clang-cl`, building the vendored `deps/icu-small` fails in bulk (measured: over
 a thousand failing targets in `source/tools/toolutil` and the ICU libraries). The port uses
 `--with-intl=system-icu`, so ICU is not built from the Node.js tree at all — the
-externalization of ICU is load-bearing, not an optimisation.
+externalization of ICU is load-bearing, not an optimisation. ([ADR 0008](
+decisions/0008-icu-comes-from-vcpkg.md) records why that is a decision and not a workaround:
+vendoring ICU would put a second ICU into any process that also uses one of the 25 ports in
+this baseline that depend on vcpkg's `icu`.)
+
+### 4.7 OpenSSL's C code has to be compiled by clang-cl
+
+Node.js requires clang-cl on Windows (`vcbuild.bat` forces it for >= 24), and vcpkg builds its
+ports with cl.exe, so OpenSSL arrived in every Node.js process as the one library compiled by
+something else. On arm64 that difference is not harmless:
+
+| OpenSSL C code built by | arm64 Windows official suite |
+|---|---|
+| `cl.exe` (what vcpkg does by default) | **250 cases `--- CRASHED ---`**, no other output |
+| `clang-cl` (this port, since ADR 0009) | **100% passed** (29 and 20 tests), **0 crashes** |
+
+The assembly was tried first and is not the cause: building with `no-asm` — which is what
+Node.js does for its own vendored OpenSSL on Windows arm64 — left the crash count at 250 with
+a byte-identical set of 254 failing tests. The assembler was already clang in the baseline, so
+holding it constant is also what makes the result above about the C compiler alone. See
+[ADR 0009](decisions/0009-openssl-is-built-with-clang-cl.md).
 
 ## 5. Reproducing these measurements
 

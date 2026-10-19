@@ -1,15 +1,21 @@
 # OpenSSL, as the pinned vcpkg baseline builds it - with one deliberate difference.
 #
-# Why an overlay exists: on Windows arm64 the baseline port builds with the
-# aarch64 assembly enabled (VC-WIN64-CLANGASM-ARM), and Node.js builds the same
-# library for the same platform without it (deps/openssl/openssl.gyp includes
-# openssl_no_asm.gypi for `target_arch=="arm64" and OS=="win"`). Issue #22 is
-# what that difference costs: this repository's arm64 leg crashes in 248 silent
-# TLS cases with the assembly build, where the official Node.js binary - the
-# no-asm build of OpenSSL 3.5.9 - crashes in none of them on the same runner.
-# windows/portfile.cmake therefore uses VC-WIN64-ARM plus no-asm on Windows
-# arm64, which is Node.js's own configuration, and leaves every other platform,
-# architecture and linkage byte-identical to the baseline.
+# Why an overlay exists: the library's C code has to be compiled by the same
+# compiler as Node.js, and on Windows that is clang-cl - `vcbuild.bat` forces it
+# for every Node.js >= 24 ("ClangCL is required because the Node.js version being
+# compiled is >= 24"). vcpkg builds its ports with cl.exe, so OpenSSL arrived as
+# the one library in the process compiled by something else, and for arm64 the
+# two do not agree: with cl.exe-built OpenSSL the arm64 Windows suite crashed in
+# 250 silent TLS cases while the official Node.js binary was clean on the same
+# runner, and with OpenSSL's C code built by clang-cl - every other option left
+# exactly as the baseline has it - the same suite passes completely (issue #22).
+# windows/portfile.cmake therefore points the build at clang-cl.
+#
+# The assembly is deliberately left as the baseline ships it. Building with
+# `no-asm` first was a hypothesis about that difference, and it was wrong: the
+# crash set came back byte-identical, 250 cases and the same 254 failing tests.
+# The assembler was already clang in the baseline, so holding it constant is also
+# what made the result above about the C compiler rather than about both.
 #
 # Everything below this point is derived from the openssl port of the pinned
 # vcpkg baseline (2026.07.29), so the conventions vcpkg expects - the install

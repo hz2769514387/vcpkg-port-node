@@ -10,6 +10,70 @@ vcpkg_add_to_path("${PERL_EXE_PATH}")
 vcpkg_cmake_get_vars(cmake_vars_file)
 include("${cmake_vars_file}")
 
+# Build OpenSSL's C code with clang-cl instead of cl.exe.
+#
+# This overlay exists for issue #22 and nothing else: the arm64 Windows suite
+# crashes in 250 silent TLS cases, upstream's own binary is clean on the same
+# runner, and no-asm made no difference at all (the crash set is byte-identical).
+# What is left inside the library is the version and the compiler that builds it.
+# libnode, the consumer and every other dependency in this repository are
+# clang-cl, so OpenSSL is the last piece not compiled by it - this makes it join
+# them and leaves everything else exactly as the baseline has it.
+#
+# clang-cl is not on PATH in vcpkg's build environment (ports are started without
+# vcvars), so it is located the way the repository's own toolchain locates it:
+# vswhere -latest, then the LLVM tree Visual Studio ships for this machine's
+# architecture. The assembler is left alone on purpose - it was already built by
+# clang in the baseline, and holding it constant is what makes the result about
+# the C compiler.
+set(_openssl_clang_cl "")
+set(_vswhere "")
+foreach(_cand
+    "C:/Program Files (x86)/Microsoft Visual Studio/Installer/vswhere.exe"
+    "C:/Program Files/Microsoft Visual Studio/Installer/vswhere.exe")
+    if(EXISTS "${_cand}")
+        set(_vswhere "${_cand}")
+        break()
+    endif()
+endforeach()
+unset(_cand)
+if(_vswhere)
+    execute_process(COMMAND "${_vswhere}" -latest -products * -property installationPath
+                    OUTPUT_VARIABLE _vs_path OUTPUT_STRIP_TRAILING_WHITESPACE
+                    RESULT_VARIABLE _vs_result)
+    if(_vs_result EQUAL 0 AND _vs_path)
+        # $ENV{PROCESSOR_ARCHITECTURE} rather than CMAKE_HOST_SYSTEM_PROCESSOR:
+        # a port script runs before any project(), so the latter is empty there
+        # and the arm64 runner got the x64 LLVM, i.e. x64 objects for an arm64
+        # target. Measured on run 39236163698.
+        set(_host_arch "$ENV{PROCESSOR_ARCHITECTURE}")
+        if(NOT _host_arch)
+            set(_host_arch "${CMAKE_HOST_SYSTEM_PROCESSOR}")
+        endif()
+        if(_host_arch MATCHES "^(ARM64|arm64|aarch64)$")
+            set(_llvm_archs ARM64 x64)
+        else()
+            set(_llvm_archs x64 ARM64)
+        endif()
+        foreach(_arch IN LISTS _llvm_archs)
+            if(EXISTS "${_vs_path}/VC/Tools/Llvm/${_arch}/bin/clang-cl.exe")
+                set(_openssl_clang_cl "${_vs_path}/VC/Tools/Llvm/${_arch}/bin/clang-cl.exe")
+                break()
+            endif()
+        endforeach()
+        unset(_llvm_archs)
+        unset(_arch)
+    endif()
+    unset(_vs_path)
+    unset(_vs_result)
+endif()
+unset(_vswhere)
+if(NOT _openssl_clang_cl)
+    message(FATAL_ERROR "openssl overlay: clang-cl not found; see the comment above.")
+endif()
+message(STATUS "openssl overlay: building the C code with ${_openssl_clang_cl}")
+set(VCPKG_DETECTED_CMAKE_C_COMPILER "${_openssl_clang_cl}")
+
 if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
     set(OPENSSL_ARCH VC-WIN32)
 elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "x64")
@@ -19,25 +83,10 @@ elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm")
 elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
     if(VCPKG_TARGET_IS_UWP)
         set(OPENSSL_ARCH VC-WIN64-ARM)
+    elseif(VCPKG_DETECTED_CMAKE_C_COMPILER_ID MATCHES "Clang")
+        set(OPENSSL_ARCH VC-CLANG-WIN64-CLANGASM-ARM)
     else()
-        # Windows arm64, desktop: Node.js's own configuration, which is no
-        # assembly. deps/openssl/openssl.gyp includes openssl_no_asm.gypi for
-        # exactly `target_arch=="arm64" and OS=="win"` ("VC-WIN64-ARM inherits
-        # from VC-noCE-common that has no asms"), and the configdata it ships
-        # for the platform is VC-WIN64-ARM/no-asm.
-        #
-        # The baseline port picks one of the CLANGASM-ARM targets here instead,
-        # which turns the aarch64 assembly on (asm_arch "aarch64", assembled by
-        # an acquired clang-cl). Issue #22 is what that difference costs: this
-        # repository's arm64 leg crashes in 248 silent TLS cases with the
-        # assembly build, where the official Node.js binary - the no-asm build
-        # of OpenSSL 3.5.9 - crashes in none of them on the same runner
-        # (official-binary-baseline.yml, run 39201696549). Matching Node.js is
-        # the experiment that isolates it: if the crashes stop, the assembly
-        # path is the cause and this stays; if they do not, the overlay is
-        # reverted and the evidence points at the version instead.
-        set(OPENSSL_ARCH VC-WIN64-ARM)
-        vcpkg_list(APPEND CONFIGURE_OPTIONS no-asm)
+        set(OPENSSL_ARCH VC-WIN64-CLANGASM-ARM)
     endif()
 else()
     message(FATAL_ERROR "Unsupported target architecture: ${VCPKG_TARGET_ARCHITECTURE}")

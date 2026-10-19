@@ -14,3 +14,4 @@ a change of mind gets a new ADR that supersedes the old one, so the history stay
 | [0006](0006-versioning-and-branch-policy.md) | Date-versioned releases, LTS-tracking `main`, and branch-per-line | Accepted | 2026-10-18 |
 | [0007](0007-toolchain-configuration-and-linkage-policy.md) | One toolchain per platform, three configurations, both linkages and both CRTs, all proven in CI | Accepted | 2026-10-18 |
 | [0008](0008-icu-comes-from-vcpkg.md) | ICU comes from vcpkg, and is therefore the one dependency not built by clang-cl | Accepted | 2026-10-19 |
+| [0009](0009-openssl-is-built-with-clang-cl.md) | OpenSSL is compiled with clang-cl, the compiler Node.js requires | Accepted | 2026-10-19 |
