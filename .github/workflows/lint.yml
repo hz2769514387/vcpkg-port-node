@@ -25,11 +25,23 @@ jobs:
         with:
           python-version: '3.13'
 
+      - name: Install the lint dependencies
+        run: python3 -m pip install pyyaml
+
       - name: Version files match the ports
         run: python3 tools/version_tree.py --check
 
       - name: Repository hygiene
         run: python3 tools/check_repo.py
+
+      - name: Every workflow script still parses as shell
+        # bash -n on each `run:` block. A workflow file parses as YAML and is
+        # accepted by GitHub even when the script inside it is not valid shell:
+        # the job runs, the step dies with "syntax error near unexpected token",
+        # and the leg is red two hours into a build for a mistake a linter sees
+        # in a second. The first run of the multi-configuration matrix failed
+        # every leg exactly that way - after the tests had passed.
+        run: python3 tools/check_workflows.py
 
       - name: The release watcher still parses the upstream feed
         run: python3 tools/node_release_watch.py --dry-run

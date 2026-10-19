@@ -647,7 +647,14 @@ function(_node_shared_args _out _libdir _is_debug)
     unset(_f)
     list(JOIN _absl_libnames "," _absl_libnames)
 
-    set(_hdrhist_lib "hdr_histogram_static")
+    # hdr-histogram's own CMake exports hdr_histogram_static when it is built as
+    # a static library and hdr_histogram when it is not - the _static suffix is
+    # a static-linkage convention, not part of the name.
+    if(_node_shared_build)
+        set(_hdrhist_lib "hdr_histogram")
+    else()
+        set(_hdrhist_lib "hdr_histogram_static")
+    endif()
     set(_args "")
     foreach(_spec
         "openssl|${_openssl_lib}"
@@ -701,9 +708,21 @@ function(_node_shared_args _out _libdir _is_debug)
         # seconds with the missing names and what is actually there.
         # _libnames is comma-separated because that is the separator
         # --shared-<dep>-libname takes; CMake needs semicolons to iterate it.
+        #
+        # Not every name on the link line is a vcpkg library: LIEF's list ends
+        # with bcrypt, which is mbedtls's Windows entropy source and lives in
+        # the SDK rather than in the install prefix. The first run with this
+        # check proved it by demanding bcrypt from a directory that has never
+        # held it.
+        set(_node_sdk_libs
+            bcrypt ntdll winmm ws2_32 crypt32 advapi32 user32 kernel32
+            dbghelp iphlpapi ole32 shell32 secur32 cryptui)
         set(_missing "")
         string(REPLACE "," ";" _libnames_list "${_libnames}")
         foreach(_n IN LISTS _libnames_list)
+            if(_n IN_LIST _node_sdk_libs)
+                continue()
+            endif()
             if(VCPKG_TARGET_IS_WINDOWS)
                 set(_candidates "${_libdir}/${_n}.lib")
                 # gyp appends the debug `d` itself, so the debug tree holds

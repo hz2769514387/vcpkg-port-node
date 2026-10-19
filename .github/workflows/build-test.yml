@@ -471,9 +471,6 @@ jobs:
               grep -E "tests passed|tests failed|Total Test time" "$f" | head -n 5 || true
               awk '/The following tests FAILED/{found=1} found' "$f" | head -n 40 || true
             done
-            else
-              echo "no ctest log: this leg did not get that far"
-            fi
             echo '```'
             # The first error, from whichever stream failed first: the port's own diagnostics
             # live in vcpkg's buildtrees, the consumer's in the tee'd logs.
