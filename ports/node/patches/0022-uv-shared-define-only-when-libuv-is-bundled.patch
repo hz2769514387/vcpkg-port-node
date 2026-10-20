@@ -1,0 +1,31 @@
+diff --git a/common.gypi b/common.gypi
+--- a/common.gypi
++++ b/common.gypi
+@@ -581,13 +581,26 @@
+           # Make sure the STL doesn't try to use exceptions
+           '_HAS_EXCEPTIONS=0',
+           'BUILDING_V8_SHARED=1',
+-          'BUILDING_UV_SHARED=1',
+           # Stop <windows.h> from defining macros that conflict with
+           # std::min() and std::max().  We don't use <windows.h> (much)
+           # but we still inherit it from uv.h.
+           'NOMINMAX',
+         ],
+       }],
++      # BUILDING_UV_SHARED belongs to whoever compiles libuv, and upstream always
++      # compiles it from deps/uv, which is why it used to sit in the Windows set
++      # above. With an external libuv (--shared-libuv, i.e. vcpkg's) the consumer
++      # side of uv.h wants USING_UV_SHARED instead - and vcpkg rewrites half of
++      # uv.h's own guard on a dynamic triplet, turning
++      #   #if defined(BUILDING_UV_SHARED) && defined(USING_UV_SHARED)
++      # into ... && 1, so carrying both is an immediate #error. node.gypi does
++      # remove the define for its own targets, but host tools such as node_js2c
++      # do not include node.gypi at all, so the removal never reached them and
++      # the first one to compile failed with
++      #   uv.h(31,2): error: "Define either BUILDING_UV_SHARED or USING_UV_SHARED, not both."
++      ['OS == "win" and node_shared_libuv=="false"', {
++        'defines': [ 'BUILDING_UV_SHARED=1' ],
++      }],
+       [ 'OS in "linux freebsd openbsd solaris aix os400 openharmony zos"', {
+         'cflags': [ '-pthread' ],
+         'ldflags': [ '-pthread' ],

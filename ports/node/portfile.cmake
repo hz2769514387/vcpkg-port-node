@@ -115,6 +115,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0019-libffi-win-arm64-asm-reaches-ninja.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0020-crates-debug-rust-target.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0021-test-py-print-exit-code.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0022-uv-shared-define-only-when-libuv-is-bundled.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
@@ -1152,23 +1153,48 @@ if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
                 list(LENGTH _node_absl_undef _node_absl_undef_count)
                 list(SUBLIST _node_absl_undef 0 5 _node_absl_undef_head)
                 string(REPLACE ";" "\n  " _node_absl_undef_head "${_node_absl_undef_head}")
-                file(READ "${_node_cfg_out_dir}/build.ninja" _node_ninja_txt)
-                if(_node_ninja_txt MATCHES "-labsl_")
-                    set(_node_absl_on_linkline "yes")
-                else()
-                    set(_node_absl_on_linkline "no")
+                # Two questions, asked separately because they have different answers.
+                # 1) Did configure.py receive the names? config.gypi is what it wrote from
+                #    --shared-abseil-libname, so this is the honest record of the handover.
+                set(_node_absl_in_gypi "file-missing")
+                if(EXISTS "${_node_cfg_out_dir}/config.gypi")
+                    file(READ "${_node_cfg_out_dir}/config.gypi" _node_gypi_txt)
+                    if(_node_gypi_txt MATCHES "-labsl_")
+                        set(_node_absl_in_gypi "yes")
+                    else()
+                        set(_node_absl_in_gypi "no")
+                    endif()
+                    unset(_node_gypi_txt)
                 endif()
+                # 2) Did gyp put them on any link line, and in which file? Every ninja file,
+                #    not just build.ninja: a target's edges can live in its own obj/*.ninja,
+                #    and looking in one file would report a confident "no" for a link line
+                #    that is simply somewhere else.
+                set(_node_absl_in_ninja "no")
+                file(GLOB_RECURSE _node_ninja_files "${_node_cfg_out_dir}/*.ninja")
+                foreach(_nf IN LISTS _node_ninja_files)
+                    file(READ "${_nf}" _node_ninja_txt)
+                    if(_node_ninja_txt MATCHES "-labsl_")
+                        file(RELATIVE_PATH _node_ninja_hit "${_node_cfg_out_dir}" "${_nf}")
+                        set(_node_absl_in_ninja "yes, in ${_node_ninja_hit}")
+                        break()
+                    endif()
+                endforeach()
+                unset(_node_ninja_files)
+                unset(_node_ninja_txt)
                 message(FATAL_ERROR
                     "node port: ${_node_cfg} libnode has ${_node_absl_undef_count} undefined "
                     "abseil symbols, so nothing provides them at run time - abseil is "
                     "static-only off Windows and has to be inside libnode.\n"
                     "First few:\n  ${_node_absl_undef_head}\n\n"
-                    "-labsl_* on gyp's link line for that configuration: "
-                    "${_node_absl_on_linkline} (from ${_node_cfg_out_dir}/build.ninja).\n"
-                    "If it says no, the names never reached configure.py; if it says yes, "
-                    "they are there but the archives are not being pulled in - check the "
-                    "order relative to the objects, and whether -Wl,--whole-archive is in "
-                    "play (gyp's solink rule wraps only the inputs, not the libraries).")
+                    "abseil names in config.gypi (so configure.py did get them): "
+                    "${_node_absl_in_gypi}\n"
+                    "-labsl_* anywhere in ${_node_cfg_out_dir}: ${_node_absl_in_ninja}\n\n"
+                    "If config.gypi has them and no ninja file does, gyp dropped them; if "
+                    "neither has them, --shared-abseil-libname arrived empty; if a ninja "
+                    "file has them, they were on the link line and the archives were not "
+                    "pulled in (look at the order relative to the objects, and at the "
+                    "solink rule's -Wl,--whole-archive, which wraps only the inputs).")
             endif()
             unset(_node_absl_undef)
             unset(_node_absl_undef_count)
@@ -1179,8 +1205,9 @@ if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
             unset(_node_nm_args)
         endforeach()
         unset(_node_cfg_out_dir)
-        unset(_node_ninja_txt)
-        unset(_node_absl_on_linkline)
+        unset(_node_absl_in_gypi)
+        unset(_node_absl_in_ninja)
+        unset(_node_ninja_hit)
     endif()
     unset(_node_nm)
 endif()

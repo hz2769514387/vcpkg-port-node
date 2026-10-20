@@ -445,6 +445,15 @@ dependencies through its own rpath: they are installed next to it in `<prefix>/l
 `$ORIGIN` / `@loader_path` names that directory without naming this machine. The installed
 `node` executable lives in `<prefix>/tools/node` and needs `$ORIGIN/../lib`.
 
+That rpath is what makes those dependencies *loadable*, and it is not the same thing as
+making them *linkable*. A consumer that calls one of them directly - an embedder driving the
+loop with `uv_run`, say - has to put it on its own link line, because neither macOS's
+two-level namespace nor Windows resolves a symbol through a library's own dependency. Under
+a static libnode the exported config already carries them (the archives cannot resolve each
+other on their own), so nothing shows; under a shared one the omission shows up as
+`Undefined symbols: _uv_run` and nothing else. `test/embedding` links libuv explicitly in
+`host_loop` for exactly this reason, and it is the shape a real consumer needs too.
+
 ### 7.3 The consumer side (what the test project does, and why)
 
 Windows has no rpath. The loader searches the executable's own directory and then PATH -
