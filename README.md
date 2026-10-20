@@ -167,6 +167,42 @@ library as well.
 The exported config checks both at configure time and fails with the fix in the message,  
 instead of letting you meet them as a wall of linker errors.
 
+### A Windows x64 Debug consumer cannot format dates through ICU
+
+`new Intl.DateTimeFormat(...)` aborts the process, inside ICU's own destructor:
+
+```
+debug_heap.cpp(904) : Assertion failed: _CrtIsValidHeapPointer(block)
+```
+
+reached from `icu_78::DateFormatSymbols::initializeData` via V8's `CreateICUDateFormatFromCache`.
+The CRT's debug heap rejects a buffer ICU hands to `free()`.
+
+Scope, measured (2026-10-21) on one dual-triplet install:
+
+| Consumer | `Intl.DateTimeFormat` |
+|---|---|
+| Windows x64, **Debug** | aborts |
+| Windows x64, Release / RelWithDebInfo | fine |
+| Windows **arm64**, Debug | fine |
+| the same install's own `node.exe`, Debug | fine |
+
+So it is not ICU and not libnode - the install's own executable does the same call in the same
+Debug library. It is the combination in one process of Node.js compiled with clang-cl `/MTd`
+and ICU compiled with `cl` `/MTd`, which the UCRT checks unconditionally. Two candidate
+mechanisms were ruled out: ICU's Debug objects do carry `/DEFAULTLIB:LIBCMTD` (202 directives in
+`icuucd.lib`) and `sizeof(icu::UnicodeString)` is 64 under `cl` and clang-cl, `/MT` and `/MTd`
+alike.
+
+The node24 line hit the identical assertion and recorded it the same way (`_CrtIsValidHeapPointer`
+is unconditional, clearing `_CRTDBG_ALLOC_MEM_DF` does not help, the dialog blocks the process);
+see `docs/memory/2026-10-15.md` on `legacy/node24_vcpkg-2026.07.29`.
+
+**What to do:** use `RelWithDebInfo` when the reason for Debug is debugging your own code - it is
+the release ABI with full debug information, and it is what this port recommends for that anyway.
+If you need a Debug CRT consumer and you call `Intl.DateTimeFormat`, there is no fix from this
+side today. `test/smoke` asserts number formatting on that cell and skips only the date half.
+
 ### Node.js is compiled with clang-cl on Windows, gcc on Linux and clang on macOS
 
 That is Node.js's own build and test matrix, and this port does not change it. What *you* use to
