@@ -957,12 +957,18 @@ foreach(_node_cfg IN LISTS _node_configs)
     # globals node_base references from simdjson.h are *data*, and data has to be dllimport to
     # be reachable through an import library - measured as LNK2019 on
     # internal::error_codes and internal::structural_or_whitespace_negated, at
-    # node_mksnapshot, and only on a dynamic Windows triplet. Patch 0023 turns the variable
-    # into the define; it is set only here, because with a static simdjson the macro would
-    # make the compiler demand dllimport from an archive that has none.
-    set(_node_simdjson_dll_arg "")
+    # node_mksnapshot, and only on a dynamic Windows triplet.
+    #
+    # Handed over as an environment variable rather than an extra -D: -D does reach gyp (that
+    # is how VCPKG_SIMDUTF_INCLUDE works, and it is forwarded verbatim), but a gyp condition
+    # reading it produced no define, so patch 0023 has configure.py put it in
+    # output['defines'] instead - the channel this port already uses for build-wide defines.
+    # Only for a dynamic Windows triplet: with a static simdjson the macro would make the
+    # compiler demand dllimport from an archive that has none.
     if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
-        set(_node_simdjson_dll_arg "-DVCPKG_SIMDJSON_USING_DLL=1")
+        set(ENV{NODE_PORT_SIMDJSON_USING_DLL} "1")
+    else()
+        unset(ENV{NODE_PORT_SIMDJSON_USING_DLL})
     endif()
 
     vcpkg_execute_required_process(
@@ -975,7 +981,6 @@ foreach(_node_cfg IN LISTS _node_configs)
             --with-intl=system-icu
             ${_node_shared_args}
             "-DVCPKG_SIMDUTF_INCLUDE=${CURRENT_INSTALLED_DIR}/include"
-            ${_node_simdjson_dll_arg}
         WORKING_DIRECTORY "${SOURCE_PATH}"
         LOGNAME "configure-${_node_cfg}"
     )
@@ -1170,11 +1175,12 @@ if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
                 list(SUBLIST _node_absl_undef 0 5 _node_absl_undef_head)
                 string(REPLACE ";" "\n  " _node_absl_undef_head "${_node_absl_undef_head}")
                 # Two questions, asked separately because they have different answers.
-                # 1) Did configure.py receive the names? config.gypi is what it wrote from
-                #    --shared-abseil-libname, so this is the honest record of the handover.
+                # 1) Did configure.py receive the names? configure.py writes config.gypi next
+                #    to itself, in the source root - not in out/<config>/, which is where the
+                #    first version of this looked and always reported "file-missing".
                 set(_node_absl_in_gypi "file-missing")
-                if(EXISTS "${_node_cfg_out_dir}/config.gypi")
-                    file(READ "${_node_cfg_out_dir}/config.gypi" _node_gypi_txt)
+                if(EXISTS "${SOURCE_PATH}/config.gypi")
+                    file(READ "${SOURCE_PATH}/config.gypi" _node_gypi_txt)
                     if(_node_gypi_txt MATCHES "-labsl_")
                         set(_node_absl_in_gypi "yes")
                     else()
@@ -1182,22 +1188,35 @@ if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
                     endif()
                     unset(_node_gypi_txt)
                 endif()
-                # 2) Did gyp put them on any link line, and in which file? Every ninja file,
-                #    not just build.ninja: a target's edges can live in its own obj/*.ninja,
-                #    and looking in one file would report a confident "no" for a link line
-                #    that is simply somewhere else.
-                set(_node_absl_in_ninja "no")
+                # 2) Did gyp put them on a link line, and where? Every ninja file, not just
+                #    build.ninja: gyp writes one per target, and the first version of this
+                #    read build.ninja alone and reported a confident "no" for flags that were
+                #    sitting in obj/cctest.ninja. The library's own edge is reported
+                #    separately, because "the flags exist somewhere" and "the library that
+                #    needs them has them" are different facts.
+                set(_node_absl_in_ninja "")
+                set(_node_absl_in_libnode "no libnode edge found")
                 file(GLOB_RECURSE _node_ninja_files "${_node_cfg_out_dir}/*.ninja")
                 foreach(_nf IN LISTS _node_ninja_files)
                     file(READ "${_nf}" _node_ninja_txt)
+                    file(RELATIVE_PATH _node_ninja_hit "${_node_cfg_out_dir}" "${_nf}")
                     if(_node_ninja_txt MATCHES "-labsl_")
-                        file(RELATIVE_PATH _node_ninja_hit "${_node_cfg_out_dir}" "${_nf}")
-                        set(_node_absl_in_ninja "yes, in ${_node_ninja_hit}")
-                        break()
+                        string(APPEND _node_absl_in_ninja " ${_node_ninja_hit}")
+                    endif()
+                    if(_node_ninja_hit MATCHES "libnode")
+                        if(_node_ninja_txt MATCHES "-labsl_")
+                            set(_node_absl_in_libnode "yes, in ${_node_ninja_hit}")
+                        else()
+                            set(_node_absl_in_libnode "no, ${_node_ninja_hit} has none")
+                        endif()
                     endif()
                 endforeach()
+                if(_node_absl_in_ninja STREQUAL "")
+                    set(_node_absl_in_ninja "no file carries them")
+                endif()
                 unset(_node_ninja_files)
                 unset(_node_ninja_txt)
+                unset(_node_ninja_hit)
                 message(FATAL_ERROR
                     "node port: ${_node_cfg} libnode has ${_node_absl_undef_count} undefined "
                     "abseil symbols, so nothing provides them at run time - abseil is "
@@ -1205,12 +1224,15 @@ if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
                     "First few:\n  ${_node_absl_undef_head}\n\n"
                     "abseil names in config.gypi (so configure.py did get them): "
                     "${_node_absl_in_gypi}\n"
-                    "-labsl_* anywhere in ${_node_cfg_out_dir}: ${_node_absl_in_ninja}\n\n"
+                    "-labsl_* in libnode's own edge: ${_node_absl_in_libnode}\n"
+                    "ninja files carrying -labsl_*:${_node_absl_in_ninja}\n\n"
                     "If config.gypi has them and no ninja file does, gyp dropped them; if "
-                    "neither has them, --shared-abseil-libname arrived empty; if a ninja "
-                    "file has them, they were on the link line and the archives were not "
-                    "pulled in (look at the order relative to the objects, and at the "
-                    "solink rule's -Wl,--whole-archive, which wraps only the inputs).")
+                    "neither has them, --shared-abseil-libname arrived empty; if another "
+                    "target has them but libnode's edge does not, the flags are not reaching "
+                    "the shared library; if libnode's edge has them, they were on the link "
+                    "line and the archives were not pulled in (look at the order relative to "
+                    "the objects, and at the solink rule's -Wl,--whole-archive, which wraps "
+                    "only the inputs, not the libraries).")
             endif()
             unset(_node_absl_undef)
             unset(_node_absl_undef_count)

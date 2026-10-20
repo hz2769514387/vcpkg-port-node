@@ -1,37 +1,27 @@
-diff --git a/common.gypi b/common.gypi
---- a/common.gypi
-+++ b/common.gypi
-@@ -18,6 +18,11 @@
-     'emulator%': [],
+diff --git a/configure.py b/configure.py
+--- a/configure.py
++++ b/configure.py
+@@ -2930,6 +2930,23 @@
+   'conditions': [],
+ }
  
-     'node_shared%': 'false',
-+    # gyp does not treat an undefined variable as empty in a condition - it stops with
-+    # "name 'X' is not defined while evaluating condition" - so a variable the port passes
-+    # only on some triplets needs a default here. '0' is the static side, which is what every
-+    # build gets unless the port says otherwise; see the simdjson condition further down.
-+    'VCPKG_SIMDJSON_USING_DLL%': '0',
-     'node_enable_v8debughelper%': 'false',
-     'node_enable_experimentals%': 'false',
-     'force_dynamic_crt%': 0,
-@@ -601,6 +606,21 @@
-       ['OS == "win" and node_shared_libuv=="false"', {
-         'defines': [ 'BUILDING_UV_SHARED=1' ],
-       }],
-+      # simdjson, same shape as the libuv line above but in the other direction: two of the
-+      # globals node_base references from simdjson.h are *data*
-+      # (internal::error_codes, internal::structural_or_whitespace_negated), and data needs
-+      # dllimport to be reachable through an import library. vcpkg's simdjson is a DLL on a
-+      # dynamic triplet, and its own CMake target hands consumers
-+      # SIMDJSON_USING_WINDOWS_DYNAMIC_LIBRARY=1 - a define gyp never sees, because the port
-+      # links the library by name rather than through that target. Without it the link of
-+      # node_mksnapshot fails with LNK2019 on exactly those two symbols and nothing else.
-+      #
-+      # The variable is passed by the port (`configure.py -DVCPKG_SIMDJSON_USING_DLL=1`) and
-+      # only for a dynamic Windows triplet, because with a static simdjson the macro would
-+      # make the compiler expect dllimport from an archive that has none.
-+      ['OS == "win" and VCPKG_SIMDJSON_USING_DLL=="1"', {
-+        'defines': [ 'SIMDJSON_USING_WINDOWS_DYNAMIC_LIBRARY=1' ],
-+      }],
-       [ 'OS in "linux freebsd openbsd solaris aix os400 openharmony zos"', {
-         'cflags': [ '-pthread' ],
-         'ldflags': [ '-pthread' ],
++# A dependency that is a DLL on Windows needs a define on the *consuming* side, and gyp is a
++# consumer that never sees the dependency's CMake INTERFACE.  vcpkg's simdjson target carries
++# SIMDJSON_USING_WINDOWS_DYNAMIC_LIBRARY=1 for exactly that reason; two of the globals node
++# references from simdjson.h are data (internal::error_codes,
++# internal::structural_or_whitespace_negated), and data has to be dllimport to be reachable
++# through an import library - without it the link of node_mksnapshot fails with LNK2019 on
++# those two symbols and nothing else.
++#
++# The vcpkg port sets NODE_PORT_SIMDJSON_USING_DLL only for a dynamic Windows triplet: with a
++# static simdjson the macro would make the compiler demand dllimport from an archive that has
++# none.  An environment variable rather than an extra -D: -D reaches gyp (it is forwarded
++# verbatim, which is how VCPKG_SIMDUTF_INCLUDE works), but a gyp condition reading it did not
++# produce the define, and this file's own output['defines'] is the channel the port already
++# uses for build-wide defines.
++if os.environ.get('NODE_PORT_SIMDJSON_USING_DLL'):
++  output['defines'] += ['SIMDJSON_USING_WINDOWS_DYNAMIC_LIBRARY=1']
++
+ # When the caller selects clang-cl (via CC/CXX), tell gyp to drive the build with
+ # it.  gyp's ninja generator recognises this exact spelling ("clang-cl" as the CC
+ # entry of make_global_settings) and swaps the MSVC cl.exe rule for clang-cl,
