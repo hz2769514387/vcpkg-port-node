@@ -101,9 +101,14 @@ test-runner-reporters | windows | NO_COLOR and FORCE_COLOR both present in the r
 #   * official binary (run 39342169919,
 #     the official-binary-baseline): test-process-execve-socket CRASHED (Signal: 10 / SIGBUS),
 #                                    test-process-execve-throws passed.
+#   * ours (run 39351011619):        test-process-execve-on-exit CRASHED (Signal: 10 / SIGBUS),
+#                                    the two entries above passing - a third member, on a run
+#                                    where nothing else in the suite failed.
 # The official binary's native arm64 macOS run has no execve failures at all, so this is the
-# Rosetta cell rather than the platform. Which member crashes is nondeterministic, so both
-# observed ones are listed; if a third member of the family crashes there, add it with the
-# same reasoning rather than treating it as a new defect.
+# Rosetta cell rather than the platform. Which member crashes is nondeterministic, so every
+# observed one is listed; if another member of the family crashes there, add it with the same
+# reasoning rather than treating it as a new defect. That is what the third line below is:
+# the family, not the individual case, is what Rosetta breaks.
 test-process-execve-throws | macos-x64 | SIGBUS under Rosetta 2; the official binary crashes the sibling execve-socket there instead (runs 39294243423 / 39342169919)
 test-process-execve-socket | macos-x64 | SIGBUS under Rosetta 2; the official binary fails this very case on the same image (run 39342169919)
+test-process-execve-on-exit | macos-x64 | SIGBUS under Rosetta 2, a third member of the same family; added under the standing rule above (run 39351011619)
