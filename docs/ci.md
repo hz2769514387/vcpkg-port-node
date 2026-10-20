@@ -110,12 +110,32 @@ the cause:
   x86_64 binaries. GitHub's arm64 images do not guarantee Rosetta, so the capability is probed
   through `arch -x86_64 /usr/bin/true` and installed if missing - otherwise the failure reads
   "Bad CPU type in executable".
-- **Retrying only download failures.** vcpkg has no retry of its own for a source tarball, and
-  one timeout from an upstream mirror costs the whole leg. The configure step retries, but only
-  when the failure looks like a download problem *and* carries no build error: matching the word
-  "download" alone is not enough, because the log quotes absolute paths such as
-  `.../vcpkg/downloads/<archive>`, so a plain build failure matches it too and would then be
-  retried four times at full wall-clock cost.
+- **Retrying only download failures.** vcpkg has no retry of its own for a source tarball or for
+  its own git fetch, and one timeout from an upstream mirror costs the whole leg. The configure
+  step retries, but only when the failure is a download problem, decided by two signature lists:
+  a *positive* download list (`Download failed`, `Couldn't resolve host name`, `RPC failed`,
+  `HTTP 5xx`, `curl: (n)`, ...) and a *positive* compiler-and-linker list (`ninja: build
+  stopped`, `error C<number>`, `undefined reference`, `LNK<number>`, ...).
+  Matching on "download" is not enough on its own, because the log quotes absolute paths such as
+  `.../vcpkg/downloads/<archive>`, so a plain build failure matches it too - and a bare
+  `Timeout` is just as bad, since a configure log on this port legitimately contains
+  `absl_kernel_timeout_internal.pc`. The download list therefore holds download-*phase* strings
+  only.
+  The list that has to be positive is the second one. Every vcpkg failure - download included -
+  ends with `CMake Error at .../vcpkg_execute_required_process.cmake` and `building <port>
+  failed with: BUILD_FAILED`, so the first version of this step, which vetoed on exactly those
+  two strings, vetoed every download failure as well and could never retry anything. It was
+  measured twice before it was corrected: a runner whose DNS was down (`curl 6`, "Couldn't
+  resolve host name") on the macos-x64 leg, and an `HTTP 503` from `chromium.googlesource.com`
+  in the zlib overlay's git fetch on the macos-x64 Debug leg. Both died on their first attempt
+  with "not a download problem".
+- **No empty array expansion under `set -u`.** macOS still ships bash 3.2 as `/bin/bash`, and
+  there expanding an *empty* array under `set -u` aborts with `<name>[@]: unbound variable`
+  (legal from bash 4.4). `suite-configs` is legitimately empty on the Debug and matrix legs, so
+  the step tests membership against the comma-separated string instead of looping over an
+  array - one form that behaves the same on every bash. The first version looped over the array
+  and failed every such leg on macOS and only on macOS, which is a hard failure to attribute
+  because the same leg passes in `ci.yml`, where the suite runs.
 - **The Rust standard library for the target architecture.** The port builds Node.js's Rust
   crates with `cargo --target <triple>`, and a rustup toolchain ships the standard library for
   the architecture it was installed for - which on an x64-osx leg is not the one the triplet

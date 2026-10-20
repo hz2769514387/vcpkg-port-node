@@ -301,10 +301,25 @@ jobs:
           FIRST_CONFIG="${CONFIG%%,*}"
           # This is also what builds the port: vcpkg runs in manifest mode during configure,
           # and it downloads every dependency's sources while doing so. vcpkg has no retry of
-          # its own for a source tarball, and one timeout from an upstream mirror costs the
-          # whole leg, so a failed attempt is retried - but only when the failure looks like a
-          # download problem. Anything else is a real defect and is left to fail immediately,
-          # because retrying it would only spend the wall-clock twice.
+          # its own for a source tarball or for its own git fetch, and one DNS hiccup or one
+          # HTTP 503 from an upstream mirror costs the whole leg, so a failed attempt is
+          # retried - but only when the failure *is* a download problem.
+          #
+          # Two signature lists decide that, and the second one is the correction that
+          # matters: every vcpkg failure, download included, ends with "CMake Error at
+          # .../vcpkg_execute_required_process.cmake" and "building <port> failed with:
+          # BUILD_FAILED". Vetoing on those - which this step used to do, together with
+          # matching the bare words "timed out"/"Timeout" - vetoed *every* download failure
+          # too, so the retry loop could never fire: measured twice, once on a runner whose
+          # DNS was down (curl 6, "Couldn't resolve host name") and once on a 503 from
+          # chromium.googlesource.com in the zlib overlay's git fetch. Both legs died on
+          # their first attempt with "not a download problem".
+          #
+          # So the veto is now a positive list of *compiler and linker* symptoms: those mean
+          # the failure is in what we built, not in the network, and repeating them only
+          # spends the wall-clock twice.
+          download_re='Could not resolve host|Couldn.t resolve host|curl operation failed|Download failed|Failed to download|Connection reset|Connection refused|Could not connect|RPC failed|HTTP 5[0-9][0-9]|curl: \([0-9]+\)|remote end hung up|early EOF|SSL certificate problem'
+          defect_re='ninja: build stopped|ninja: error|undefined reference|compilation terminated|error C[0-9]{4}|fatal error|LNK[0-9]{4}|cannot find -l|ld returned'
           log="$RUNNER_TEMP/ci-logs/configure.log"
           attempt_no=0
           for attempt in 1 2 3 4; do
@@ -315,9 +330,8 @@ jobs:
               echo "configure succeeded on attempt $attempt"
               exit 0
             fi
-            if grep -qiE "Failed to download|Could not resolve host|Connection reset|Connection refused|Could not connect|timed out|Timeout|curl: \(" "$log" \
-               && ! grep -qE "CMake Error|BUILD_FAILED" "$log"; then
-              echo "::warning::attempt $attempt failed with what looks like a download error; retrying in $((attempt * 10))s"
+            if grep -qiE "$download_re" "$log" && ! grep -qE "$defect_re" "$log"; then
+              echo "::warning::attempt $attempt failed on a download error ($(grep -oiE "$download_re" "$log" | head -n 1)); retrying in $((attempt * 10))s"
               sleep $((attempt * 10))
             else
               echo "::error::attempt $attempt failed for a reason that is not a download problem; not retrying"
@@ -436,13 +450,19 @@ jobs:
           # and Debug where that is built) and not on every configuration a leg
           # builds. Everything else - the identity, embedding, symbol and zlib
           # cases - runs everywhere.
+          #
+          # suite-configs is empty on the Debug and matrix legs, and that used to abort this
+          # step on macOS alone with "suitecfgs[@]: unbound variable": macOS still ships bash
+          # 3.2 as /bin/bash, where expanding an *empty* array under `set -u` is an error
+          # (bash 4.4 made it legal). Membership is therefore tested against the string, which
+          # needs no array and behaves the same on every bash.
+          : "${CONFIGS:=Release}"
           IFS=',' read -r -a cfgs <<< "$CONFIGS"
-          IFS=',' read -r -a suitecfgs <<< "$SUITE_CONFIGS"
           for cfg in "${cfgs[@]}"; do
             opts="-LE node-suite"
-            for s in "${suitecfgs[@]}"; do
-              if [ "$s" = "$cfg" ]; then opts=""; fi
-            done
+            case ",${SUITE_CONFIGS:-}," in
+              *",$cfg,"*) opts="" ;;
+            esac
             echo "::group::ctest $cfg ($opts)"
             # -C is only meaningful for multi-config generators (Visual Studio); the
             # single-config ones ignore it.
