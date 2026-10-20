@@ -16,6 +16,11 @@ requests, issues, wiki pages, releases — is public and permanent. Therefore:
   upstream issues or pull requests, no pushes to other repositories — unless the
   maintainer explicitly asks for it in the current session.
 - Never commit credentials, tokens, cookies, or private keys, not even "temporarily".
+  Enforced twice: the pre-commit hook (`.githooks/`, enabled once per clone with
+  `git config core.hooksPath .githooks`) scans the staged lines, and lint.yml runs
+  `tools/check_secrets.py --all` over the whole history on every push. A value the
+  scanner flags but that is genuinely not a secret gets reworded (env read,
+  placeholder) rather than excluded.
 - Respect `robots.txt`, upstream licenses, and upstream NOTICE files when vendoring or
   patching code.
 - Silence is not permission. If an action is not clearly sanctioned by this file, by the

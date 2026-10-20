@@ -34,6 +34,12 @@ jobs:
       - name: Repository hygiene
         run: python3 tools/check_repo.py
 
+      - name: No credentials in the history
+        # The same scanner the pre-commit hook runs on staged lines, here over
+        # every blob reachable from any ref. A hook is opt-in per clone, so
+        # this is what makes the rule hold for the repository itself.
+        run: python3 tools/check_secrets.py --all
+
       - name: Every workflow script still parses as shell
         # bash -n on each `run:` block. A workflow file parses as YAML and is
         # accepted by GitHub even when the script inside it is not valid shell:

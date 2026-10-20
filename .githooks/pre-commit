@@ -1,0 +1,12 @@
+#!/bin/sh
+# Blocks a commit whose staged lines look like credentials. The scanner and its
+# reasoning live in tools/check_secrets.py; this hook only invokes it.
+#
+# The hook is opt-in by clone - git runs neither this nor anything else unless
+# the clone says so:
+#
+#   git config core.hooksPath .githooks
+#
+# lint.yml runs the same scanner over the whole history, so a clone that never
+# enables the hook is still caught, just later and more publicly.
+python tools/check_secrets.py --staged
