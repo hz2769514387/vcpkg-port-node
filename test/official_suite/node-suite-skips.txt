@@ -89,3 +89,21 @@ test-snapshot-typescript | windows | tsc emits CRLF on Windows, the fixture comp
 # port-built executable; re-check against the official binary before trusting this entry,
 # because an environment difference could just as easily be ours.
 test-runner-reporters | windows | NO_COLOR and FORCE_COLOR both present in the run environment
+
+# -- macOS x64 (Rosetta 2) ----------------------------------------------------
+# The port's x64 macOS leg builds x64 and executes it on arm64 hardware under Rosetta 2,
+# and the process.execve family is unstable there in a way that is not ours to fix: the
+# crash lands on a *different member of the same family* depending on the binary.
+#
+# Evidence, same suite, same runner image, both binaries:
+#   * ours (run 39294243423):        test-process-execve-throws CRASHED (Signal: 10 / SIGBUS),
+#                                    test-process-execve-socket passed;
+#   * official binary (run 39342169919,
+#     the official-binary-baseline): test-process-execve-socket CRASHED (Signal: 10 / SIGBUS),
+#                                    test-process-execve-throws passed.
+# The official binary's native arm64 macOS run has no execve failures at all, so this is the
+# Rosetta cell rather than the platform. Which member crashes is nondeterministic, so both
+# observed ones are listed; if a third member of the family crashes there, add it with the
+# same reasoning rather than treating it as a new defect.
+test-process-execve-throws | macos-x64 | SIGBUS under Rosetta 2; the official binary crashes the sibling execve-socket there instead (runs 39294243423 / 39342169919)
+test-process-execve-socket | macos-x64 | SIGBUS under Rosetta 2; the official binary fails this very case on the same image (run 39342169919)
