@@ -1,7 +1,19 @@
 diff --git a/common.gypi b/common.gypi
 --- a/common.gypi
 +++ b/common.gypi
-@@ -601,6 +601,21 @@
+@@ -18,6 +18,11 @@
+     'emulator%': [],
+ 
+     'node_shared%': 'false',
++    # gyp does not treat an undefined variable as empty in a condition - it stops with
++    # "name 'X' is not defined while evaluating condition" - so a variable the port passes
++    # only on some triplets needs a default here. '0' is the static side, which is what every
++    # build gets unless the port says otherwise; see the simdjson condition further down.
++    'VCPKG_SIMDJSON_USING_DLL%': '0',
+     'node_enable_v8debughelper%': 'false',
+     'node_enable_experimentals%': 'false',
+     'force_dynamic_crt%': 0,
+@@ -601,6 +606,21 @@
        ['OS == "win" and node_shared_libuv=="false"', {
          'defines': [ 'BUILDING_UV_SHARED=1' ],
        }],
