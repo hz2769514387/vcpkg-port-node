@@ -98,9 +98,22 @@ set_tests_properties(embedding.thread_loop PROPERTIES
 # The UI-toolkit arrangement: node::SpinEventLoop hands the loop to the runtime, so a host
 # with its own main loop drives uv_run(UV_RUN_NOWAIT) instead. The interesting assertion is
 # that the script's timer fired *inside* one of the host's iterations.
+#
+# libuv is linked explicitly here, and that is the honest form of the promise rather than a
+# workaround: a consumer that *calls* one of node's dependencies has to link it, exactly as
+# with any vcpkg package. With a static libnode the exported config already carries it (the
+# archives cannot resolve each other on their own), so this is a no-op there; with a shared
+# libnode the dependency is a separate .dylib/.so/DLL, and neither macOS's two-level
+# namespace nor Windows resolves a symbol through a library's own dependency - the dylib
+# only has to be findable at run time, which libnode's rpath already guarantees. Measured:
+# without this line, embedding.host_loop failed on arm64-osx-dynamic with
+# "Undefined symbols for architecture arm64: _uv_run, _uv_sleep".
+find_package(libuv CONFIG REQUIRED)
 add_executable(host_loop host_loop/main.cpp)
 target_compile_features(host_loop PRIVATE cxx_std_20)
-target_link_libraries(host_loop PRIVATE unofficial::node::node Threads::Threads)
+target_link_libraries(host_loop PRIVATE unofficial::node::node
+  $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>
+  Threads::Threads)
 
 add_test(NAME embedding.host_loop
   COMMAND host_loop "${_embedding}/host_loop/host_loop.js")
