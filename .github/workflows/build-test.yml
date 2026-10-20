@@ -73,10 +73,10 @@ on:
         type: boolean
         default: false
       install-timeout-minutes:
-        description: "Job timeout for the install job of a split leg."
+        description: "Job timeout for the install job of a split leg. 360 is GitHub's ceiling for any job."
         required: false
         type: number
-        default: 350
+        default: 360
       timeout-minutes:
         description: Job timeout. A dual-configuration (Debug) leg on a slow runner needs more than the default.
         required: false

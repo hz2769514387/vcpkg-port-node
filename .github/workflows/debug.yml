@@ -78,6 +78,11 @@ jobs:
       consumer-configs: Debug
       suite-configs: ""
       split-install: true
+      # Measured 2026-10-21 (run 39448354844): the port alone - Release and Debug - ran from
+      # 15:43 to the 350-minute cut at 21:18, Release finished (1824/1824) and Debug did not.
+      # So a Linux Debug install needs more than one job's worth of wall clock even with the
+      # leg split, and 360 below is only the ceiling, not a budget that has been shown to fit.
+      install-timeout-minutes: 360
       timeout-minutes: 330
 
   linux-arm64:
@@ -90,6 +95,9 @@ jobs:
       consumer-configs: Debug
       suite-configs: ""
       split-install: true
+      # Same as the x64 leg above: the measurement is there, and 360 is the ceiling rather
+      # than a budget known to fit.
+      install-timeout-minutes: 360
       timeout-minutes: 330
 
   macos:

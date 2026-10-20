@@ -34,12 +34,19 @@ job is one job; a leg whose *install alone* is close to the ceiling runs as two,
 
 A dual triplet builds Node.js twice, and on a four-core runner that install is around five
 hours by itself - so five hours of install plus a consumer plus tests does not fit one
-budget, while five hours fits one and the rest fits another. The artifact is a few gigabytes,
-which is why this is not the default: a release-only install is minutes and moving it would
-cost more than repeating it. The two jobs share the step bodies through
-`.github/actions/prepare` and `.github/actions/configure` rather than through a copy - the
-install job's configure is what builds the port, and the consumer job's configure runs again
-only to find the installed tree already current.
+budget, while five hours fits one and the rest fits another. **The split is a second budget,
+not a cure, and it has now been measured against one** (2026-10-21, run 39448354844): the
+Linux x64 Debug install job ran its full 350 minutes and was still building the Debug half of
+the port - it started node at 15:43, Release finished (1824/1824 targets), the job was cut at
+21:18. `install-timeout-minutes` is 360 now, which is GitHub's ceiling for *any* job rather
+than a budget that has been shown to fit: the Debug build of Node.js under gcc on a four-core
+runner is the whole cost, and nothing here halves it.
+
+The artifact is a few gigabytes, which is why this is not the default: a release-only install
+is minutes and moving it would cost more than repeating it. The two jobs share the step bodies
+through `.github/actions/prepare` and `.github/actions/configure` rather than through a copy -
+the install job's configure is what builds the port, and the consumer job's configure runs
+again only to find the installed tree already current.
 
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
 place the build steps exist. They differ in which `preset` and `triplet` they pass, in which
