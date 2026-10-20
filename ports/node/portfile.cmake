@@ -116,6 +116,7 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0020-crates-debug-rust-target.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0021-test-py-print-exit-code.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0022-uv-shared-define-only-when-libuv-is-bundled.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0023-simdjson-dll-import-define.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
@@ -950,6 +951,20 @@ foreach(_node_cfg IN LISTS _node_configs)
         set(_node_shared_build_arg "")
     endif()
 
+    # simdjson as a DLL needs a define on the consumer side, and gyp is a consumer that never
+    # sees it: vcpkg's simdjson target carries SIMDJSON_USING_WINDOWS_DYNAMIC_LIBRARY=1 on its
+    # INTERFACE, but the port links the library by name, so nothing propagates it. Two of the
+    # globals node_base references from simdjson.h are *data*, and data has to be dllimport to
+    # be reachable through an import library - measured as LNK2019 on
+    # internal::error_codes and internal::structural_or_whitespace_negated, at
+    # node_mksnapshot, and only on a dynamic Windows triplet. Patch 0023 turns the variable
+    # into the define; it is set only here, because with a static simdjson the macro would
+    # make the compiler demand dllimport from an archive that has none.
+    set(_node_simdjson_dll_arg "")
+    if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+        set(_node_simdjson_dll_arg "-DVCPKG_SIMDJSON_USING_DLL=1")
+    endif()
+
     vcpkg_execute_required_process(
         COMMAND "${PYTHON3}" configure.py
             --ninja
@@ -960,6 +975,7 @@ foreach(_node_cfg IN LISTS _node_configs)
             --with-intl=system-icu
             ${_node_shared_args}
             "-DVCPKG_SIMDUTF_INCLUDE=${CURRENT_INSTALLED_DIR}/include"
+            ${_node_simdjson_dll_arg}
         WORKING_DIRECTORY "${SOURCE_PATH}"
         LOGNAME "configure-${_node_cfg}"
     )
@@ -1241,6 +1257,20 @@ foreach(_node_cfg IN LISTS _node_configs)
         # Nothing else is a deliverable: the component archives are inputs the
         # shared library already absorbed, and linking them again from a
         # consumer would put a second copy of every symbol into the process.
+        #
+        # The library file itself is still what this port installed, and
+        # node_INSTALLED_LIBRARIES has to say so: it is what the symbol audit in the
+        # test project uses to tell this port's own files from everything else in
+        # <prefix>/lib, and with an empty list that audit falls back to scanning the
+        # whole directory - which in a dynamic triplet holds every dependency's static
+        # archive, and reports the dependency against itself.
+        if(_node_cfg STREQUAL "Release")
+            if(VCPKG_TARGET_IS_WINDOWS)
+                set(_node_installed_libs "libnode.dll.lib")
+            else()
+                set(_node_installed_libs "${_node_shlib_name}")
+            endif()
+        endif()
         unset(_node_shlib)
         unset(_node_implib)
         unset(_node_out_dir)
@@ -1476,10 +1506,20 @@ if(NOT _node_module_version OR NOT _node_napi_version)
         "regexes in ports/node/portfile.cmake to match the new headers.")
 endif()
 
+# Which artifact the consumer gets, for the test project's decisions that are about linkage
+# rather than about versions: the symbol audit and one suite case read it. Stated rather than
+# inferred from the file names, because both linkages install a file called "libnode*".
+if(_node_shared_build)
+    set(_node_linkage_str "dynamic")
+else()
+    set(_node_linkage_str "static")
+endif()
+
 string(APPEND _cfg
     "get_filename_component(_node_prefix \"\${CMAKE_CURRENT_LIST_DIR}/../..\" ABSOLUTE)\n"
     "set(_node_lib \"\${_node_prefix}/lib\")\n"
     "set(node_INSTALLED_LIBRARIES \"${_node_installed_libs}\")\n"
+    "set(node_LIBRARY_LINKAGE \"${_node_linkage_str}\")\n"
     "set(node_MODULE_VERSION \"${_node_module_version}\")\n"
     "set(node_NAPI_VERSION \"${_node_napi_version}\")\n")
 

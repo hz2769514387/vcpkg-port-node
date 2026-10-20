@@ -3,7 +3,7 @@
     "version": "20261018",
     "released": false,
     "manifest_version": "26.12.0",
-    "manifest_port_version": 7
+    "manifest_port_version": 8
   },
   "node": {
     "version": "26.12.0",

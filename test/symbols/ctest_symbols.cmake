@@ -79,6 +79,25 @@ if(NOT IS_DIRECTORY "${_node_port_packages}")
   return()
 endif()
 
+# The audit compares *archives*, and a shared libnode is one library that deliberately
+# contains the static-only dependencies: off Windows abseil, highway and simdutf have no
+# shared form, so they are compiled into libnode by design, and the "duplicate" between
+# libnode.so and libabsl_base.a is the intent rather than a finding. The archives next to
+# libnode in <prefix>/lib are never linked into the consumer's process at all, so the
+# question the audit asks does not describe this linkage. Measured on arm64-osx-dynamic
+# (run 39424273491): 93 "node libraries" and a wall of abseil duplicates, all of them
+# dependencies sitting untouched in the install prefix.
+#
+# What replaces it for a shared build: the port refuses to finish if libnode has undefined
+# abseil symbols (ports/node/portfile.cmake), which is the property this audit exists to
+# protect. Recorded in issue #11 as a coverage note, not as a passing leg.
+if(node_LIBRARY_LINKAGE STREQUAL "dynamic")
+  message(STATUS "symbol audit: skipped for a shared libnode (one library, static-only "
+                 "dependencies embedded by design); the port's own undefined-symbol check "
+                 "covers the same property")
+  return()
+endif()
+
 add_test(NAME symbols-no-duplicate-strong
          COMMAND node_embedder "${_node_port_symbol_audit}"
                  --node-lib-dir "${_node_port_libdir}"

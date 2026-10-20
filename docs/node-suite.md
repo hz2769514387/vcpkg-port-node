@@ -95,3 +95,10 @@ consumer process contains exactly one copy of each externalized library — the 
 duplicate static definitions silently, so that needs a symbol audit instead (tracked
 separately). It also does not prove anything about platforms whose leg has never completed a
 build.
+
+One case is skipped by linkage rather than by platform, and the configuration decides it
+rather than a skip list: `abort/test-abort-backtrace` requires a native stack frame to name
+the executable, which is true when node's code is linked *into* the executable (a static
+libnode) and cannot be true when it lives in `libnode.<module>.dylib` / `.so` — the trace is
+complete and symbolised, it simply names the library. `node_LIBRARY_LINKAGE`, exported by the
+port's CMake config, is what `test/official_suite` reads to decide.

@@ -206,6 +206,20 @@ if(NODE_TEST_SKIP)
   list(APPEND _skips ${_extra})
 endif()
 
+# A shared libnode changes what "the binary" means to a stack trace, and one case asserts
+# exactly that. abort/test-abort-backtrace requires some frame of the native trace to name
+# the executable, which holds when node's code is linked into the executable - a static
+# libnode. With a shared one every node frame is attributed to libnode.<module>.dylib /
+# .so, so the trace is complete and symbolised but the assertion cannot hold. Measured on
+# arm64-osx-dynamic (run 39424273491). This is a property of the linkage, not of the
+# platform, so it is decided here rather than in a per-platform skip list.
+if(node_LIBRARY_LINKAGE STREQUAL "dynamic")
+  message(STATUS
+    "Node.js test suite: shared libnode, skipping test-abort-backtrace (the native trace "
+    "attributes node frames to the library, and the case requires the executable name)")
+  list(APPEND _skips "test-abort-backtrace")
+endif()
+
 list(REMOVE_DUPLICATES _skips)
 list(JOIN _skips "," _skips_csv)
 

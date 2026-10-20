@@ -1,0 +1,25 @@
+diff --git a/common.gypi b/common.gypi
+--- a/common.gypi
++++ b/common.gypi
+@@ -601,6 +601,21 @@
+       ['OS == "win" and node_shared_libuv=="false"', {
+         'defines': [ 'BUILDING_UV_SHARED=1' ],
+       }],
++      # simdjson, same shape as the libuv line above but in the other direction: two of the
++      # globals node_base references from simdjson.h are *data*
++      # (internal::error_codes, internal::structural_or_whitespace_negated), and data needs
++      # dllimport to be reachable through an import library. vcpkg's simdjson is a DLL on a
++      # dynamic triplet, and its own CMake target hands consumers
++      # SIMDJSON_USING_WINDOWS_DYNAMIC_LIBRARY=1 - a define gyp never sees, because the port
++      # links the library by name rather than through that target. Without it the link of
++      # node_mksnapshot fails with LNK2019 on exactly those two symbols and nothing else.
++      #
++      # The variable is passed by the port (`configure.py -DVCPKG_SIMDJSON_USING_DLL=1`) and
++      # only for a dynamic Windows triplet, because with a static simdjson the macro would
++      # make the compiler expect dllimport from an archive that has none.
++      ['OS == "win" and VCPKG_SIMDJSON_USING_DLL=="1"', {
++        'defines': [ 'SIMDJSON_USING_WINDOWS_DYNAMIC_LIBRARY=1' ],
++      }],
+       [ 'OS in "linux freebsd openbsd solaris aix os400 openharmony zos"', {
+         'cflags': [ '-pthread' ],
+         'ldflags': [ '-pthread' ],
