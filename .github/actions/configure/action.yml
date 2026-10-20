@@ -1,0 +1,81 @@
+name: Configure the consumer test project
+description: >
+  Runs the first configure of test/, which is what installs the port (vcpkg runs in manifest
+  mode during configure, and downloads and builds every dependency while doing so). Retries a
+  failed attempt only when the failure is a download problem - see the comment in the body for
+  why the retry gate has to be a positive list of compiler symptoms.
+
+  An action because two jobs run it: the install job of a split leg, and the consumer job,
+  where it is a no-op that costs a couple of seconds because the install is already there.
+
+inputs:
+  preset:
+    description: CMake preset name.
+    required: true
+  triplet:
+    description: vcpkg triplet to install with, which decides the build configuration.
+    required: true
+  config:
+    description: First consumer configuration; its value seeds CMAKE_BUILD_TYPE.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Configure the consumer test project
+      shell: bash
+      working-directory: test
+      env:
+        PRESET: ${{ inputs.preset }}
+        TRIPLET: ${{ inputs.triplet }}
+        CONFIG: ${{ inputs.consumer-configs }}
+      run: |
+        set -euo pipefail
+        # CMAKE_BUILD_TYPE is the *first* configuration in the list. On a
+        # multi-config generator (Visual Studio) it is not what decides the
+        # build - every configuration is available in one tree - and on a
+        # single-config one the per-configuration loop below reconfigures
+        # before it builds. Either way this configure is the one that builds
+        # the port, which is the expensive part, and it happens once.
+        FIRST_CONFIG="${CONFIG%%,*}"
+        # This is also what builds the port: vcpkg runs in manifest mode during configure,
+        # and it downloads every dependency's sources while doing so. vcpkg has no retry of
+        # its own for a source tarball or for its own git fetch, and one DNS hiccup or one
+        # HTTP 503 from an upstream mirror costs the whole leg, so a failed attempt is
+        # retried - but only when the failure *is* a download problem.
+        #
+        # Two signature lists decide that, and the second one is the correction that
+        # matters: every vcpkg failure, download included, ends with "CMake Error at
+        # .../vcpkg_execute_required_process.cmake" and "building <port> failed with:
+        # BUILD_FAILED". Vetoing on those - which this step used to do, together with
+        # matching the bare words "timed out"/"Timeout" - vetoed *every* download failure
+        # too, so the retry loop could never fire: measured twice, once on a runner whose
+        # DNS was down (curl 6, "Couldn't resolve host name") and once on a 503 from
+        # chromium.googlesource.com in the zlib overlay's git fetch. Both legs died on
+        # their first attempt with "not a download problem".
+        #
+        # So the veto is now a positive list of *compiler and linker* symptoms: those mean
+        # the failure is in what we built, not in the network, and repeating them only
+        # spends the wall-clock twice.
+        download_re='Could not resolve host|Couldn.t resolve host|curl operation failed|Download failed|Failed to download|Connection reset|Connection refused|Could not connect|RPC failed|HTTP 5[0-9][0-9]|curl: \([0-9]+\)|remote end hung up|early EOF|SSL certificate problem'
+        defect_re='ninja: build stopped|ninja: error|undefined reference|compilation terminated|error C[0-9]{4}|fatal error|LNK[0-9]{4}|cannot find -l|ld returned'
+        log="$RUNNER_TEMP/ci-logs/configure.log"
+        attempt_no=0
+        for attempt in 1 2 3 4; do
+          attempt_no="$attempt"
+          if cmake --preset "$PRESET" \
+               -DVCPKG_TARGET_TRIPLET="$TRIPLET" \
+               -DCMAKE_BUILD_TYPE="$FIRST_CONFIG" 2>&1 | tee "$log"; then
+            echo "configure succeeded on attempt $attempt"
+            exit 0
+          fi
+          if grep -qiE "$download_re" "$log" && ! grep -qE "$defect_re" "$log"; then
+            echo "::warning::attempt $attempt failed on a download error ($(grep -oiE "$download_re" "$log" | head -n 1)); retrying in $((attempt * 10))s"
+            sleep $((attempt * 10))
+          else
+            echo "::error::attempt $attempt failed for a reason that is not a download problem; not retrying"
+            exit 1
+          fi
+        done
+        echo "::error::configure still failing after $attempt_no attempts"
+        exit 1

@@ -12,6 +12,20 @@ name: Build and test the node port
 # included - those are the stock settings plus `VCPKG_BUILD_TYPE release`, and that one line
 # is what keeps a leg from building Release *and* Debug, which would double its wall-clock
 # time. This repository carries no triplet file of its own.
+#
+# A leg runs either as one job or as two, because a dual-triplet install can exceed one job's
+# six-hour ceiling while neither half does:
+#
+#   * `split-install: false` (the default) - one job does everything. A release-only install
+#     is minutes, so splitting it would only add an artifact transfer.
+#   * `split-install: true` - an `install` job builds the port and uploads the installed
+#     tree, and a `build` job downloads it, builds the consumer and runs the tests. Used by
+#     the Linux Debug legs, whose dual-triplet install alone is around five hours. The tree
+#     is a few gigabytes, which is why this is not the default.
+#
+# The setup and the configure step live in composite actions (.github/actions/) instead of
+# inline, because both jobs run them and a copy would drift. Their bodies are the same text
+# that used to be here.
 
 on:
   workflow_call:
@@ -49,10 +63,20 @@ on:
         type: string
         default: 9e593bb18ea69cc5095e012465dcd675a822ed0d
       experimental:
-        description: "Mark the platform as unverified: failures are reported but do not fail the run."
+        description: "Mark the platform as unverified: a failing consumer build or test does not fail the run."
         required: false
         type: boolean
         default: false
+      split-install:
+        description: "Build the port in its own job and hand the installed tree to a second job, for a leg whose install alone is close to the six-hour ceiling."
+        required: false
+        type: boolean
+        default: false
+      install-timeout-minutes:
+        description: "Job timeout for the install job of a split leg."
+        required: false
+        type: number
+        default: 350
       timeout-minutes:
         description: Job timeout. A dual-configuration (Debug) leg on a slow runner needs more than the default.
         required: false
@@ -63,7 +87,138 @@ permissions:
   contents: read
 
 jobs:
+  install:
+    # The expensive half of a split leg - a dual triplet builds Node.js twice - and the whole
+    # reason the split exists, since the six-hour limit applies per job, not per leg.
+    #
+    # Deliberately *not* continue-on-error, whatever `experimental` says: a leg whose install
+    # failed has nothing to consume, and letting this job report success would hand an empty
+    # or stale tree to the consumer job and turn a clear failure into a confusing one.
+    if: ${{ inputs.split-install }}
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.install-timeout-minutes }}
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      # The GitHub Actions binary cache provider (x-gha) was removed from vcpkg, and
+      # `clear;x-gha,readwrite` therefore silently disables caching entirely - it prints a
+      # warning and builds every dependency from source on every run. The supported
+      # replacement without new secrets is a plain files provider, persisted by the cache
+      # step inside the prepare action.
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-archives,readwrite
+      VCPKG_MAX_CONCURRENCY: 3
+      # English diagnostics from MSVC's tools: gyp decodes their output as UTF-8, and a
+      # localized message turns a real link failure into a UnicodeDecodeError (docs/build.md).
+      VSLANG: 1033
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the leg
+        uses: ./.github/actions/prepare
+        with:
+          runner: ${{ inputs.runner }}
+          preset: ${{ inputs.preset }}
+          triplet: ${{ inputs.triplet }}
+          consumer-configs: ${{ inputs.consumer-configs }}
+          suite-configs: ${{ inputs.suite-configs }}
+          vcpkg-commit: ${{ inputs.vcpkg-commit }}
+          # Evaluated here, after the checkout, and handed in: hashFiles is not something to
+          # rely on inside a composite action.
+          manifest-hash: ${{ hashFiles('ports/**', 'test/vcpkg.json') }}
+      - name: Configure the consumer test project
+        uses: ./.github/actions/configure
+        with:
+          preset: ${{ inputs.preset }}
+          triplet: ${{ inputs.triplet }}
+          config: ${{ inputs.consumer-configs }}
+      - name: Summarize the run
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          {
+            echo "## ${{ inputs.triplet }} (consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
+            echo ""
+            echo '```'
+            # The pass/fail counts go first: they are the whole answer to "did this leg work",
+            # and they are easy to miss at the end of a few thousand lines.
+            # One log per configuration, so the counts are read out of all of
+            # them; a leg that builds three configurations and reports one is
+            # not reporting what it did.
+            for f in "$RUNNER_TEMP"/ci-logs/ctest-*.log; do
+              [ -f "$f" ] || continue
+              echo "-- $(basename "$f")"
+              grep -E "tests passed|tests failed|Total Test time" "$f" | head -n 5 || true
+              awk '/The following tests FAILED/{found=1} found' "$f" | head -n 40 || true
+            done
+            echo '```'
+            # The first error, from whichever stream failed first: the port's own diagnostics
+            # live in vcpkg's buildtrees, the consumer's in the tee'd logs.
+            echo ""
+            echo '### First error'
+            echo '```'
+            {
+              grep -m1 -hE "error|Error" "$RUNNER_TEMP/ci-logs"/*.log 2>/dev/null || true
+              for f in $(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 100); do
+                if grep -m1 -hE "error:|CMake Error|BUILD_FAILED" "$f" 2>/dev/null; then break; fi
+              done
+            } | head -n 15
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Collect the logs
+        if: always()
+        shell: bash
+        run: |
+          set -uo pipefail
+          mkdir -p "$RUNNER_TEMP/ci-logs/vcpkg"
+          # The port's own stdout and stderr are separate files in vcpkg's buildtrees
+          # (build-<config>-out.log / -err.log), and the manifest log embeds only one of them.
+          # Without them a diagnostic printed to the other stream is lost.
+          while IFS= read -r f; do
+            cp "$f" "$RUNNER_TEMP/ci-logs/vcpkg/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
+          done < <(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 200)
+          # The consumer build's own CMake logs, which are not under buildtrees.
+          while IFS= read -r f; do
+            cp "$f" "$RUNNER_TEMP/ci-logs/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
+          done < <(find test/build -name '*.log' -type f 2>/dev/null | head -n 200)
+          du -sh "$RUNNER_TEMP/ci-logs" || true
+          ls -la "$RUNNER_TEMP/ci-logs" || true
+
+      - name: Upload the installed tree
+        uses: actions/upload-artifact@v4
+        with:
+          # Not `logs-part-*`: that pattern is what logs.yml merges into the run's log
+          # archive, and a few gigabytes of libraries do not belong in a log archive.
+          name: port-install-${{ inputs.triplet }}
+          # Only the installed tree: the rest of the build directory is CMake state that the
+          # consumer job recreates in seconds, and it would be as large as the tree itself.
+          path: test/build/${{ inputs.preset }}/vcpkg_installed/**
+          include-hidden-files: true
+          if-no-files-found: error
+          # Compressed, not stored. A dual Debug install runs to several gigabytes - libnode
+          # and the v8 archives are object files with debug information, twice - and the
+          # artifact cap is 10 GB, so "store only" is a guess that this leg happens to be
+          # small enough. It also compresses unusually well for its size.
+          compression-level: 6
+          retention-days: 1
+
+      - name: Upload this leg's logs
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          # Named so that the merge job in every calling workflow picks all legs up with one
+          # pattern: one archive per run, not one per platform.
+          name: logs-part-install-${{ inputs.triplet }}
+          path: ${{ runner.temp }}/ci-logs
+          if-no-files-found: warn
+          retention-days: 7
+
   build:
+    needs: install
+    # Runs when the install job was skipped (the leg is not split) and when it succeeded.
+    # Not when it failed or the run was cancelled: `needs` would let it start, and it would
+    # then build against nothing.
+    if: ${{ !cancelled() && needs.install.result != 'failure' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     # continue-on-error has to live here rather than on the caller: a job that calls a
@@ -76,7 +231,7 @@ jobs:
       # `clear;x-gha,readwrite` therefore silently disables caching entirely - it prints a
       # warning and builds every dependency from source on every run. The supported
       # replacement without new secrets is a plain files provider, persisted by the cache
-      # step below.
+      # step inside the prepare action.
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-archives,readwrite
       VCPKG_MAX_CONCURRENCY: 3
       # English diagnostics from MSVC's tools: gyp decodes their output as UTF-8, and a
@@ -85,262 +240,33 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Report the starting point
-        shell: bash
-        run: |
-          # Every log this job produces is tee'd under $RUNNER_TEMP/ci-logs, so the uploaded
-          # artifact is one directory no matter which step failed. It is spelled with the
-          # RUNNER_TEMP environment variable rather than a job-level env entry on purpose:
-          # the `runner` context is not available in job-level env, and using it there makes
-          # the whole workflow file invalid ("Unrecognized named-value: 'runner'").
-          mkdir -p "$RUNNER_TEMP/ci-logs"
-          echo "### Port build"
-          echo "- runner: ${{ inputs.runner }} ($RUNNER_OS/$RUNNER_ARCH)"
-          echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }}, consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
-          echo "- vcpkg: ${{ inputs.vcpkg-commit }}"
-          echo "- suite on: ${{ inputs.suite-configs }}"
-          echo ""
-          echo "Free space before:"; df -h . || true
-
-      - name: Restore the vcpkg binary cache
-        uses: actions/cache@v4
+      - name: Prepare the leg
+        uses: ./.github/actions/prepare
         with:
-          path: ${{ github.workspace }}/vcpkg-archives
-          # The key covers the vcpkg commit and the contents of ports/ plus the test
-          # manifest: any of those changing changes the ABI of what gets built, so a stale
-          # entry would restore the wrong binaries. The triplet is part of the ABI too, so
-          # legs that install different triplets must not share an entry.
-          key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-${{ hashFiles('ports/**', 'test/vcpkg.json') }}
-          restore-keys: |
-            vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-
-
-      - name: Check out the pinned vcpkg
-        shell: bash
-        env:
-          VCPKG_COMMIT: ${{ inputs.vcpkg-commit }}
-        run: |
-          set -euo pipefail
-          mkdir -p "$VCPKG_ROOT"
-          cd "$VCPKG_ROOT"
-          git init --quiet
-          git remote add origin https://github.com/microsoft/vcpkg.git
-          git fetch --depth 1 origin "$VCPKG_COMMIT"
-          git checkout --quiet FETCH_HEAD
-          git rev-parse HEAD
-
-      - name: Bootstrap vcpkg
-        shell: bash
-        run: |
-          set -euo pipefail
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            "$VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
-          else
-            "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
-          fi
-
-      - name: Toolchain inventory
-        shell: bash
-        run: |
-          # Everything below is a hard requirement, and each one has failed at least once
-          # somewhere: cargo for Node.js 26's Temporal crate, python for gyp and for the
-          # official test driver, clang-cl on Windows (upstream requirement since 24).
-          #
-          # The CMake version is reported but deliberately not enforced. vcpkg's scripts have
-          # had CMake-version requirements (the node24 line needed CMake 4 for
-          # `string(JSON ... STRING_ENCODE)`), yet the images used here ship 3.x and build
-          # this port fine - a hard gate on the version would therefore fail working legs.
-          # Reported, a mismatch is visible; enforced, it is a false alarm.
-          echo "cargo         : $(cargo --version || echo MISSING)"
-          echo "python        : $(python --version 2>&1 || echo MISSING)"
-          echo "python3       : $(python3 --version 2>&1 || echo MISSING)"
-          echo "cmake         : $(cmake --version | head -n 1 || echo MISSING)"
-          echo "ninja         : $(ninja --version 2>/dev/null || echo MISSING)"
-          if [ "$RUNNER_OS" = "Windows" ]; then
-            echo "clang-cl      : $(command -v clang-cl || echo MISSING)"
-            # Whether this job runs elevated decides a whole class of Node.js
-            # test-suite results. Four cases (test-fs-rm and friends) use icacls
-            # to deny themselves access and then assert EPERM, which is not the
-            # same obstacle for a process in the Administrators group as for an
-            # ordinary one - and these images do run elevated. Reported rather
-            # than assumed, because the alternative is writing a skip whose
-            # reason is a guess.
-            echo "account       : $(whoami)"
-            echo "elevated      : $(net session >/dev/null 2>&1 && echo yes || echo no)"
-            probe="$RUNNER_TEMP/acl-probe"
-            rm -rf "$probe"; mkdir -p "$probe/acl_dir"
-            : > "$probe/acl_dir/f.txt"
-            if icacls "$probe/acl_dir" /deny 'everyone:(OI)(CI)(DE,DC,X)' >/dev/null 2>&1; then
-              # The whole point: does a deny ACE actually stop us?
-              if rm -f "$probe/acl_dir/f.txt" 2>/dev/null; then
-                echo "deny ACE      : INEFFECTIVE (deletion succeeded - EPERM tests will fail)"
-              else
-                echo "deny ACE      : effective"
-              fi
-            else
-              echo "deny ACE      : icacls failed"
-            fi
-            rm -rf "$probe" 2>/dev/null || true
-          fi
-
-      - name: Ensure the Rust standard library for the target architecture
-        shell: bash
-        env:
-          TRIPLET: ${{ inputs.triplet }}
-        run: |
-          set -euo pipefail
-          # The port builds Node.js's Rust crates with `cargo --target <triple>`, and a rustup
-          # toolchain ships the standard library for one architecture only - the one it was
-          # installed for. On the x64-osx leg that is a different architecture from the target,
-          # because the runner is an arm64 image, and cargo stops a few hundred targets in with
-          # "error[E0463]: can't find crate for `core`", which names neither the leg nor the
-          # cause. The target is taken from the triplet rather than from the runner, because a
-          # leg's target and its runner disagree exactly when it is a cross build. Adding the
-          # target is idempotent, so every leg does it rather than only the cross ones.
-          arch="${TRIPLET%%-*}"
-          case "${RUNNER_OS}-${arch}" in
-            macOS-x64)     rust_target=x86_64-apple-darwin ;;
-            macOS-arm64)   rust_target=aarch64-apple-darwin ;;
-            Linux-x64)     rust_target=x86_64-unknown-linux-gnu ;;
-            Linux-arm64)   rust_target=aarch64-unknown-linux-gnu ;;
-            Windows-x64)   rust_target=x86_64-pc-windows-msvc ;;
-            Windows-arm64) rust_target=aarch64-pc-windows-msvc ;;
-            *)
-              echo "::warning::no Rust target triple known for ${RUNNER_OS}-${arch} (triplet ${TRIPLET})"
-              exit 0
-              ;;
-          esac
-          if ! command -v rustup >/dev/null 2>&1; then
-            echo "::warning::rustup is not on PATH; a crate build for ${rust_target} would fail with E0463"
-            exit 0
-          fi
-          rustup target add "${rust_target}"
-          rustup target list --installed
-
-      - name: Ensure CMake 4 or newer (vcpkg's scripts need it)
-        shell: bash
-        run: |
-          set -euo pipefail
-          # vcpkg's own scripts call `string(JSON ... STRING_ENCODE)`, which CMake only grew in
-          # 4.0. An image that still ships 3.31 therefore fails on the very first dependency
-          # with "invalid mode 'STRING_ENCODE'", which reads like a port bug rather than an
-          # image problem - it cost the node24 line a full diagnosis, and ubuntu-24.04-arm hit
-          # it here. Installed rather than gated: a stale image must not become a broken leg.
-          #
-          # The version is read out of a variable, not through a pipeline into `head`. With
-          # `set -o pipefail`, `head -n 1` closing the pipe early can kill the writer with
-          # SIGPIPE and fail this step on a CMake that is perfectly fine.
-          version_output="$(cmake --version 2>/dev/null || true)"
-          major="$(printf '%s\n' "$version_output" | sed -nE '1s/^cmake version ([0-9]+).*/\1/p')"
-          if [ -n "$major" ] && [ "$major" -ge 4 ]; then
-            echo "the CMake on PATH is already 4 or newer: $(printf '%s\n' "$version_output" | sed -n 1p)"
-            exit 0
-          fi
-
-          version=4.4.0
-          case "${RUNNER_OS}-${RUNNER_ARCH}" in
-            Linux-X64)     asset="cmake-$version-linux-x86_64.tar.gz";    inner="cmake-$version-linux-x86_64" ;;
-            Linux-ARM64)   asset="cmake-$version-linux-aarch64.tar.gz";   inner="cmake-$version-linux-aarch64" ;;
-            macOS-*)       asset="cmake-$version-macos-universal.tar.gz"; inner="cmake-$version-macos-universal/CMake.app/Contents" ;;
-            Windows-ARM64) asset="cmake-$version-windows-arm64.zip";      inner="cmake-$version-windows-arm64" ;;
-            Windows-*)     asset="cmake-$version-windows-x86_64.zip";     inner="cmake-$version-windows-x86_64" ;;
-            *) echo "::error::no CMake $version asset known for ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
-          esac
-          # The arm64 assets are used on purpose: an x86_64 CMake under emulation on an arm64
-          # runner is slow and adds a variable to every build.
-          root="$RUNNER_TEMP/cmake-$version"
-          mkdir -p "$root"
-          curl -fsSL -o "$root/$asset" \
-            "https://github.com/Kitware/CMake/releases/download/v$version/$asset"
-          case "$asset" in
-            *.zip)
-              if command -v unzip >/dev/null 2>&1; then
-                unzip -q -o "$root/$asset" -d "$root"
-              else
-                # Git Bash does not always ship unzip; PowerShell always can.
-                powershell -NoProfile -Command "Expand-Archive -LiteralPath '$root/$asset' -DestinationPath '$root' -Force"
-              fi
-              ;;
-            *) tar -xzf "$root/$asset" -C "$root" ;;
-          esac
-          echo "$root/$inner/bin" >> "$GITHUB_PATH"
-          "$root/$inner/bin/cmake" --version
-
-      - name: Ensure Rosetta 2 is available (macOS x64 only)
-        if: runner.os == 'macOS' && contains(inputs.triplet, 'x64-osx')
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The port builds its host tools as the *target* machine type too (Node.js's
-          # --no-cross-compiling path), so on an arm64 image the build and its tests execute
-          # x86_64 binaries. Probed through the capability rather than by looking for a
-          # package name: GitHub's arm64 images do not guarantee Rosetta is preinstalled, and
-          # without it the failure surfaces far from the cause ("Bad CPU type in executable").
-          if arch -x86_64 /usr/bin/true 2>/dev/null; then
-            echo "Rosetta 2 is present"
-          else
-            echo "Installing Rosetta 2"
-            sudo softwareupdate --install-rosetta --agree-to-license
-            arch -x86_64 /usr/bin/true
-          fi
-
+          runner: ${{ inputs.runner }}
+          preset: ${{ inputs.preset }}
+          triplet: ${{ inputs.triplet }}
+          consumer-configs: ${{ inputs.consumer-configs }}
+          suite-configs: ${{ inputs.suite-configs }}
+          vcpkg-commit: ${{ inputs.vcpkg-commit }}
+          # Evaluated here, after the checkout, and handed in: hashFiles is not something to
+          # rely on inside a composite action.
+          manifest-hash: ${{ hashFiles('ports/**', 'test/vcpkg.json') }}
+      - name: Download the installed tree
+        if: ${{ inputs.split-install }}
+        uses: actions/download-artifact@v4
+        with:
+          name: port-install-${{ inputs.triplet }}
+          # The same absolute path the install job used. It has to be: vcpkg's status entries
+          # and the exported CMake configs carry absolute paths, and the runner's workspace
+          # path is the same in both jobs for the same repository.
+          path: test/build/${{ inputs.preset }}/vcpkg_installed
       - name: Configure the consumer test project
-        shell: bash
-        working-directory: test
-        env:
-          PRESET: ${{ inputs.preset }}
-          TRIPLET: ${{ inputs.triplet }}
-          CONFIG: ${{ inputs.consumer-configs }}
-        run: |
-          set -euo pipefail
-          # CMAKE_BUILD_TYPE is the *first* configuration in the list. On a
-          # multi-config generator (Visual Studio) it is not what decides the
-          # build - every configuration is available in one tree - and on a
-          # single-config one the per-configuration loop below reconfigures
-          # before it builds. Either way this configure is the one that builds
-          # the port, which is the expensive part, and it happens once.
-          FIRST_CONFIG="${CONFIG%%,*}"
-          # This is also what builds the port: vcpkg runs in manifest mode during configure,
-          # and it downloads every dependency's sources while doing so. vcpkg has no retry of
-          # its own for a source tarball or for its own git fetch, and one DNS hiccup or one
-          # HTTP 503 from an upstream mirror costs the whole leg, so a failed attempt is
-          # retried - but only when the failure *is* a download problem.
-          #
-          # Two signature lists decide that, and the second one is the correction that
-          # matters: every vcpkg failure, download included, ends with "CMake Error at
-          # .../vcpkg_execute_required_process.cmake" and "building <port> failed with:
-          # BUILD_FAILED". Vetoing on those - which this step used to do, together with
-          # matching the bare words "timed out"/"Timeout" - vetoed *every* download failure
-          # too, so the retry loop could never fire: measured twice, once on a runner whose
-          # DNS was down (curl 6, "Couldn't resolve host name") and once on a 503 from
-          # chromium.googlesource.com in the zlib overlay's git fetch. Both legs died on
-          # their first attempt with "not a download problem".
-          #
-          # So the veto is now a positive list of *compiler and linker* symptoms: those mean
-          # the failure is in what we built, not in the network, and repeating them only
-          # spends the wall-clock twice.
-          download_re='Could not resolve host|Couldn.t resolve host|curl operation failed|Download failed|Failed to download|Connection reset|Connection refused|Could not connect|RPC failed|HTTP 5[0-9][0-9]|curl: \([0-9]+\)|remote end hung up|early EOF|SSL certificate problem'
-          defect_re='ninja: build stopped|ninja: error|undefined reference|compilation terminated|error C[0-9]{4}|fatal error|LNK[0-9]{4}|cannot find -l|ld returned'
-          log="$RUNNER_TEMP/ci-logs/configure.log"
-          attempt_no=0
-          for attempt in 1 2 3 4; do
-            attempt_no="$attempt"
-            if cmake --preset "$PRESET" \
-                 -DVCPKG_TARGET_TRIPLET="$TRIPLET" \
-                 -DCMAKE_BUILD_TYPE="$FIRST_CONFIG" 2>&1 | tee "$log"; then
-              echo "configure succeeded on attempt $attempt"
-              exit 0
-            fi
-            if grep -qiE "$download_re" "$log" && ! grep -qE "$defect_re" "$log"; then
-              echo "::warning::attempt $attempt failed on a download error ($(grep -oiE "$download_re" "$log" | head -n 1)); retrying in $((attempt * 10))s"
-              sleep $((attempt * 10))
-            else
-              echo "::error::attempt $attempt failed for a reason that is not a download problem; not retrying"
-              exit 1
-            fi
-          done
-          echo "::error::configure still failing after $attempt_no attempts"
-          exit 1
-
+        uses: ./.github/actions/configure
+        with:
+          preset: ${{ inputs.preset }}
+          triplet: ${{ inputs.triplet }}
+          config: ${{ inputs.consumer-configs }}
       - name: Build the consumer test project
         shell: bash
         working-directory: test
@@ -370,7 +296,6 @@ jobs:
               | tee "$RUNNER_TEMP/ci-logs/build-$cfg.log"
             echo "::endgroup::"
           done
-
       - name: Assert the architecture of the built executable
         if: ${{ inputs.expect-arch != '' }}
         shell: bash
@@ -435,7 +360,6 @@ jobs:
             exit 1
           fi
           done
-
       - name: Run the tests
         shell: bash
         working-directory: test
@@ -470,7 +394,6 @@ jobs:
               2>&1 | tee "$RUNNER_TEMP/ci-logs/ctest-$cfg.log"
             echo "::endgroup::"
           done
-
       - name: Summarize the run
         if: always()
         shell: bash

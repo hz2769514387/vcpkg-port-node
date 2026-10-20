@@ -22,6 +22,25 @@ inside one job: `debug.yml` and `matrix.yml` exist because a job that installed 
 three configurations and ran the suite three times would exceed GitHub's six-hour job limit,
 while three workflows run in parallel and each stays inside it (ADR 0007).
 
+The limit applies **per job**, which is the other half of that argument. A leg that fits one
+job is one job; a leg whose *install alone* is close to the ceiling runs as two, with
+`split-install: true`:
+
+| | `split-install: false` (default) | `split-install: true` |
+|---|---|---|
+| jobs | one | `install`, then `build` (`needs: install`) |
+| what crosses between them | - | the installed tree, as an artifact (`port-install-<triplet>`, 1-day retention, uncompressed) |
+| used by | every `ci.yml` and `matrix.yml` leg, the Windows and macOS Debug legs | the two Linux Debug legs |
+
+A dual triplet builds Node.js twice, and on a four-core runner that install is around five
+hours by itself - so five hours of install plus a consumer plus tests does not fit one
+budget, while five hours fits one and the rest fits another. The artifact is a few gigabytes,
+which is why this is not the default: a release-only install is minutes and moving it would
+cost more than repeating it. The two jobs share the step bodies through
+`.github/actions/prepare` and `.github/actions/configure` rather than through a copy - the
+install job's configure is what builds the port, and the consumer job's configure runs again
+only to find the installed tree already current.
+
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
 place the build steps exist. They differ in which `preset` and `triplet` they pass, in which
 `consumer-configs` they build the consumer as, in which of those run Node.js's own suite

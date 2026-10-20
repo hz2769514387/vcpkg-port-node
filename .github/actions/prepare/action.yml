@@ -1,0 +1,239 @@
+name: Prepare a leg
+description: >
+  Everything a leg needs before it builds anything: the vcpkg binary cache, the pinned vcpkg
+  checkout, a toolchain inventory, the Rust standard library for the target architecture,
+  CMake 4 when the image ships 3.x, and Rosetta 2 for an x64 macOS build on an arm64 image.
+
+  This is an action rather than job steps because build-test.yml can run a leg as two jobs -
+  an install job and a consumer job - and the two must start from the same environment. The
+  step bodies are the ones that used to sit inline there; nothing was rewritten on the way.
+
+  `manifest-hash` is an input because `hashFiles` is not something to rely on inside a
+  composite action: the caller evaluates it, after its own checkout, which is also the point
+  where it means something (the cache key hashes ports/ and the test manifest on disk).
+
+inputs:
+  runner:
+    description: Runner image name, for the report only.
+    required: true
+  preset:
+    description: CMake preset name, for the report only.
+    required: true
+  triplet:
+    description: vcpkg triplet this leg installs.
+    required: true
+  consumer-configs:
+    description: Consumer configurations this leg builds, for the report only.
+    required: false
+    default: Release
+  suite-configs:
+    description: Configurations that also run Node.js's suite, for the report only.
+    required: false
+    default: ""
+  vcpkg-commit:
+    description: vcpkg commit to check out (ADR 0005 - the pin is the checkout).
+    required: true
+  manifest-hash:
+    description: Cache-key component covering ports/ and test/vcpkg.json, from the caller.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - name: Report the starting point
+      shell: bash
+      run: |
+        # Every log this job produces is tee'd under $RUNNER_TEMP/ci-logs, so the uploaded
+        # artifact is one directory no matter which step failed. It is spelled with the
+        # RUNNER_TEMP environment variable rather than a job-level env entry on purpose:
+        # the `runner` context is not available in job-level env, and using it there makes
+        # the whole workflow file invalid ("Unrecognized named-value: 'runner'").
+        mkdir -p "$RUNNER_TEMP/ci-logs"
+        echo "### Port build"
+        echo "- runner: ${{ inputs.runner }} ($RUNNER_OS/$RUNNER_ARCH)"
+        echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }}, consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
+        echo "- vcpkg: ${{ inputs.vcpkg-commit }}"
+        echo "- suite on: ${{ inputs.suite-configs }}"
+        echo ""
+        echo "Free space before:"; df -h . || true
+
+    - name: Restore the vcpkg binary cache
+      uses: actions/cache@v4
+      with:
+        path: ${{ github.workspace }}/vcpkg-archives
+        # The key covers the vcpkg commit and the contents of ports/ plus the test
+        # manifest: any of those changing changes the ABI of what gets built, so a stale
+        # entry would restore the wrong binaries. The triplet is part of the ABI too, so
+        # legs that install different triplets must not share an entry.
+        key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-${{ inputs.manifest-hash }}
+        restore-keys: |
+          vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-
+
+    - name: Check out the pinned vcpkg
+      shell: bash
+      env:
+        VCPKG_COMMIT: ${{ inputs.vcpkg-commit }}
+      run: |
+        set -euo pipefail
+        mkdir -p "$VCPKG_ROOT"
+        cd "$VCPKG_ROOT"
+        git init --quiet
+        git remote add origin https://github.com/microsoft/vcpkg.git
+        git fetch --depth 1 origin "$VCPKG_COMMIT"
+        git checkout --quiet FETCH_HEAD
+        git rev-parse HEAD
+
+    - name: Bootstrap vcpkg
+      shell: bash
+      run: |
+        set -euo pipefail
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          "$VCPKG_ROOT/bootstrap-vcpkg.bat" -disableMetrics
+        else
+          "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
+        fi
+
+    - name: Toolchain inventory
+      shell: bash
+      run: |
+        # Everything below is a hard requirement, and each one has failed at least once
+        # somewhere: cargo for Node.js 26's Temporal crate, python for gyp and for the
+        # official test driver, clang-cl on Windows (upstream requirement since 24).
+        #
+        # The CMake version is reported but deliberately not enforced. vcpkg's scripts have
+        # had CMake-version requirements (the node24 line needed CMake 4 for
+        # `string(JSON ... STRING_ENCODE)`), yet the images used here ship 3.x and build
+        # this port fine - a hard gate on the version would therefore fail working legs.
+        # Reported, a mismatch is visible; enforced, it is a false alarm.
+        echo "cargo         : $(cargo --version || echo MISSING)"
+        echo "python        : $(python --version 2>&1 || echo MISSING)"
+        echo "python3       : $(python3 --version 2>&1 || echo MISSING)"
+        echo "cmake         : $(cmake --version | head -n 1 || echo MISSING)"
+        echo "ninja         : $(ninja --version 2>/dev/null || echo MISSING)"
+        if [ "$RUNNER_OS" = "Windows" ]; then
+          echo "clang-cl      : $(command -v clang-cl || echo MISSING)"
+          # Whether this job runs elevated decides a whole class of Node.js
+          # test-suite results. Four cases (test-fs-rm and friends) use icacls
+          # to deny themselves access and then assert EPERM, which is not the
+          # same obstacle for a process in the Administrators group as for an
+          # ordinary one - and these images do run elevated. Reported rather
+          # than assumed, because the alternative is writing a skip whose
+          # reason is a guess.
+          echo "account       : $(whoami)"
+          echo "elevated      : $(net session >/dev/null 2>&1 && echo yes || echo no)"
+          probe="$RUNNER_TEMP/acl-probe"
+          rm -rf "$probe"; mkdir -p "$probe/acl_dir"
+          : > "$probe/acl_dir/f.txt"
+          if icacls "$probe/acl_dir" /deny 'everyone:(OI)(CI)(DE,DC,X)' >/dev/null 2>&1; then
+            # The whole point: does a deny ACE actually stop us?
+            if rm -f "$probe/acl_dir/f.txt" 2>/dev/null; then
+              echo "deny ACE      : INEFFECTIVE (deletion succeeded - EPERM tests will fail)"
+            else
+              echo "deny ACE      : effective"
+            fi
+          else
+            echo "deny ACE      : icacls failed"
+          fi
+          rm -rf "$probe" 2>/dev/null || true
+        fi
+
+    - name: Ensure the Rust standard library for the target architecture
+      shell: bash
+      env:
+        TRIPLET: ${{ inputs.triplet }}
+      run: |
+        set -euo pipefail
+        # The port builds Node.js's Rust crates with `cargo --target <triple>`, and a rustup
+        # toolchain ships the standard library for one architecture only - the one it was
+        # installed for. On the x64-osx leg that is a different architecture from the target,
+        # because the runner is an arm64 image, and cargo stops a few hundred targets in with
+        # "error[E0463]: can't find crate for `core`", which names neither the leg nor the
+        # cause. The target is taken from the triplet rather than from the runner, because a
+        # leg's target and its runner disagree exactly when it is a cross build. Adding the
+        # target is idempotent, so every leg does it rather than only the cross ones.
+        arch="${TRIPLET%%-*}"
+        case "${RUNNER_OS}-${arch}" in
+          macOS-x64)     rust_target=x86_64-apple-darwin ;;
+          macOS-arm64)   rust_target=aarch64-apple-darwin ;;
+          Linux-x64)     rust_target=x86_64-unknown-linux-gnu ;;
+          Linux-arm64)   rust_target=aarch64-unknown-linux-gnu ;;
+          Windows-x64)   rust_target=x86_64-pc-windows-msvc ;;
+          Windows-arm64) rust_target=aarch64-pc-windows-msvc ;;
+          *)
+            echo "::warning::no Rust target triple known for ${RUNNER_OS}-${arch} (triplet ${TRIPLET})"
+            exit 0
+            ;;
+        esac
+        if ! command -v rustup >/dev/null 2>&1; then
+          echo "::warning::rustup is not on PATH; a crate build for ${rust_target} would fail with E0463"
+          exit 0
+        fi
+        rustup target add "${rust_target}"
+        rustup target list --installed
+
+    - name: Ensure CMake 4 or newer (vcpkg's scripts need it)
+      shell: bash
+      run: |
+        set -euo pipefail
+        # vcpkg's own scripts call `string(JSON ... STRING_ENCODE)`, which CMake only grew in
+        # 4.0. An image that still ships 3.31 therefore fails on the very first dependency
+        # with "invalid mode 'STRING_ENCODE'", which reads like a port bug rather than an
+        # image problem - it cost the node24 line a full diagnosis, and ubuntu-24.04-arm hit
+        # it here. Installed rather than gated: a stale image must not become a broken leg.
+        #
+        # The version is read out of a variable, not through a pipeline into `head`. With
+        # `set -o pipefail`, `head -n 1` closing the pipe early can kill the writer with
+        # SIGPIPE and fail this step on a CMake that is perfectly fine.
+        version_output="$(cmake --version 2>/dev/null || true)"
+        major="$(printf '%s\n' "$version_output" | sed -nE '1s/^cmake version ([0-9]+).*/\1/p')"
+        if [ -n "$major" ] && [ "$major" -ge 4 ]; then
+          echo "the CMake on PATH is already 4 or newer: $(printf '%s\n' "$version_output" | sed -n 1p)"
+          exit 0
+        fi
+
+        version=4.4.0
+        case "${RUNNER_OS}-${RUNNER_ARCH}" in
+          Linux-X64)     asset="cmake-$version-linux-x86_64.tar.gz";    inner="cmake-$version-linux-x86_64" ;;
+          Linux-ARM64)   asset="cmake-$version-linux-aarch64.tar.gz";   inner="cmake-$version-linux-aarch64" ;;
+          macOS-*)       asset="cmake-$version-macos-universal.tar.gz"; inner="cmake-$version-macos-universal/CMake.app/Contents" ;;
+          Windows-ARM64) asset="cmake-$version-windows-arm64.zip";      inner="cmake-$version-windows-arm64" ;;
+          Windows-*)     asset="cmake-$version-windows-x86_64.zip";     inner="cmake-$version-windows-x86_64" ;;
+          *) echo "::error::no CMake $version asset known for ${RUNNER_OS}-${RUNNER_ARCH}"; exit 1 ;;
+        esac
+        # The arm64 assets are used on purpose: an x86_64 CMake under emulation on an arm64
+        # runner is slow and adds a variable to every build.
+        root="$RUNNER_TEMP/cmake-$version"
+        mkdir -p "$root"
+        curl -fsSL -o "$root/$asset" \
+          "https://github.com/Kitware/CMake/releases/download/v$version/$asset"
+        case "$asset" in
+          *.zip)
+            if command -v unzip >/dev/null 2>&1; then
+              unzip -q -o "$root/$asset" -d "$root"
+            else
+              # Git Bash does not always ship unzip; PowerShell always can.
+              powershell -NoProfile -Command "Expand-Archive -LiteralPath '$root/$asset' -DestinationPath '$root' -Force"
+            fi
+            ;;
+          *) tar -xzf "$root/$asset" -C "$root" ;;
+        esac
+        echo "$root/$inner/bin" >> "$GITHUB_PATH"
+        "$root/$inner/bin/cmake" --version
+
+    - name: Ensure Rosetta 2 is available (macOS x64 only)
+      if: runner.os == 'macOS' && contains(inputs.triplet, 'x64-osx')
+      shell: bash
+      run: |
+        set -euo pipefail
+        # The port builds its host tools as the *target* machine type too (Node.js's
+        # --no-cross-compiling path), so on an arm64 image the build and its tests execute
+        # x86_64 binaries. Probed through the capability rather than by looking for a
+        # package name: GitHub's arm64 images do not guarantee Rosetta is preinstalled, and
+        # without it the failure surfaces far from the cause ("Bad CPU type in executable").
+        if arch -x86_64 /usr/bin/true 2>/dev/null; then
+          echo "Rosetta 2 is present"
+        else
+          echo "Installing Rosetta 2"
+          sudo softwareupdate --install-rosetta --agree-to-license
+          arch -x86_64 /usr/bin/true
+        fi

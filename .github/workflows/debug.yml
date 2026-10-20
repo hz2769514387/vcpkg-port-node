@@ -64,6 +64,10 @@ jobs:
       expect-arch: ARM64
       timeout-minutes: 330
 
+  # The two Linux legs run as two jobs each: the dual-triplet install alone is close to five
+  # hours on a four-core runner, and the six-hour ceiling applies per job. Windows and macOS
+  # build the same dual install in two to three hours, so they stay single-job - an install
+  # artifact is a few gigabytes and only worth moving when it has to be.
   linux:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
@@ -73,6 +77,7 @@ jobs:
       triplet: x64-linux
       consumer-configs: Debug
       suite-configs: ""
+      split-install: true
       timeout-minutes: 330
 
   linux-arm64:
@@ -84,6 +89,7 @@ jobs:
       triplet: arm64-linux
       consumer-configs: Debug
       suite-configs: ""
+      split-install: true
       timeout-minutes: 330
 
   macos:
