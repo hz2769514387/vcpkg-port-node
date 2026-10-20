@@ -149,9 +149,15 @@ the cause:
 
 A preset in `test/CMakePresets.json` is named after the vcpkg triplet it selects, so it differs
 from the triplet column below only where CI installs vcpkg's release-only variant of the same
-triplet. `*-release` is not available for every triplet, which is why some rows below install a
-dual triplet and then build all three consumer configurations - the second port build is already
-paid for.
+triplet. Every `ci.yml` and `matrix.yml` leg installs such a variant, because a dual triplet
+builds Node.js twice and that is what used to put single legs past the six-hour job limit.
+`debug.yml` is the exception, and the reason it is a workflow of its own: it installs the stock
+dual triplet once, which builds Release *and* Debug, and then builds a Debug consumer against it.
+
+A consumer configuration follows from that: Release and RelWithDebInfo work against any install,
+Debug needs one that also holds debug libraries. No `matrix.yml` leg builds a Debug consumer,
+and this repository carries no triplets of its own, so a Debug consumer on a shared or `/MD`
+libnode is not verified yet - see issue #11 rather than assuming it from a passing leg.
 
 Every cell below is a promise a consumer can hold this repository to, and each one is a leg.
 
@@ -163,15 +169,15 @@ Every cell below is a promise a consumer can hold this repository to, and each o
 | `ci.yml` | arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release, RelWithDebInfo | Release | yes |
 | `ci.yml` | arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release, RelWithDebInfo | Release | yes |
 | `ci.yml` | x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release, RelWithDebInfo | Release | yes |
-| `debug.yml` | all six | as above | as above | stock (dual) | **Debug** | Debug | yes |
-| `matrix.yml` | x64 Windows, `/MD` | `windows-2022` | `x64-windows-static-md` | `x64-windows-static-md` | Release, RelWithDebInfo, Debug | Release | no — new cell |
-| `matrix.yml` | arm64 Windows, `/MD` | `windows-11-arm` | `arm64-windows-static-md` | `arm64-windows-static-md` | Release, RelWithDebInfo, Debug | Release | no — new cell |
-| `matrix.yml` | x64 Windows, shared | `windows-2022` | `x64-windows` | `x64-windows` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | arm64 Windows, shared | `windows-11-arm` | `arm64-windows` | `arm64-windows` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | x64 Linux, shared | `ubuntu-latest` | `x64-linux-dynamic` | `x64-linux-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
-| `matrix.yml` | arm64 Linux, shared | `ubuntu-24.04-arm` | `arm64-linux-dynamic` | `arm64-linux-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
-| `matrix.yml` | arm64 macOS, shared | `macos-latest` | `arm64-osx-dynamic` | `arm64-osx-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
-| `matrix.yml` | x64 macOS, shared | `macos-15` | `x64-osx-dynamic` | `x64-osx-dynamic` | Release, RelWithDebInfo, Debug | Release | no — new cell |
+| `debug.yml` | all six | as above | as above | stock (dual) | **Debug** | — (off) | yes |
+| `matrix.yml` | x64 Windows, `/MD` | `windows-2022` | `x64-windows-static-md` | `x64-windows-static-md-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | arm64 Windows, `/MD` | `windows-11-arm` | `arm64-windows-static-md` | `arm64-windows-static-md-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | x64 Windows, shared | `windows-2022` | `x64-windows` | `x64-windows-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | arm64 Windows, shared | `windows-11-arm` | `arm64-windows` | `arm64-windows-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | x64 Linux, shared | `ubuntu-latest` | `x64-linux-dynamic` | `x64-linux-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | arm64 Linux, shared | `ubuntu-24.04-arm` | `arm64-linux-dynamic` | `arm64-linux-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | arm64 macOS, shared | `macos-latest` | `arm64-osx-dynamic` | `arm64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | x64 macOS, shared | `macos-15` | `x64-osx-dynamic` | `x64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
 
 The `matrix.yml` legs are `experimental` because they have not completed a build yet, which is
 this repository's standing rule for a leg in that state: the port claims these cells, so they

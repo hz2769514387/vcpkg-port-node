@@ -33,9 +33,18 @@ permissions:
 jobs:
   # One job per cell rather than a matrix - see the note in ci.yml.
   #
-  # These triplets are dual (no `*-release` community variant exists for most of them), so
-  # the port builds Release *and* Debug here, and the legs build all three consumer
-  # configurations: that second port build is already paid for, and Debug is a promise anyway.
+  # Two consumer configurations per leg, Release and RelWithDebInfo, never Debug. The
+  # triplets are release-only (`VCPKG_BUILD_TYPE=release`), which is what keeps eight
+  # additional installs of the port inside the six-hour job limit, and a Debug consumer
+  # cannot link a Release library on Windows at all - the exported config says so and
+  # refuses at configure time. An earlier version of this file asked for Debug anyway, on
+  # the assumption that these triplets were dual; six of the eight legs then failed in
+  # `find_package` before building anything, which is how the assumption was found.
+  #
+  # Debug itself is covered for the static triplets by debug.yml, where the port is built
+  # twice on purpose. Debug on a shared libnode or on the /MD CRT is therefore *not*
+  # verified here - it needs a dual triplet, and that combination costs a second full
+  # install. It is recorded in issue #11 rather than implied by a leg that passes.
 
   windows-md:
     uses: ./.github/workflows/build-test.yml
@@ -44,7 +53,7 @@ jobs:
       runner: windows-2022
       preset: x64-windows-static-md
       triplet: x64-windows-static-md-release
-      consumer-configs: Release,RelWithDebInfo,Debug
+      consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: x64
       experimental: true
@@ -57,7 +66,7 @@ jobs:
       runner: windows-11-arm
       preset: arm64-windows-static-md
       triplet: arm64-windows-static-md-release
-      consumer-configs: Release,RelWithDebInfo,Debug
+      consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: ARM64
       experimental: true
@@ -96,7 +105,7 @@ jobs:
       runner: ubuntu-latest
       preset: x64-linux-dynamic
       triplet: x64-linux-dynamic-release
-      consumer-configs: Release,RelWithDebInfo,Debug
+      consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       experimental: true
       timeout-minutes: 240
@@ -108,7 +117,7 @@ jobs:
       runner: ubuntu-24.04-arm
       preset: arm64-linux-dynamic
       triplet: arm64-linux-dynamic-release
-      consumer-configs: Release,RelWithDebInfo,Debug
+      consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       experimental: true
       timeout-minutes: 240
@@ -120,7 +129,7 @@ jobs:
       runner: macos-latest
       preset: arm64-osx-dynamic
       triplet: arm64-osx-dynamic-release
-      consumer-configs: Release,RelWithDebInfo,Debug
+      consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: arm64
       experimental: true
@@ -133,7 +142,7 @@ jobs:
       runner: macos-15
       preset: x64-osx-dynamic
       triplet: x64-osx-dynamic-release
-      consumer-configs: Release,RelWithDebInfo,Debug
+      consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: x86_64
       experimental: true
