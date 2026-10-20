@@ -22,10 +22,33 @@
 #ifdef _WIN32
 #include <windows.h>
 
+#include <crtdbg.h>
+
 #include <string>
 #include <vector>
 
 namespace {
+
+// A Debug assertion must not become a modal dialog.
+//
+// The CRT's default report mode for _CRT_ASSERT and _CRT_ERROR is _CRTDBG_MODE_WNDW, which
+// puts up a message box and *waits for a click*. In CI nobody clicks, so a Debug assertion
+// turns into a timeout with the assertion text never printed - measured on the x64 Windows
+// Debug leg, which died at Intl.DateTimeFormat for four rounds, with only "the suite timed
+// out after 180 seconds" to show for it. The stack was the only thing that explained it:
+// MessageBoxW inside _CrtDbgReportW, under free_dbg_nolock, under ICU's UnicodeString
+// destructor. Routing the report to stderr keeps the abort - the assertion still fails the
+// test - and puts the message where the test log can read it.
+//
+// This does not touch the arguments: the shell still hands node::Start the argv it was given.
+void ReportCrtAssertionsToStderr() {
+#ifdef _DEBUG
+  for (int kind : {_CRT_ASSERT, _CRT_ERROR, _CRT_WARN}) {
+    _CrtSetReportMode(kind, _CRTDBG_MODE_FILE);
+    _CrtSetReportFile(kind, _CRTDBG_FILE_STDERR);
+  }
+#endif
+}
 
 std::vector<char*> ToUtf8Argv(int argc, wchar_t* wargv[], std::vector<std::string>* storage) {
   storage->reserve(static_cast<size_t>(argc));
@@ -56,6 +79,7 @@ std::vector<char*> ToUtf8Argv(int argc, wchar_t* wargv[], std::vector<std::strin
 }  // namespace
 
 int wmain(int argc, wchar_t* wargv[]) {
+  ReportCrtAssertionsToStderr();
   std::vector<std::string> storage;
   std::vector<char*> argv = ToUtf8Argv(argc, wargv, &storage);
   return node::Start(argc, argv.data());
