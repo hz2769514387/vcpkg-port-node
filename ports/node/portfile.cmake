@@ -655,16 +655,42 @@ function(_node_shared_args _out _libdir _is_debug)
     endif()
 
     # abseil is split into ~90 archives; Node's own pkg-config list names only
-    # part of them, so take every installed name.
-    file(GLOB _absl_files RELATIVE "${_libdir}" "${_libdir}/${_absl_prefix}*${_absl_suffix}")
-    set(_absl_libnames "")
-    foreach(_f IN LISTS _absl_files)
-        get_filename_component(_f "${_f}" NAME_WE)
-        string(REGEX REPLACE "^lib" "" _f "${_f}")
-        list(APPEND _absl_libnames "${_f}")
-    endforeach()
-    unset(_absl_files)
-    unset(_f)
+    # part of them, so take every installed name. Two shapes that are not that one:
+    #
+    #   * Windows with a dynamic triplet. vcpkg's abseil port leaves
+    #     ABSL_BUILD_MONOLITHIC_SHARED_LIBS at MSVC's default, which is ON, so the only
+    #     library installed is abseil_dll.lib - there is no absl_mutex.lib and no absl_*.lib
+    #     of any kind. The glob below therefore found nothing, the list went out empty, the
+    #     precheck further down had no name to complain about, and the first host tool to
+    #     link v8_libbase died with LNK2019 on absl::lts_*::Mutex. Measured on
+    #     x64-windows-release.
+    #   * POSIX. abseil there is static-only (vcpkg_check_linkage(ONLY_STATIC_LIBRARY) in its
+    #     portfile), so the component archives are libabsl_*.a no matter what libnode's own
+    #     linkage is.
+    if(VCPKG_TARGET_IS_WINDOWS AND VCPKG_LIBRARY_LINKAGE STREQUAL "dynamic")
+        set(_absl_libnames "abseil_dll")
+    else()
+        file(GLOB _absl_files RELATIVE "${_libdir}" "${_libdir}/${_absl_prefix}*${_absl_suffix}")
+        set(_absl_libnames "")
+        foreach(_f IN LISTS _absl_files)
+            get_filename_component(_f "${_f}" NAME_WE)
+            string(REGEX REPLACE "^lib" "" _f "${_f}")
+            list(APPEND _absl_libnames "${_f}")
+        endforeach()
+        unset(_absl_files)
+        unset(_f)
+    endif()
+    # An empty list is otherwise silent: the precheck only complains about names it was
+    # given, and a build that never linked abseil fails much later and somewhere else.
+    # abseil is not optional - --shared-abseil is always passed - so an empty list is a
+    # defect in this file, not a consumer problem.
+    if(NOT _absl_libnames)
+        file(GLOB _present "${_libdir}/*")
+        message(FATAL_ERROR
+            "node port: no abseil libraries found under '${_libdir}' (looked for "
+            "${_absl_prefix}*${_absl_suffix}). abseil is externalized unconditionally, so "
+            "the build cannot proceed without it. What that directory holds:\n  ${_present}")
+    endif()
     list(JOIN _absl_libnames "," _absl_libnames)
 
     # hdr-histogram's own CMake names the static library hdr_histogram_static and
@@ -1073,6 +1099,90 @@ if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
     get_filename_component(_node_shlib_name "${_node_shlib_path}" NAME)
     unset(_node_shlib_candidates)
     unset(_node_shlib_path)
+
+    # ---------------------------------------------------------------------------------
+    # A shared libnode has to carry abseil, and this is the only place that is checkable.
+    #
+    # Off Windows, vcpkg's abseil is static-only, so there is no libabsl_*.so for the loader
+    # to find: the archives must end up inside libnode. When they do not, the link still
+    # *succeeds* - a shared library is allowed to leave symbols undefined - and the failure
+    # appears at the consumer's link, two and a half hours into a leg, reading
+    # "libnode.so.147: undefined reference to absl::lts_*::..." and pointing at the consumer
+    # rather than at this port. That is exactly what the x64-linux-dynamic leg reported, and
+    # nothing in the log above it named abseil once.
+    #
+    # Any undefined abseil symbol here is a defect by construction, so it is checked next to
+    # the library. The refusal also reports whether the -labsl_* flags reached the gyp link
+    # line at all, which is the first question the failure raises and the one the log cannot
+    # answer: gyp's rsp file is only visible in build.ninja.
+    # ---------------------------------------------------------------------------------
+    find_program(_node_nm NAMES llvm-nm nm)
+    if(NOT _node_nm)
+        message(WARNING "node port: no nm found; cannot verify that abseil is inside libnode")
+    else()
+        foreach(_node_cfg IN LISTS _node_configs)
+            if(_node_cfg STREQUAL "Debug")
+                set(_node_cfg_out_dir "${SOURCE_PATH}/out/Debug")
+            else()
+                set(_node_cfg_out_dir "${SOURCE_PATH}/out/Release")
+            endif()
+            if(VCPKG_TARGET_IS_OSX)
+                set(_node_cfg_shlib "${_node_cfg_out_dir}/${_node_shlib_name}")
+                # Apple's nm has no -D; -u already means "undefined only", and a dylib's
+                # undefined symbols are the external references either way.
+                set(_node_nm_args -u)
+            else()
+                set(_node_cfg_shlib "${_node_cfg_out_dir}/lib/${_node_shlib_name}")
+                # -D reads the dynamic symbol table, which survives stripping; a plain nm on
+                # a stripped .so reports nothing at all and the check would pass by accident.
+                set(_node_nm_args -D -u)
+            endif()
+            execute_process(
+                COMMAND "${_node_nm}" ${_node_nm_args} "${_node_cfg_shlib}"
+                OUTPUT_VARIABLE _node_undef
+                ERROR_VARIABLE _node_undef_err
+                RESULT_VARIABLE _node_undef_rc)
+            if(NOT _node_undef_rc EQUAL 0)
+                message(FATAL_ERROR
+                    "node port: '${_node_nm} ${_node_nm_args}' failed on ${_node_cfg_shlib} "
+                    "(${_node_undef_rc}), so the abseil check could not run: ${_node_undef_err}")
+            endif()
+            string(REGEX MATCHALL "[^\n]*(_ZN4absl|AbslInternal)[^\n]*" _node_absl_undef "${_node_undef}")
+            if(_node_absl_undef)
+                list(LENGTH _node_absl_undef _node_absl_undef_count)
+                list(SUBLIST _node_absl_undef 0 5 _node_absl_undef_head)
+                string(REPLACE ";" "\n  " _node_absl_undef_head "${_node_absl_undef_head}")
+                file(READ "${_node_cfg_out_dir}/build.ninja" _node_ninja_txt)
+                if(_node_ninja_txt MATCHES "-labsl_")
+                    set(_node_absl_on_linkline "yes")
+                else()
+                    set(_node_absl_on_linkline "no")
+                endif()
+                message(FATAL_ERROR
+                    "node port: ${_node_cfg} libnode has ${_node_absl_undef_count} undefined "
+                    "abseil symbols, so nothing provides them at run time - abseil is "
+                    "static-only off Windows and has to be inside libnode.\n"
+                    "First few:\n  ${_node_absl_undef_head}\n\n"
+                    "-labsl_* on gyp's link line for that configuration: "
+                    "${_node_absl_on_linkline} (from ${_node_cfg_out_dir}/build.ninja).\n"
+                    "If it says no, the names never reached configure.py; if it says yes, "
+                    "they are there but the archives are not being pulled in - check the "
+                    "order relative to the objects, and whether -Wl,--whole-archive is in "
+                    "play (gyp's solink rule wraps only the inputs, not the libraries).")
+            endif()
+            unset(_node_absl_undef)
+            unset(_node_absl_undef_count)
+            unset(_node_absl_undef_head)
+            unset(_node_undef)
+            unset(_node_undef_err)
+            unset(_node_cfg_shlib)
+            unset(_node_nm_args)
+        endforeach()
+        unset(_node_cfg_out_dir)
+        unset(_node_ninja_txt)
+        unset(_node_absl_on_linkline)
+    endif()
+    unset(_node_nm)
 endif()
 
 foreach(_node_cfg IN LISTS _node_configs)

@@ -56,6 +56,36 @@ Two consequences that are easy to get wrong:
 `-l<name>` is translated to `<name>.lib` by gyp's `msvs_emulation.AdjustLibraries`, so the
 ninja link line ends up with real MSVC library names.
 
+**The list is not always `absl_*.lib`, and getting that wrong is silent.** Two cases, both
+measured:
+
+| Triplet | Libraries abseil actually installs | What to pass |
+|---|---|---|
+| Windows, static (the cell everything above was measured on) | 91 `absl_*.lib`, one per component | every installed name |
+| Windows, dynamic (`*-windows`) | **one** library, `abseil_dll.lib` - vcpkg leaves `ABSL_BUILD_MONOLITHIC_SHARED_LIBS` at MSVC's default, which is ON, so no `absl_*.lib` exists at all | `abseil_dll` |
+| POSIX (any linkage) | `libabsl_*.a` - vcpkg's abseil port calls `vcpkg_check_linkage(ONLY_STATIC_LIBRARY)` off Windows, so abseil is never a shared library there | every installed name |
+
+Globbing `absl_*.lib` on a dynamic Windows triplet therefore yields an empty list, and an
+empty list is invisible: `configure.py` simply adds no `-l` entry, the port builds for another
+twenty minutes, and the first host tool to link `v8_libbase` dies with
+
+```
+v8_libbase.lib(v8_libbase.mutex.obj) : error LNK2019: unresolved external symbol
+    "public: void __cdecl absl::lts_20260107::Mutex::lock(void)"
+bytecode_builtins_list_generator.exe : fatal error LNK1120: 3 unresolved externals
+```
+
+which names neither abseil nor the triplet. The port now names `abseil_dll` for that case and
+refuses to continue with an empty list at all.
+
+The POSIX row has a second consequence for a **shared** libnode: since abseil is static-only
+there, it cannot be a run-time dependency, so the archives have to end up *inside*
+`libnode.so`. When they do not, the link still succeeds - a shared library may keep symbols
+undefined - and the failure moves to the consumer, as
+`libnode.so.147: undefined reference to absl::...`. The port therefore checks the built library
+with `nm` and refuses if any abseil symbol is still undefined (see
+`docs/dependency-disposition.md`).
+
 ## 3. What the externalization actually removes (measured)
 
 With `--shared-abseil --shared-highway` on v26.12.0:
