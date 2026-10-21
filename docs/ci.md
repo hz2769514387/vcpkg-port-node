@@ -17,8 +17,9 @@ here ([0002](decisions/0002-node-version-policy.md), [0003](decisions/0003-vcpkg
 | `node-release-watch.yml` | daily (06:23 UTC), manual | seconds | whether upstream has published a newer Node.js release (ADR 0002) |
 | `vcpkg-release-watch.yml` | daily (06:53 UTC), manual | seconds | whether upstream has published a newer vcpkg release (docs/versioning.md) |
 
-Every dimension is verified on push. What is *not* true is that every dimension is verified
-inside one job: `debug.yml` and `matrix.yml` exist because a job that installed the port for
+Every dimension this repository verifies is exercised on push - and the one it does not verify is
+named rather than implied (see the Debug subsection below). What is *not* true is that every
+dimension is verified inside one job: `debug.yml` and `matrix.yml` exist because a job that installed the port for
 three configurations and ran the suite three times would exceed GitHub's six-hour job limit,
 while three workflows run in parallel and each stays inside it (ADR 0007).
 
@@ -29,24 +30,51 @@ job is one job; a leg whose *install alone* is close to the ceiling runs as two,
 | | `split-install: false` (default) | `split-install: true` |
 |---|---|---|
 | jobs | one | `install`, then `build` (`needs: install`) |
-| what crosses between them | - | the installed tree, as an artifact (`port-install-<triplet>`, 1-day retention, uncompressed) |
-| used by | every `ci.yml` and `matrix.yml` leg, the Windows and macOS Debug legs | the two Linux Debug legs |
+| what crosses between them | - | the installed tree, as an artifact (`port-install-<triplet>`, 1-day retention) |
+| used by | every leg today | nothing today - see below |
 
 A dual triplet builds Node.js twice, and on a four-core runner that install is around five
 hours by itself - so five hours of install plus a consumer plus tests does not fit one
 budget, while five hours fits one and the rest fits another. **The split is a second budget,
-not a cure, and it has now been measured against one** (2026-10-21, run 39448354844): the
-Linux x64 Debug install job ran its full 350 minutes and was still building the Debug half of
-the port - it started node at 15:43, Release finished (1824/1824 targets), the job was cut at
-21:18. `install-timeout-minutes` is 360 now, which is GitHub's ceiling for *any* job rather
-than a budget that has been shown to fit: the Debug build of Node.js under gcc on a four-core
-runner is the whole cost, and nothing here halves it.
+not a cure, and it has been measured against one** (2026-10-21): run 39448354844 saw the Linux
+x64 Debug install job run its full 350 minutes with the port's Release half finished
+(1824/1824 targets, started 15:43) and Debug unfinished when it was cut at 21:18. Run
+39500147659 fitted the same install into 4h37m - but only because the Release half came from
+the binary cache - and its consumer job then failed on an artifact that had lost file modes
+(a zip round trip drops the executable bit, and the test suite's `.bin/ada` fixture needs it).
+
+That is why **no leg uses `split-install` today**, and why Linux has no Debug leg (below).
+The mode stays because it is the shape a larger runner would want, and because two things
+about it are now known: the artifact has to be a **tar** rather than a zip if anything in the
+tree relies on file modes, and the saving is bounded - it gives the consumer and the tests
+their own budget, not a shorter install.
 
 The artifact is a few gigabytes, which is why this is not the default: a release-only install
 is minutes and moving it would cost more than repeating it. The two jobs share the step bodies
 through `.github/actions/prepare` and `.github/actions/configure` rather than through a copy -
 the install job's configure is what builds the port, and the consumer job's configure runs
 again only to find the installed tree already current.
+
+### Debug is verified on four cells, not six
+
+`debug.yml` runs Windows x64, Windows arm64, macOS arm64 and macOS x64. **Linux has no Debug
+leg**, and that is a runner limit rather than a port limit:
+
+| | |
+|---|---|
+| Linux x64, dual install (Release + Debug) | cut at 350 minutes with Debug unfinished (run 39448354844); 4h37m with the Release half from the binary cache (run 39500147659) |
+| the same dual install built with clang-cl (Windows, macOS) | roughly two to three hours |
+
+The Debug build of Node.js under gcc is the whole cost - `-O0 -g` over V8's translation units
+produces objects and links far larger than the release build, and a four-core runner has no
+headroom left. Nothing here halves it: a debug-only triplet (`VCPKG_BUILD_TYPE=debug`) would,
+but the port refuses one (seven dependencies' post-install fixups break on the debug layout,
+see the top of `debug.yml`) and even that is around four and a half hours.
+
+So the statement is the one in the README's known limits: a Debug consumer is supported and
+verified on Windows and macOS; on Linux this repository's CI **does not verify it**, because
+the machine that would is not a GitHub-hosted one. Re-adding the two legs on a bigger runner
+is two job blocks plus `split-install: true`, with the two lessons above.
 
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
 place the build steps exist. They differ in which `preset` and `triplet` they pass, in which

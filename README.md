@@ -248,15 +248,17 @@ libraries by hand; the generated config is the readable description of that link
 
 ## Continuous integration
 
-Four gates, described in `docs/ci.md`, and every dimension of the matrix is verified **on every
-push**:
+Four gates, described in `docs/ci.md`. Every dimension this repository verifies is exercised **on
+every push**, and the one it does not is named rather than implied:
 
 - a seconds-long lint pass;
 - `ci.yml` — the port built through `test/` across all six platform cells (both architectures on
   Windows, Linux and macOS), consumed as Release **and** as RelWithDebInfo, with Node.js's own
   test suite run against the Release consumer of every leg;
-- `debug.yml` — the same six cells as a **Debug** consumer, which needs a Debug library and
-  therefore its own install;
+- `debug.yml` — a **Debug** consumer, which needs a Debug library and therefore its own install.
+  Four cells, not six: Windows x64 and arm64, macOS arm64 and x64. **Linux has no Debug leg**,
+  because the Debug build of Node.js with gcc does not fit a GitHub-hosted runner — the
+  measurements and what would bring it back are in `docs/ci.md`;
 - `matrix.yml` — the rest of the matrix: the dynamic CRT on Windows and a **shared libnode** on
   every platform. These legs are non-blocking until each has completed a build.
 

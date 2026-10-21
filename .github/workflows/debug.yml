@@ -19,6 +19,11 @@ name: Debug configuration
 #
 # Runs on push as well as weekly: every dimension is verified on push, and keeping Debug in
 # its own workflow is what keeps it inside the six-hour job limit.
+#
+# **Four cells, not six**: Windows (x64, arm64) and macOS (arm64, x64). Linux has no Debug leg,
+# because the Debug build of Node.js with gcc does not fit a GitHub-hosted runner - see the note
+# where the Linux jobs used to be, and docs/ci.md for the numbers. It is a limit of the runner,
+# not of the port: a machine with more cores builds the same configuration fine.
 
 on:
   push:
@@ -64,41 +69,16 @@ jobs:
       expect-arch: ARM64
       timeout-minutes: 330
 
-  # The two Linux legs run as two jobs each: the dual-triplet install alone is close to five
-  # hours on a four-core runner, and the six-hour ceiling applies per job. Windows and macOS
-  # build the same dual install in two to three hours, so they stay single-job - an install
-  # artifact is a few gigabytes and only worth moving when it has to be.
-  linux:
-    uses: ./.github/workflows/build-test.yml
-    secrets: inherit
-    with:
-      runner: ubuntu-latest
-      preset: x64-linux
-      triplet: x64-linux
-      consumer-configs: Debug
-      suite-configs: ""
-      split-install: true
-      # Measured 2026-10-21 (run 39448354844): the port alone - Release and Debug - ran from
-      # 15:43 to the 350-minute cut at 21:18, Release finished (1824/1824) and Debug did not.
-      # So a Linux Debug install needs more than one job's worth of wall clock even with the
-      # leg split, and 360 below is only the ceiling, not a budget that has been shown to fit.
-      install-timeout-minutes: 360
-      timeout-minutes: 330
-
-  linux-arm64:
-    uses: ./.github/workflows/build-test.yml
-    secrets: inherit
-    with:
-      runner: ubuntu-24.04-arm
-      preset: arm64-linux
-      triplet: arm64-linux
-      consumer-configs: Debug
-      suite-configs: ""
-      split-install: true
-      # Same as the x64 leg above: the measurement is there, and 360 is the ceiling rather
-      # than a budget known to fit.
-      install-timeout-minutes: 360
-      timeout-minutes: 330
+  # No Linux legs. The Debug build of Node.js with gcc does not fit a GitHub-hosted runner:
+  # measured 2026-10-21 (run 39448354844) the install job ran its full 350 minutes with the
+  # port's Release half finished (1824/1824 targets) and Debug unfinished, and run 39500147659
+  # then fitted the install into 4h37m only because the Release half came from the binary cache
+  # - the consumer job after it failed on an artifact that had lost file modes (an
+  # upload/download round trip through zip drops the executable bit on the test-suite fixtures).
+  # Rather than carry two legs that cannot pass and cost six runner-hours per push, Debug is
+  # verified on Windows (x64, arm64) and macOS (arm64, x64) and Linux Debug is a documented gap
+  # in docs/ci.md. `split-install` in build-test.yml is the mode those two legs used and is kept
+  # for a larger runner; see the note there.
 
   macos:
     uses: ./.github/workflows/build-test.yml
@@ -125,7 +105,7 @@ jobs:
       timeout-minutes: 330
 
   logs:
-    needs: [windows, windows-arm64, linux, linux-arm64, macos, macos-x64]
+    needs: [windows, windows-arm64, macos, macos-x64]
     if: always()
     uses: ./.github/workflows/logs.yml
     secrets: inherit

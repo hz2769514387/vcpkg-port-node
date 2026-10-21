@@ -91,6 +91,13 @@ jobs:
     # The expensive half of a split leg - a dual triplet builds Node.js twice - and the whole
     # reason the split exists, since the six-hour limit applies per job, not per leg.
     #
+    # **No leg uses this today**, so it is skipped everywhere: the only caller was the two Linux
+    # Debug legs, and those are gone (docs/ci.md, "Debug is verified on four cells"). It is kept
+    # because a larger runner would want exactly this shape, and because the two lessons about
+    # it are written down there - the artifact has to be a tar if anything relies on file
+    # modes, and the saving is bounded. Delete it together with the input if nothing has used
+    # it by the time a bigger runner is clearly not coming.
+    #
     # Deliberately *not* continue-on-error, whatever `experimental` says: a leg whose install
     # failed has nothing to consume, and letting this job report success would hand an empty
     # or stale tree to the consumer job and turn a clear failure into a confusing one.
