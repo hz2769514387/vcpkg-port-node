@@ -1028,6 +1028,31 @@ foreach(_node_cfg IN LISTS _node_configs)
         unset(_node_shared_deps)
     endif()
 
+    # -----------------------------------------------------------------------
+    # Windows shared: put the dependency DLLs where the tools are run from.
+    #
+    # The same problem the symlinks above solve on Unix, with a different answer: Windows has
+    # no rpath, and the loader searches the executable's own directory before PATH. PATH alone
+    # is not enough here, because gyp-win-tool's action-wrapper runs each action with the
+    # environment it recorded at gyp time (`environment.x64`), so the PATH this port exports
+    # does not reach it. Measured 2026-10-21: with the DLLs only in `<installed>/bin`,
+    # `node_mksnapshot.exe` linked and then the snapshot action died with
+    # 0xC0000135 (STATUS_DLL_NOT_FOUND) while generating `gen/node_snapshot.cc`, which ninja
+    # reports as `FAILED: [code=3221225781] gen/node_snapshot.cc` and nothing else.
+    #
+    # A copy, not a link: Windows has no link the loader follows. These are the dependency
+    # DLLs only (a few tens of megabytes); libnode.dll itself is produced into this directory
+    # by the build.
+    if(VCPKG_TARGET_IS_WINDOWS AND _node_shared_build)
+        set(_node_out_dir "${SOURCE_PATH}/out/${_node_cfg}")
+        file(GLOB _node_dep_dlls "${CURRENT_INSTALLED_DIR}/bin/*.dll")
+        if(_node_dep_dlls)
+            file(COPY ${_node_dep_dlls} DESTINATION "${_node_out_dir}")
+        endif()
+        unset(_node_dep_dlls)
+        unset(_node_out_dir)
+    endif()
+
     set(_node_ninja_targets libnode)
     if(_node_cfg STREQUAL "Release" AND "tools" IN_LIST FEATURES)
         list(APPEND _node_ninja_targets node)
