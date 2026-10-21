@@ -1204,11 +1204,31 @@ if(_node_shared_build AND NOT VCPKG_TARGET_IS_WINDOWS)
                         string(APPEND _node_absl_in_ninja " ${_node_ninja_hit}")
                     endif()
                     if(_node_ninja_hit MATCHES "libnode")
-                        if(_node_ninja_txt MATCHES "-labsl_")
-                            set(_node_absl_in_libnode "yes, in ${_node_ninja_hit}")
+                        # "The file mentions -labsl_*" is not the question. gyp writes one file
+                        # per target and it holds several edges, so the flags can be in the file
+                        # and still miss the edge that links the library. Ask the `libs` lines
+                        # specifically - that variable is what the solink rule expands - and
+                        # quote the first one so the answer is visible rather than inferred.
+                        string(REGEX MATCHALL "libs = [^\n]*" _node_libs_lines "${_node_ninja_txt}")
+                        if(_node_libs_lines STREQUAL "")
+                            set(_node_absl_in_libnode
+                                "no libs line at all in ${_node_ninja_hit} (though the file itself carries -labsl_*)")
                         else()
-                            set(_node_absl_in_libnode "no, ${_node_ninja_hit} has none")
+                            set(_node_libs_hit "no")
+                            foreach(_node_libs_line IN LISTS _node_libs_lines)
+                                if(_node_libs_line MATCHES "-labsl_")
+                                    set(_node_libs_hit "yes")
+                                endif()
+                            endforeach()
+                            list(GET _node_libs_lines 0 _node_libs_first)
+                            string(SUBSTRING "${_node_libs_first}" 0 160 _node_libs_first)
+                            set(_node_absl_in_libnode
+                                "${_node_libs_hit}, in ${_node_ninja_hit} - first libs line: ${_node_libs_first}")
+                            unset(_node_libs_first)
+                            unset(_node_libs_line)
                         endif()
+                        unset(_node_libs_lines)
+                        unset(_node_libs_hit)
                     endif()
                 endforeach()
                 if(_node_absl_in_ninja STREQUAL "")
