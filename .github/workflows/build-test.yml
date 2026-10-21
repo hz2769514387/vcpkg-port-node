@@ -143,12 +143,15 @@ jobs:
       - name: Configure the consumer test project (release-only warm-up)
         if: ${{ inputs.install-only }}
         uses: ./.github/actions/configure
-        env:
-          VCPKG_BUILD_TYPE: release
         with:
           preset: ${{ inputs.preset }}
           triplet: ${{ inputs.triplet }}
           config: ${{ inputs.consumer-configs }}
+          # An input, not an `env:` on this step: a step-level env does not reach the steps of a
+          # composite action, and the first version of this did exactly that - the port printed
+          # "VCPKG_BUILD_TYPE unset -> building Release + Debug" and the warm-up built both
+          # halves for five hours (run 39534901582).
+          vcpkg-build-type: release
       - name: Configure the consumer test project
         if: ${{ !inputs.install-only }}
         uses: ./.github/actions/configure
@@ -313,7 +316,20 @@ jobs:
           target="test/build/${{ inputs.preset }}/vcpkg_installed"
           mkdir -p "$target"
           tar -xf "$RUNNER_TEMP/port-install/port-install.tar" -C "$target"
-          ls -l "$target/share/unofficial-node/../node/test-suite/test/fixtures/run-script/node_modules/.bin/" | head -n 5
+          # Assert the mode survived, rather than listing a path: the tar exists because a zip
+          # round trip dropped the executable bit (run 39500147659), and the first version of
+          # this step hard-coded a fixture path and failed on a path that had moved (run
+          # 39534901582). `find` asks the tree where the fixtures are.
+          bin=$(find "$target/share/node/test-suite" -path '*/.bin/*' -type f 2>/dev/null | head -n 1)
+          if [ -z "$bin" ]; then
+            echo "::warning::no .bin fixture in the installed test suite; not asserting modes"
+          else
+            echo "fixture mode: $(stat -c '%A' "$bin") $bin"
+            [ -x "$bin" ] || {
+              echo "::error::the installed test suite lost its executable bit on $bin"
+              exit 1
+            }
+          fi
       - name: Configure the consumer test project
         uses: ./.github/actions/configure
         with:

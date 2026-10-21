@@ -94,7 +94,7 @@ jobs:
       consumer-configs: Release
       suite-configs: ""
       install-only: true
-      install-timeout-minutes: 300
+      install-timeout-minutes: 360
 
   linux:
     needs: linux-warm
@@ -121,7 +121,7 @@ jobs:
       consumer-configs: Release
       suite-configs: ""
       install-only: true
-      install-timeout-minutes: 300
+      install-timeout-minutes: 360
 
   linux-arm64:
     needs: linux-arm64-warm
