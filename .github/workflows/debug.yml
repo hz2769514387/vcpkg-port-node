@@ -20,10 +20,9 @@ name: Debug configuration
 # Runs on push as well as weekly: every dimension is verified on push, and keeping Debug in
 # its own workflow is what keeps it inside the six-hour job limit.
 #
-# **Four cells, not six**: Windows (x64, arm64) and macOS (arm64, x64). Linux has no Debug leg,
-# because the Debug build of Node.js with gcc does not fit a GitHub-hosted runner - see the note
-# where the Linux jobs used to be, and docs/ci.md for the numbers. It is a limit of the runner,
-# not of the port: a machine with more cores builds the same configuration fine.
+# Six cells. Windows and macOS are one job each; the two Linux cells are three (a Release-only
+# warm-up, the dual install, and the consumer), because a cold dual install does not fit a
+# four-core runner in one job - see the note above those jobs and docs/ci.md.
 
 on:
   push:
@@ -69,16 +68,74 @@ jobs:
       expect-arch: ARM64
       timeout-minutes: 330
 
-  # No Linux legs. The Debug build of Node.js with gcc does not fit a GitHub-hosted runner:
-  # measured 2026-10-21 (run 39448354844) the install job ran its full 350 minutes with the
-  # port's Release half finished (1824/1824 targets) and Debug unfinished, and run 39500147659
-  # then fitted the install into 4h37m only because the Release half came from the binary cache
-  # - the consumer job after it failed on an artifact that had lost file modes (an
-  # upload/download round trip through zip drops the executable bit on the test-suite fixtures).
-  # Rather than carry two legs that cannot pass and cost six runner-hours per push, Debug is
-  # verified on Windows (x64, arm64) and macOS (arm64, x64) and Linux Debug is a documented gap
-  # in docs/ci.md. `split-install` in build-test.yml is the mode those two legs used and is kept
-  # for a larger runner; see the note there.
+  # --- the Linux Debug cell, as three jobs per platform ------------------------------------
+  # A port change invalidates the binary cache key (the key hashes ports/**), and a port change is
+  # exactly when this cell is worth having. A cold round cannot build a dual install on a
+  # four-core runner: measured 2026-10-21, run 39448354844 was cut at 350 minutes with the port's
+  # Release half finished (1824/1824 targets) and Debug unfinished, while run 39500147659 - whose
+  # dependencies came from a warm cache - needed 4h37m for the same install.
+  #
+  # So each platform is two calls rather than one. `*-warm` installs Release only
+  # (VCPKG_BUILD_TYPE=release) to fill the binary cache; the leg that `needs:` it then installs
+  # the dual triplet, where Release is a cache hit and only Debug is compiled. Each job stays
+  # inside the six-hour ceiling even with a cold key.
+  #
+  # Two details that cost a round each to learn: the install tree crosses to the consumer job as
+  # a tar (a zip artifact dropped the executable bit on the test suite's .bin/ada fixture, run
+  # 39500147659), and the warm-up must not upload its tree (release-only, thrown away).
+  linux-warm:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      preset: x64-linux
+      triplet: x64-linux
+      # Release, to match what a release-only install can serve: nothing is built here.
+      consumer-configs: Release
+      suite-configs: ""
+      install-only: true
+      install-timeout-minutes: 300
+
+  linux:
+    needs: linux-warm
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      preset: x64-linux
+      triplet: x64-linux
+      consumer-configs: Debug
+      suite-configs: ""
+      split-install: true
+      install-timeout-minutes: 360
+      timeout-minutes: 120
+
+  linux-arm64-warm:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24.04-arm
+      preset: arm64-linux
+      triplet: arm64-linux
+      # Release, to match what a release-only install can serve: nothing is built here.
+      consumer-configs: Release
+      suite-configs: ""
+      install-only: true
+      install-timeout-minutes: 300
+
+  linux-arm64:
+    needs: linux-arm64-warm
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-24.04-arm
+      preset: arm64-linux
+      triplet: arm64-linux
+      consumer-configs: Debug
+      suite-configs: ""
+      split-install: true
+      install-timeout-minutes: 360
+      timeout-minutes: 120
 
   macos:
     uses: ./.github/workflows/build-test.yml
@@ -105,7 +162,7 @@ jobs:
       timeout-minutes: 330
 
   logs:
-    needs: [windows, windows-arm64, macos, macos-x64]
+    needs: [windows, windows-arm64, linux-warm, linux, linux-arm64-warm, linux-arm64, macos, macos-x64]
     if: always()
     uses: ./.github/workflows/logs.yml
     secrets: inherit

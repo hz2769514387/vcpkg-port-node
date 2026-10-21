@@ -77,6 +77,11 @@ on:
         required: false
         type: number
         default: 360
+      install-only:
+        description: "Run the install job and nothing else, with VCPKG_BUILD_TYPE=release. Used as a warm-up in front of a dual install: it fills the binary cache with the Release half, so the leg that follows only has to build Debug. Call it as a job and make the real leg `needs:` it."
+        required: false
+        type: boolean
+        default: false
       timeout-minutes:
         description: Job timeout. A dual-configuration (Debug) leg on a slow runner needs more than the default.
         required: false
@@ -101,7 +106,7 @@ jobs:
     # Deliberately *not* continue-on-error, whatever `experimental` says: a leg whose install
     # failed has nothing to consume, and letting this job report success would hand an empty
     # or stale tree to the consumer job and turn a clear failure into a confusing one.
-    if: ${{ inputs.split-install }}
+    if: ${{ inputs.split-install || inputs.install-only }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.install-timeout-minutes }}
     env:
@@ -131,7 +136,21 @@ jobs:
           # Evaluated here, after the checkout, and handed in: hashFiles is not something to
           # rely on inside a composite action.
           manifest-hash: ${{ hashFiles('ports/**', 'test/vcpkg.json') }}
+      # Two spellings of the same step, because the warm-up needs one environment variable the
+      # real install must not see: `VCPKG_BUILD_TYPE=release` makes vcpkg build only the Release
+      # configuration, which is exactly what a warm-up wants (its job is to put the Release
+      # package in the binary cache) and exactly what a dual install must not have.
+      - name: Configure the consumer test project (release-only warm-up)
+        if: ${{ inputs.install-only }}
+        uses: ./.github/actions/configure
+        env:
+          VCPKG_BUILD_TYPE: release
+        with:
+          preset: ${{ inputs.preset }}
+          triplet: ${{ inputs.triplet }}
+          config: ${{ inputs.consumer-configs }}
       - name: Configure the consumer test project
+        if: ${{ !inputs.install-only }}
         uses: ./.github/actions/configure
         with:
           preset: ${{ inputs.preset }}
@@ -191,16 +210,30 @@ jobs:
           du -sh "$RUNNER_TEMP/ci-logs" || true
           ls -la "$RUNNER_TEMP/ci-logs" || true
 
+      - name: Pack the installed tree
+        # A warm-up's tree is release-only and is thrown away; only the binary cache it filled
+        # matters, and that is saved by the cache action's post step.
+        if: ${{ !inputs.install-only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # A tar inside the artifact, not the artifact's own zip of a directory: zip carries no
+          # POSIX mode bits, and a round trip through it dropped the executable bit on the test
+          # suite's `test/fixtures/run-script/node_modules/.bin/ada` fixture - the consumer job
+          # then refused to configure with "test suite fixture lost its executable bit"
+          # (measured, run 39500147659). tar keeps the modes, and the artifact only ever sees
+          # one file.
+          tar -cf "$RUNNER_TEMP/port-install.tar"             -C "test/build/${{ inputs.preset }}/vcpkg_installed" .
+          ls -lh "$RUNNER_TEMP/port-install.tar"
+
       - name: Upload the installed tree
+        if: ${{ !inputs.install-only }}
         uses: actions/upload-artifact@v4
         with:
           # Not `logs-part-*`: that pattern is what logs.yml merges into the run's log
           # archive, and a few gigabytes of libraries do not belong in a log archive.
           name: port-install-${{ inputs.triplet }}
-          # Only the installed tree: the rest of the build directory is CMake state that the
-          # consumer job recreates in seconds, and it would be as large as the tree itself.
-          path: test/build/${{ inputs.preset }}/vcpkg_installed/**
-          include-hidden-files: true
+          path: ${{ runner.temp }}/port-install.tar
           if-no-files-found: error
           # Compressed, not stored. A dual Debug install runs to several gigabytes - libnode
           # and the v8 archives are object files with debug information, twice - and the
@@ -215,7 +248,9 @@ jobs:
         with:
           # Named so that the merge job in every calling workflow picks all legs up with one
           # pattern: one archive per run, not one per platform.
-          name: logs-part-install-${{ inputs.triplet }}
+          # `warm` or `install` in the name: a warm-up and the install job of the same leg
+          # both run, and upload-artifact@v4 refuses two artifacts with one name.
+          name: logs-part-${{ inputs.install-only && 'warm' || 'install' }}-${{ inputs.triplet }}
           path: ${{ runner.temp }}/ci-logs
           if-no-files-found: warn
           retention-days: 7
@@ -225,7 +260,7 @@ jobs:
     # Runs when the install job was skipped (the leg is not split) and when it succeeded.
     # Not when it failed or the run was cancelled: `needs` would let it start, and it would
     # then build against nothing.
-    if: ${{ !cancelled() && needs.install.result != 'failure' }}
+    if: ${{ !cancelled() && !inputs.install-only && needs.install.result != 'failure' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     # continue-on-error has to live here rather than on the caller: a job that calls a
@@ -264,10 +299,21 @@ jobs:
         uses: actions/download-artifact@v4
         with:
           name: port-install-${{ inputs.triplet }}
+          path: ${{ runner.temp }}/port-install
+
+      - name: Unpack the installed tree
+        if: ${{ inputs.split-install }}
+        shell: bash
+        run: |
+          set -euo pipefail
           # The same absolute path the install job used. It has to be: vcpkg's status entries
           # and the exported CMake configs carry absolute paths, and the runner's workspace
-          # path is the same in both jobs for the same repository.
-          path: test/build/${{ inputs.preset }}/vcpkg_installed
+          # path is the same in both jobs for the same repository. `tar -x` restores the modes
+          # the install job had, which is the reason this is a tar at all.
+          target="test/build/${{ inputs.preset }}/vcpkg_installed"
+          mkdir -p "$target"
+          tar -xf "$RUNNER_TEMP/port-install/port-install.tar" -C "$target"
+          ls -l "$target/share/unofficial-node/../node/test-suite/test/fixtures/run-script/node_modules/.bin/" | head -n 5
       - name: Configure the consumer test project
         uses: ./.github/actions/configure
         with:
