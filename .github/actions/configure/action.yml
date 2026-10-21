@@ -18,10 +18,6 @@ inputs:
   config:
     description: First consumer configuration; its value seeds CMAKE_BUILD_TYPE.
     required: true
-  vcpkg-build-type:
-    description: "Passed to vcpkg as VCPKG_BUILD_TYPE. `release` makes the install build only the Release configuration, which is what the Linux Debug warm-up job wants; leave empty for a normal dual install."
-    required: false
-    default: ""
 
 runs:
   using: composite
@@ -33,18 +29,8 @@ runs:
         PRESET: ${{ inputs.preset }}
         TRIPLET: ${{ inputs.triplet }}
         CONFIG: ${{ inputs.config }}
-        # A caller's step-level env does not reach the steps of a composite action, so the
-        # release-only switch travels as an input and is exported here. Measured: with the
-        # caller setting `env: VCPKG_BUILD_TYPE=release` on the `uses:` step, the port still
-        # printed "VCPKG_BUILD_TYPE unset -> building Release + Debug" and the warm-up spent
-        # five hours building both halves (run 39534901582).
-        NODE_PORT_VCPKG_BUILD_TYPE: ${{ inputs.vcpkg-build-type }}
       run: |
         set -euo pipefail
-        if [ -n "${NODE_PORT_VCPKG_BUILD_TYPE}" ]; then
-          export VCPKG_BUILD_TYPE="$NODE_PORT_VCPKG_BUILD_TYPE"
-          echo "vcpkg: VCPKG_BUILD_TYPE=$VCPKG_BUILD_TYPE (this install builds one configuration)"
-        fi
         # CMAKE_BUILD_TYPE is the *first* configuration in the list. On a
         # multi-config generator (Visual Studio) it is not what decides the
         # build - every configuration is available in one tree - and on a

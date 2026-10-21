@@ -23,65 +23,49 @@ dimension is verified inside one job: `debug.yml` and `matrix.yml` exist because
 three configurations and ran the suite three times would exceed GitHub's six-hour job limit,
 while three workflows run in parallel and each stays inside it (ADR 0007).
 
-The limit applies **per job**, which is the other half of that argument. A leg that fits one
-job is one job; a leg whose *install alone* is close to the ceiling runs as two, with
-`split-install: true`:
+The limit applies **per job**, which is the other half of that argument. A leg that fits one job
+is one job; the one leg that does not fit - Linux x64 Debug - runs as two, with
+`split-install: true`, in front of a job that installs the port only:
 
 | | `split-install: false` (default) | `split-install: true` |
 |---|---|---|
 | jobs | one | `install`, then `build` (`needs: install`) |
-| what crosses between them | - | the installed tree, as an artifact (`port-install-<triplet>`, 1-day retention) |
-| used by | every leg except the two Linux Debug ones | the two Linux Debug legs |
-| also used for | - | a release-only **warm-up** in front of each of them (`install-only: true`) |
+| what crosses between them | - | the installed tree, as a **tar** (`port-install-<triplet>`, 1-day retention) |
+| used by | every leg except Linux x64 Debug | Linux x64 Debug |
 
-A dual triplet builds Node.js twice, and on a four-core runner that install is around five to
-six hours by itself - so install plus consumer plus tests does not fit one budget, while the
-install fits one and the rest fits another. Two things were measured on 2026-10-21 and both
-changed the shape of this:
+Three things were measured on 2026-10-21 and each changed the shape of this:
 
-- **A cold install does not fit, and the cache key goes cold exactly when the cell matters.**
-  Run 39448354844 (fresh key, because `ports/**` had changed) was cut at 350 minutes with the
-  port's Release half finished (1824/1824 targets, started 15:43) and Debug unfinished at
-  21:18. Run 39500147659, whose dependencies came from the cache, fitted the same install into
-  4h37m. The cache key hashes `ports/**`, so every port change starts from cold.
-- **A zip artifact loses file modes.** Run 39500147659's consumer job refused to configure
-  with "test suite fixture lost its executable bit" on
-  `test/fixtures/run-script/node_modules/.bin/ada`: the tree crosses between jobs as an
-  artifact, and `upload-artifact` zips what it is given. It is a **tar** inside the artifact
-  now (`tar -cf` on the install side, `tar -xf` on the consumer side), which carries the modes.
+- **A cold dual install does not fit, and the cache key goes cold exactly when it matters.** The
+  cache key hashes `ports/**`, so any port change starts from cold. Run 39448354844 was cut at
+  350 minutes with the port's Release half finished and Debug unfinished; run 39565015717 took
+  4.1 hours for node alone and 4.5 for the job, with a warm dependency set.
+- **A zip artifact loses file modes.** Run 39500147659's consumer job refused to configure with
+  "test suite fixture lost its executable bit" on `.bin/ada`: the tree crosses between jobs as
+  an artifact and `upload-artifact` zips what it is given. It is a tar inside the artifact now.
+- **A release-only install is not reachable from here.** The plan was a cheap `install-only`
+  job with `VCPKG_BUILD_TYPE=release`, which would halve the prepare time. Neither a step-level
+  `env:` (which does not reach a composite action's steps) nor an action input exported inside
+  it reached vcpkg: run 39534901582 printed `vcpkg: VCPKG_BUILD_TYPE=release` from the shell and
+  then `-- node port: VCPKG_BUILD_TYPE unset -> building Release + Debug` from the port. So the
+  prepare job does the full install and its product is the **binary cache entry**; the leg that
+  follows re-installs in 12.5 minutes instead of 4.5 hours.
 
-So a Linux Debug cell is **three jobs**, not two:
+### Debug is five cells: four single-job, one in two
 
-| job | what it does |
-|---|---|
-| `<leg>-warm` | `install-only: true` - installs with `VCPKG_BUILD_TYPE=release`, which fills the binary cache with the Release half and uploads nothing |
-| `<leg>`/`install` | the dual install; Release is a cache hit, so only Debug is compiled |
-| `<leg>`/`build` | downloads the tar, unpacks it, builds the consumer and runs the tests |
-
-Each of the three stays inside the ceiling even on a cold key. The artifact is a few
-gigabytes, which is why none of this is the default: a release-only install is minutes and
-moving it between jobs would cost more than repeating it.
-
-The jobs share the step bodies through `.github/actions/prepare` and
-`.github/actions/configure` rather than through a copy - the install job's configure is what
-builds the port, and the consumer job's configure runs again only to find the installed tree
-already current.
-
-### Debug is six cells, with Linux in three jobs each
-
-`debug.yml` runs the same six cells as `ci.yml`. Windows and macOS are one job each, because
-clang-cl builds the same dual install in two to three hours; Linux is three jobs per cell, for
-the two reasons above. That asymmetry is the price of a four-core runner and it is measured,
-not assumed:
+`debug.yml` runs Windows x64, Windows arm64, macOS arm64, macOS x64 and Linux x64.
 
 | | |
 |---|---|
-| Linux x64, cold dual install | cut at 350 minutes, Release finished, Debug unfinished (run 39448354844) |
-| Linux x64, dual install with the Release half cached | 4h37m (run 39500147659) |
-| the same dual install built with clang-cl (Windows, macOS) | two to three hours |
+| Linux x64, job 1 (`install-only`) | 4.5 h, product is the cache entry |
+| Linux x64, job 2 (install from cache, consumer, tests) | 12.5 min + 8 min |
+| Linux arm64, dual install | **cut at 6 hours**, node still compiling (run 39565015717) |
+| the same dual install with clang-cl (Windows, macOS) | two to three hours |
 
-If a larger runner is ever available, `linux-warm` and `linux-arm64-warm` can be deleted and
-`install-only` left unused: the leg that follows already works with a warm cache of its own.
+**Linux arm64 has no Debug leg.** Adding a third job does not help: the six-hour cut is the
+install alone, so there is nothing to split. It is a runner limit, not a port limit - a machine
+with more cores builds the same configuration - and closing it means the same two job blocks
+back on a bigger runner. Linux Debug on arm64 is therefore the one cell this repository's CI
+does not verify, and it says so here rather than implying otherwise.
 
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
 place the build steps exist. They differ in which `preset` and `triplet` they pass, in which

@@ -255,11 +255,12 @@ every push**, and the one it does not is named rather than implied:
 - `ci.yml` — the port built through `test/` across all six platform cells (both architectures on
   Windows, Linux and macOS), consumed as Release **and** as RelWithDebInfo, with Node.js's own
   test suite run against the Release consumer of every leg;
-- `debug.yml` — the same six cells as a **Debug** consumer, which needs a Debug library and
-  therefore its own install. Windows and macOS are one job per cell; Linux is three — a
-  release-only warm-up to fill the binary cache, the dual install, and the consumer — because a
-  cold dual install of Node.js with gcc does not fit a four-core runner in one job (`docs/ci.md`
-  has the measurements);
+- `debug.yml` — a **Debug** consumer, which needs a Debug library and therefore its own install.
+  Five cells: Windows x64 and arm64, macOS arm64 and x64, and Linux x64 — the last as two jobs,
+  one to install the port and fill the binary cache and one to build and test, because a cold
+  dual install of Node.js with gcc is 4.5 hours on a four-core runner. **Linux arm64 has no
+  Debug leg**: its install does not finish inside six hours, and `docs/ci.md` has the numbers
+  and what would close the gap;
 - `matrix.yml` — the rest of the matrix: the dynamic CRT on Windows and a **shared libnode** on
   every platform. These legs are non-blocking until each has completed a build.
 

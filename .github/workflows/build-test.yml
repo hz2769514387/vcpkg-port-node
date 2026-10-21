@@ -78,7 +78,7 @@ on:
         type: number
         default: 360
       install-only:
-        description: "Run the install job and nothing else, with VCPKG_BUILD_TYPE=release. Used as a warm-up in front of a dual install: it fills the binary cache with the Release half, so the leg that follows only has to build Debug. Call it as a job and make the real leg `needs:` it."
+        description: "Run the install job and nothing else: install the port, upload no tree, run no consumer. Its product is the vcpkg binary-cache entry it saves when it ends, so a leg that `needs:` it re-installs in minutes instead of hours. Used by the Linux x64 Debug cell."
         required: false
         type: boolean
         default: false
@@ -136,24 +136,13 @@ jobs:
           # Evaluated here, after the checkout, and handed in: hashFiles is not something to
           # rely on inside a composite action.
           manifest-hash: ${{ hashFiles('ports/**', 'test/vcpkg.json') }}
-      # Two spellings of the same step, because the warm-up needs one environment variable the
-      # real install must not see: `VCPKG_BUILD_TYPE=release` makes vcpkg build only the Release
-      # configuration, which is exactly what a warm-up wants (its job is to put the Release
-      # package in the binary cache) and exactly what a dual install must not have.
-      - name: Configure the consumer test project (release-only warm-up)
-        if: ${{ inputs.install-only }}
-        uses: ./.github/actions/configure
-        with:
-          preset: ${{ inputs.preset }}
-          triplet: ${{ inputs.triplet }}
-          config: ${{ inputs.consumer-configs }}
-          # An input, not an `env:` on this step: a step-level env does not reach the steps of a
-          # composite action, and the first version of this did exactly that - the port printed
-          # "VCPKG_BUILD_TYPE unset -> building Release + Debug" and the warm-up built both
-          # halves for five hours (run 39534901582).
-          vcpkg-build-type: release
+      # One step for both jobs. A release-only variant was tried and removed: neither an `env:`
+      # on the step nor an input exported inside the action reached vcpkg, which went on to build
+      # both configurations (run 39534901582 printed "vcpkg: VCPKG_BUILD_TYPE=release" and the
+      # port answered "-- node port: VCPKG_BUILD_TYPE unset -> building Release + Debug"). The
+      # `install-only` job is therefore a full install whose product is the binary cache entry,
+      # and the leg that follows it installs from that cache in minutes.
       - name: Configure the consumer test project
-        if: ${{ !inputs.install-only }}
         uses: ./.github/actions/configure
         with:
           preset: ${{ inputs.preset }}
@@ -320,7 +309,10 @@ jobs:
           # round trip dropped the executable bit (run 39500147659), and the first version of
           # this step hard-coded a fixture path and failed on a path that had moved (run
           # 39534901582). `find` asks the tree where the fixtures are.
-          bin=$(find "$target/share/node/test-suite" -path '*/.bin/*' -type f 2>/dev/null | head -n 1)
+          # `-print -quit`, not `| head -n 1`: under `set -o pipefail` the head closing the pipe
+          # sends find a SIGPIPE, the pipeline fails and `set -e` aborts the step - which is
+          # exactly how this failed in run 39535015717 after a successful 4.8 GB extraction.
+          bin=$(find "$target/share/node/test-suite" -path '*/.bin/*' -type f -print -quit 2>/dev/null || true)
           if [ -z "$bin" ]; then
             echo "::warning::no .bin fixture in the installed test suite; not asserting modes"
           else

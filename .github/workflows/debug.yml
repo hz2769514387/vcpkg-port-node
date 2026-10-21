@@ -20,9 +20,10 @@ name: Debug configuration
 # Runs on push as well as weekly: every dimension is verified on push, and keeping Debug in
 # its own workflow is what keeps it inside the six-hour job limit.
 #
-# Six cells. Windows and macOS are one job each; the two Linux cells are three (a Release-only
-# warm-up, the dual install, and the consumer), because a cold dual install does not fit a
-# four-core runner in one job - see the note above those jobs and docs/ci.md.
+# Five cells. Windows and macOS are one job each; Linux x64 is two (an install job that fills the
+# binary cache, then the leg itself), because a cold dual install of Node.js under gcc is 4.5
+# hours on a four-core runner and has gone past 350 minutes. Linux arm64 is not there at all:
+# its dual install does not finish in six hours. See docs/ci.md.
 
 on:
   push:
@@ -68,36 +69,36 @@ jobs:
       expect-arch: ARM64
       timeout-minutes: 330
 
-  # --- the Linux Debug cell, as three jobs per platform ------------------------------------
-  # A port change invalidates the binary cache key (the key hashes ports/**), and a port change is
-  # exactly when this cell is worth having. A cold round cannot build a dual install on a
-  # four-core runner: measured 2026-10-21, run 39448354844 was cut at 350 minutes with the port's
-  # Release half finished (1824/1824 targets) and Debug unfinished, while run 39500147659 - whose
-  # dependencies came from a warm cache - needed 4h37m for the same install.
+  # --- the Linux Debug cell, as two jobs ------------------------------------------------
+  # Measured 2026-10-21 (run 39565015717): a dual install of the port on a four-core Linux
+  # runner is 4.1 hours for node alone, 4.5 for the job. That fits one job, but only just, and a
+  # cold dependency set has pushed it past 350 minutes before (run 39448354844). So the install
+  # is done twice in two jobs rather than once in one:
   #
-  # So each platform is two calls rather than one. `*-warm` installs Release only
-  # (VCPKG_BUILD_TYPE=release) to fill the binary cache; the leg that `needs:` it then installs
-  # the dual triplet, where Release is a cache hit and only Debug is compiled. Each job stays
-  # inside the six-hour ceiling even with a cold key.
+  #   linux-prepare   installs the port. Nothing is uploaded and nothing is tested - the product
+  #                   is the binary cache entry this job saves at its end.
+  #   linux           installs the same triplet again, which is now a cache hit (measured: 12.5
+  #                   minutes instead of 4.5 hours), then hands the tree to the consumer job as
+  #                   a tar and builds and tests it.
   #
-  # Two details that cost a round each to learn: the install tree crosses to the consumer job as
-  # a tar (a zip artifact dropped the executable bit on the test suite's .bin/ada fixture, run
-  # 39500147659), and the warm-up must not upload its tree (release-only, thrown away).
-  linux-warm:
+  # A release-only prepare job was the plan and is not possible: neither an `env:` on the `uses:`
+  # step nor an action input reached vcpkg, which built both configurations regardless
+  # ("vcpkg: VCPKG_BUILD_TYPE=release" printed by the shell, "-- node port: VCPKG_BUILD_TYPE
+  # unset -> building Release + Debug" printed by the port).
+  linux-prepare:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
       runner: ubuntu-latest
       preset: x64-linux
       triplet: x64-linux
-      # Release, to match what a release-only install can serve: nothing is built here.
-      consumer-configs: Release
+      consumer-configs: Debug
       suite-configs: ""
       install-only: true
       install-timeout-minutes: 360
 
   linux:
-    needs: linux-warm
+    needs: linux-prepare
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
@@ -107,35 +108,13 @@ jobs:
       consumer-configs: Debug
       suite-configs: ""
       split-install: true
-      install-timeout-minutes: 360
+      install-timeout-minutes: 120
       timeout-minutes: 120
 
-  linux-arm64-warm:
-    uses: ./.github/workflows/build-test.yml
-    secrets: inherit
-    with:
-      runner: ubuntu-24.04-arm
-      preset: arm64-linux
-      triplet: arm64-linux
-      # Release, to match what a release-only install can serve: nothing is built here.
-      consumer-configs: Release
-      suite-configs: ""
-      install-only: true
-      install-timeout-minutes: 360
-
-  linux-arm64:
-    needs: linux-arm64-warm
-    uses: ./.github/workflows/build-test.yml
-    secrets: inherit
-    with:
-      runner: ubuntu-24.04-arm
-      preset: arm64-linux
-      triplet: arm64-linux
-      consumer-configs: Debug
-      suite-configs: ""
-      split-install: true
-      install-timeout-minutes: 360
-      timeout-minutes: 120
+  # No arm64 Linux leg. The same dual install on `ubuntu-24.04-arm` did not finish in either
+  # budget tried - 6 hours in run 39565015717, with node still compiling - so there is no third
+  # job that would make it fit. Linux Debug is verified on x64; arm64 Linux Debug is a named gap
+  # in docs/ci.md, and a larger runner would close it by adding the same two job blocks back.
 
   macos:
     uses: ./.github/workflows/build-test.yml
@@ -162,7 +141,7 @@ jobs:
       timeout-minutes: 330
 
   logs:
-    needs: [windows, windows-arm64, linux-warm, linux, linux-arm64-warm, linux-arm64, macos, macos-x64]
+    needs: [windows, windows-arm64, linux-prepare, linux, macos, macos-x64]
     if: always()
     uses: ./.github/workflows/logs.yml
     secrets: inherit
