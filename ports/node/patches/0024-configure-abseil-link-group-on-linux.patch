@@ -1,0 +1,38 @@
+diff --git a/configure.py b/configure.py
+--- a/configure.py
++++ b/configure.py
+@@ -3116,6 +3116,34 @@
+ if make_global_settings:
+   output['make_global_settings'] = make_global_settings
+ 
++# Abseil arrives as about ninety static archives that reference each other, and an ELF linker
++# resolves archives in the order it meets them: one that needs a symbol from an archive listed
++# before it leaves that symbol undefined in the shared library, and the link still succeeds
++# because a shared library is allowed to have undefined symbols. Measured on linux-shared: the
++# `-labsl_*` flags were in libnode's own `libs` line and libnode.so still carried sixteen
++# undefined abseil symbols (AbslInternalSpinLockWake, CycleClock::cycle_clock_source_, ...).
++# The group makes ld rescan them until nothing new resolves.
++#
++# Linux only, and not "all POSIX": ld64 on macOS takes the same list as it is - measured, the
++# macOS shared legs link without this - and rejects --start-group outright.
++if sys.platform.startswith('linux'):
++  _grouped_libraries = []
++  _in_group = False
++  for _library in output['libraries']:
++    if _library.startswith('-labsl_'):
++      if not _in_group:
++        _grouped_libraries.append('-Wl,--start-group')
++        _in_group = True
++      _grouped_libraries.append(_library)
++    else:
++      if _in_group:
++        _grouped_libraries.append('-Wl,--end-group')
++        _in_group = False
++      _grouped_libraries.append(_library)
++  if _in_group:
++    _grouped_libraries.append('-Wl,--end-group')
++  output['libraries'] = _grouped_libraries
++
+ print_verbose(output)
+ 
+ # Dump as JSON to allow js2c.cc read it as a simple json file.

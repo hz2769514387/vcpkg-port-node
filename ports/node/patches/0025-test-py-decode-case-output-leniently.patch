@@ -1,0 +1,20 @@
+diff --git a/tools/test.py b/tools/test.py
+--- a/tools/test.py
++++ b/tools/test.py
+@@ -845,8 +845,14 @@
+   )
+   os.close(fd_out)
+   os.close(fd_err)
+-  output = open(outname, encoding='utf8').read()
+-  errors = open(errname, encoding='utf8').read()
++  # A case's output is whatever the case wrote, and a case may write a byte sequence that is
++  # not UTF-8 - a Windows API message in the ANSI code page, for one. Reading it strictly makes
++  # the *driver* die with UnicodeDecodeError and takes the whole shard with it: measured on a
++  # Windows English runner, "0xa8 in position 243" while the progress line still said
++  # `+ 2346 |- 0`, i.e. nothing had failed. Replacing the undecodable bytes keeps the case's
++  # verdict where it belongs - on its exit code - and leaves the rest of the shard running.
++  output = open(outname, encoding='utf8', errors='replace').read()
++  errors = open(errname, encoding='utf8', errors='replace').read()
+   CheckedUnlink(outname)
+   CheckedUnlink(errname)
+ 

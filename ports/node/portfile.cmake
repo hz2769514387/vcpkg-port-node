@@ -117,6 +117,8 @@ vcpkg_extract_source_archive(SOURCE_PATH
         "${CMAKE_CURRENT_LIST_DIR}/patches/0021-test-py-print-exit-code.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0022-uv-shared-define-only-when-libuv-is-bundled.patch"
         "${CMAKE_CURRENT_LIST_DIR}/patches/0023-simdjson-dll-import-define.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0024-configure-abseil-link-group-on-linux.patch"
+        "${CMAKE_CURRENT_LIST_DIR}/patches/0025-test-py-decode-case-output-leniently.patch"
 )
 
 # Build-time tools from vcpkg's tool cache, so nothing has to be preinstalled.
