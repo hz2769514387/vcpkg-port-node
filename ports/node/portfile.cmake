@@ -1047,7 +1047,14 @@ foreach(_node_cfg IN LISTS _node_configs)
     # by the build.
     if(VCPKG_TARGET_IS_WINDOWS AND _node_shared_build)
         set(_node_out_dir "${SOURCE_PATH}/out/${_node_cfg}")
-        file(GLOB _node_dep_dlls "${CURRENT_INSTALLED_DIR}/bin/*.dll")
+        # `bin/` and `lib/`: vcpkg's convention is bin/, but not every port follows it - LIEF
+        # installs `lib/LIEF.dll` next to its import library, and LIEF is one of the libraries
+        # node's snapshot tool imports. Measured with the dependents check below: of the 24 names
+        # it reported, 23 were system DLLs and the one real finding was LIEF.dll, which the
+        # `bin/`-only glob had never copied.
+        file(GLOB _node_dep_dlls
+             "${CURRENT_INSTALLED_DIR}/bin/*.dll"
+             "${CURRENT_INSTALLED_DIR}/lib/*.dll")
         if(_node_dep_dlls)
             file(COPY ${_node_dep_dlls} DESTINATION "${_node_out_dir}")
         endif()
@@ -1101,7 +1108,8 @@ foreach(_node_cfg IN LISTS _node_configs)
             else()
                 message(STATUS
                     "node port: ${_node_cfg} node_mksnapshot imports a DLL that is NOT in the "
-                    "output root:${_node_missing_dlls}")
+                    "output root:${_node_missing_dlls} (system DLLs are expected in this list; "
+                    "anything else is a dependency that was not copied)")
             endif()
             unset(_node_missing_dlls)
             unset(_node_mksnapshot_deps)

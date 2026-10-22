@@ -171,6 +171,25 @@ runs:
         rustup target add "${rust_target}"
         rustup target list --installed
 
+    - name: Ensure a linker that can fit a Debug link (Linux)
+      if: runner.os == 'Linux'
+      shell: bash
+      run: |
+        set -euo pipefail
+        # A Debug consumer links against a static libnode.a with gigabytes of debug information,
+        # and bfd's symbol tables for that do not fit in a 7 GB runner: measured twice, at the
+        # same edge, `collect2: fatal error: ld terminated with signal 9 [Killed]`, after which
+        # the job reports "the runner has received a shutdown signal" and reads like
+        # infrastructure. lld needs a fraction of the memory and is faster. The images ship
+        # without it, so ask for it; on a machine that has it this is a no-op.
+        if command -v ld.lld >/dev/null 2>&1; then
+          echo "lld already present: $(ld.lld --version | head -n 1)"
+          exit 0
+        fi
+        sudo apt-get update -qq
+        sudo apt-get install -y -qq lld
+        ld.lld --version | head -n 1
+
     - name: Ensure CMake 4 or newer (vcpkg's scripts need it)
       shell: bash
       run: |
