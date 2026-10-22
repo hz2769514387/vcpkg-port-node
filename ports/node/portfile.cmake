@@ -1051,6 +1051,14 @@ foreach(_node_cfg IN LISTS _node_configs)
         if(_node_dep_dlls)
             file(COPY ${_node_dep_dlls} DESTINATION "${_node_out_dir}")
         endif()
+        # Say it out loud: the first version of this copy was silent, and the build failed with
+        # the same 0xC0000135 afterwards, which left "the copy did not run" and "the copy ran and
+        # the missing DLL is something else" indistinguishable. One line settles it.
+        list(LENGTH _node_dep_dlls _node_dep_dll_count)
+        message(STATUS
+            "node port: ${_node_cfg} copied ${_node_dep_dll_count} dependency DLL(s) from "
+            "${CURRENT_INSTALLED_DIR}/bin into ${_node_out_dir}")
+        unset(_node_dep_dll_count)
         unset(_node_dep_dlls)
         unset(_node_out_dir)
     endif()

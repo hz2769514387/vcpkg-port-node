@@ -1,9 +1,9 @@
 diff --git a/configure.py b/configure.py
 --- a/configure.py
 +++ b/configure.py
-@@ -3116,6 +3116,34 @@
- if make_global_settings:
-   output['make_global_settings'] = make_global_settings
+@@ -3109,6 +3109,40 @@
+ # Add configurations to target defaults
+ output['configurations'] = configurations
  
 +# Abseil arrives as about ninety static archives that reference each other, and an ELF linker
 +# resolves archives in the order it meets them: one that needs a symbol from an archive listed
@@ -13,8 +13,13 @@ diff --git a/configure.py b/configure.py
 +# undefined abseil symbols (AbslInternalSpinLockWake, CycleClock::cycle_clock_source_, ...).
 +# The group makes ld rescan them until nothing new resolves.
 +#
-+# Linux only, and not "all POSIX": ld64 on macOS takes the same list as it is - measured, the
-+# macOS shared legs link without this - and rejects --start-group outright.
++# This has to happen while `output` is still the flat dict: a few lines below it is replaced by
++# {'variables': ..., 'target_defaults': <that dict>} for config.gypi. The first version of this
++# patch sat after the replacement and every Linux leg died with KeyError: 'libraries' - the
++# Windows legs were unaffected only because the whole block is Linux-only.
++#
++# Linux only, and not "all POSIX": ld64 on macOS takes the same list as it is - the macOS shared
++# legs link without this - and rejects --start-group outright.
 +if sys.platform.startswith('linux'):
 +  _grouped_libraries = []
 +  _in_group = False
@@ -33,6 +38,7 @@ diff --git a/configure.py b/configure.py
 +    _grouped_libraries.append('-Wl,--end-group')
 +  output['libraries'] = _grouped_libraries
 +
- print_verbose(output)
- 
- # Dump as JSON to allow js2c.cc read it as a simple json file.
++
+ output = {
+   'variables': variables,
+   'target_defaults': output,
