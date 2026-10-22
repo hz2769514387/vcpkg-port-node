@@ -202,6 +202,24 @@ jobs:
           du -sh "$RUNNER_TEMP/ci-logs" || true
           ls -la "$RUNNER_TEMP/ci-logs" || true
 
+      - name: Make room before packing
+        if: ${{ !inputs.install-only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # Three copies of the same few gigabytes end up on one disk: vcpkg's build tree, the
+          # installed tree, and the tar of it. The runner has about 14 GB free, so the upload
+          # step is where a job disappears - measured twice: run 39729687647 lost
+          # `linux / install` at "Upload the installed tree" with no artifact and no log
+          # artifact either, which is a dead runner rather than a failed upload.
+          #
+          # Buildtrees and packages are only needed to diagnose a *failed* build, and the log
+          # collection step has already copied the interesting files out of them.
+          df -h . || true
+          du -sh vcpkg/buildtrees vcpkg/packages 2>/dev/null || true
+          rm -rf vcpkg/buildtrees vcpkg/packages
+          df -h . || true
+
       - name: Pack the installed tree
         # A warm-up's tree is release-only and is thrown away; only the binary cache it filled
         # matters, and that is saved by the cache action's post step.
@@ -217,6 +235,17 @@ jobs:
           # one file.
           tar -cf "$RUNNER_TEMP/port-install.tar"             -C "test/build/${{ inputs.preset }}/vcpkg_installed" .
           ls -lh "$RUNNER_TEMP/port-install.tar"
+
+      - name: Drop the tree the tar already contains
+        if: ${{ !inputs.install-only }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          # The tar holds it; keeping both means the upload competes with the source tree for
+          # the same disk.
+          du -sh "test/build/${{ inputs.preset }}/vcpkg_installed" 2>/dev/null || true
+          rm -rf "test/build/${{ inputs.preset }}/vcpkg_installed"
+          df -h . || true
 
       - name: Upload the installed tree
         if: ${{ !inputs.install-only }}
