@@ -20,10 +20,10 @@ name: Debug configuration
 # Runs on push as well as weekly: every dimension is verified on push, and keeping Debug in
 # its own workflow is what keeps it inside the six-hour job limit.
 #
-# Five cells. Windows and macOS are one job each; Linux x64 is two (an install job that fills the
-# binary cache, then the leg itself), because a cold dual install of Node.js under gcc is 4.5
-# hours on a four-core runner and has gone past 350 minutes. Linux arm64 is not there at all:
-# its dual install does not finish in six hours. See docs/ci.md.
+# Five cells. Windows and macOS are one job each; Linux x64 is two (install, then build and
+# test), because a cold dual install of Node.js under gcc is 4.5 hours on a four-core runner and
+# has gone past 350 minutes. Linux arm64 is not there at all: its dual install does not finish in
+# six hours. See docs/ci.md.
 
 on:
   push:
@@ -70,35 +70,24 @@ jobs:
       timeout-minutes: 330
 
   # --- the Linux Debug cell, as two jobs ------------------------------------------------
-  # Measured 2026-10-21 (run 39565015717): a dual install of the port on a four-core Linux
-  # runner is 4.1 hours for node alone, 4.5 for the job. That fits one job, but only just, and a
-  # cold dependency set has pushed it past 350 minutes before (run 39448354844). So the install
-  # is done twice in two jobs rather than once in one:
+  # Measured 2026-10-22 (run 39706746229): a dual install of the port on a four-core Linux runner
+  # is 4.1 hours for node alone and 4.5 for the job - inside the six-hour ceiling, but with less
+  # margin than Windows or macOS, where clang-cl does the same work in two to three hours. So the
+  # install gets a job of its own and hands the installed tree to a second job, which is where the
+  # consumer and the tests run.
   #
-  #   linux-prepare   installs the port. Nothing is uploaded and nothing is tested - the product
-  #                   is the binary cache entry this job saves at its end.
-  #   linux           installs the same triplet again, which is now a cache hit (measured: 12.5
-  #                   minutes instead of 4.5 hours), then hands the tree to the consumer job as
-  #                   a tar and builds and tests it.
+  # Two attempts to make this cheaper were measured and dropped rather than kept as folklore:
   #
-  # A release-only prepare job was the plan and is not possible: neither an `env:` on the `uses:`
-  # step nor an action input reached vcpkg, which built both configurations regardless
-  # ("vcpkg: VCPKG_BUILD_TYPE=release" printed by the shell, "-- node port: VCPKG_BUILD_TYPE
-  # unset -> building Release + Debug" printed by the port).
-  linux-prepare:
-    uses: ./.github/workflows/build-test.yml
-    secrets: inherit
-    with:
-      runner: ubuntu-latest
-      preset: x64-linux
-      triplet: x64-linux
-      consumer-configs: Debug
-      suite-configs: ""
-      install-only: true
-      install-timeout-minutes: 360
-
+  #   * a Release-only prepare job (`VCPKG_BUILD_TYPE=release`) would have halved the install.
+  #     Neither a step-level `env:` nor an action input reached vcpkg in manifest mode: run
+  #     39534901582 printed "vcpkg: VCPKG_BUILD_TYPE=release" from the shell and
+  #     "-- node port: VCPKG_BUILD_TYPE unset -> building Release + Debug" from the port.
+  #   * a separate prepare job that fills the binary cache so this install is a hit. It worked
+  #     when the cache was warm (12 minutes instead of 4.5 hours) and did not when it was not:
+  #     run 39758350009 spent its whole six hours rebuilding, because the Actions cache is 10 GB
+  #     per repository and ten legs' archives evict each other. A dependency that works half the
+  #     time is worse than no dependency.
   linux:
-    needs: linux-prepare
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
     with:
@@ -108,13 +97,11 @@ jobs:
       consumer-configs: Debug
       suite-configs: ""
       split-install: true
-      install-timeout-minutes: 120
+      install-timeout-minutes: 360
       timeout-minutes: 120
 
-  # No arm64 Linux leg. The same dual install on `ubuntu-24.04-arm` did not finish in either
-  # budget tried - 6 hours in run 39565015717, with node still compiling - so there is no third
-  # job that would make it fit. Linux Debug is verified on x64; arm64 Linux Debug is a named gap
-  # in docs/ci.md, and a larger runner would close it by adding the same two job blocks back.
+  # No arm64 Linux leg: the same dual install on `ubuntu-24.04-arm` did not finish in six hours
+  # in any of three attempts, and there is no smaller unit to split it into.
 
   macos:
     uses: ./.github/workflows/build-test.yml
@@ -141,7 +128,7 @@ jobs:
       timeout-minutes: 330
 
   logs:
-    needs: [windows, windows-arm64, linux-prepare, linux, macos, macos-x64]
+    needs: [windows, windows-arm64, linux, macos, macos-x64]
     if: always()
     uses: ./.github/workflows/logs.yml
     secrets: inherit

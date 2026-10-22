@@ -25,7 +25,7 @@ while three workflows run in parallel and each stays inside it (ADR 0007).
 
 The limit applies **per job**, which is the other half of that argument. A leg that fits one job
 is one job; the one leg that does not fit - Linux x64 Debug - runs as two, with
-`split-install: true`, in front of a job that installs the port only:
+`split-install: true`:
 
 | | `split-install: false` (default) | `split-install: true` |
 |---|---|---|
@@ -33,39 +33,36 @@ is one job; the one leg that does not fit - Linux x64 Debug - runs as two, with
 | what crosses between them | - | the installed tree, as a **tar** (`port-install-<triplet>`, 1-day retention) |
 | used by | every leg except Linux x64 Debug | Linux x64 Debug |
 
-Three things were measured on 2026-10-21 and each changed the shape of this:
+Four things were measured on 2026-10-21/22 and each changed the shape of this:
 
-- **A cold dual install does not fit, and the cache key goes cold exactly when it matters.** The
-  cache key hashes `ports/**`, so any port change starts from cold. Run 39448354844 was cut at
-  350 minutes with the port's Release half finished and Debug unfinished; run 39565015717 took
-  4.1 hours for node alone and 4.5 for the job, with a warm dependency set.
+- **A cold dual install is 4.5 hours** on a four-core runner (4.1 of them node). That fits the
+  ceiling with about an hour to spare, which is why this leg is split and the others are not.
 - **A zip artifact loses file modes.** Run 39500147659's consumer job refused to configure with
-  "test suite fixture lost its executable bit" on `.bin/ada`: the tree crosses between jobs as
-  an artifact and `upload-artifact` zips what it is given. It is a tar inside the artifact now.
-- **A release-only install is not reachable from here.** The plan was a cheap `install-only`
-  job with `VCPKG_BUILD_TYPE=release`, which would halve the prepare time. Neither a step-level
-  `env:` (which does not reach a composite action's steps) nor an action input exported inside
-  it reached vcpkg: run 39534901582 printed `vcpkg: VCPKG_BUILD_TYPE=release` from the shell and
-  then `-- node port: VCPKG_BUILD_TYPE unset -> building Release + Debug` from the port. So the
-  prepare job does the full install and its product is the **binary cache entry**; the leg that
-  follows re-installs in 12.5 minutes instead of 4.5 hours.
+  "test suite fixture lost its executable bit" on `.bin/ada`. The tree is a **tar** inside the
+  artifact now (`tar -cf` / `tar -xf`), which carries the modes.
+- **Three copies of one tree do not fit on one disk.** Run 39729687647 lost the install job at
+  "Upload the installed tree" with no artifact *and* no log artifact - a dead runner. vcpkg's
+  build tree, the installed tree and its tar were on one 14 GB volume. The job now drops
+  `vcpkg/buildtrees` and `vcpkg/packages` before packing and the installed tree once the tar
+  holds it, and prints `df -h` either side.
+- **The Actions cache cannot be a dependency.** The cache is 10 GB per repository; ten legs'
+  archives evict each other, so a prepare job that fills it works on some rounds (an install in
+  12 minutes instead of 4.5 hours) and not on others (run 39758350009 spent its full six hours
+  rebuilding). Two cheaper shapes were tried and dropped: that cache-warming job, and a
+  Release-only install, which is not reachable at all - neither a step-level `env:` nor an action
+  input reaches vcpkg in manifest mode (run 39534901582 printed `VCPKG_BUILD_TYPE=release` from
+  the shell and `-- node port: VCPKG_BUILD_TYPE unset` from the port).
 
 ### Debug is five cells: four single-job, one in two
 
-`debug.yml` runs Windows x64, Windows arm64, macOS arm64, macOS x64 and Linux x64.
+`debug.yml` runs Windows x64, Windows arm64, macOS arm64, macOS x64 and Linux x64. Windows and
+macOS build the same dual install in two to three hours with clang-cl; Linux x64 takes 4.5 and
+gets its own install job.
 
-| | |
-|---|---|
-| Linux x64, job 1 (`install-only`) | 4.5 h, product is the cache entry |
-| Linux x64, job 2 (install from cache, consumer, tests) | 12.5 min + 8 min |
-| Linux arm64, dual install | **cut at 6 hours**, node still compiling (run 39565015717) |
-| the same dual install with clang-cl (Windows, macOS) | two to three hours |
-
-**Linux arm64 has no Debug leg.** Adding a third job does not help: the six-hour cut is the
-install alone, so there is nothing to split. It is a runner limit, not a port limit - a machine
-with more cores builds the same configuration - and closing it means the same two job blocks
-back on a bigger runner. Linux Debug on arm64 is therefore the one cell this repository's CI
-does not verify, and it says so here rather than implying otherwise.
+**Linux arm64 has no Debug leg.** Its dual install did not finish in six hours in three separate
+attempts, so there is no smaller unit to split it into. That is a runner limit, not a port limit
+- a machine with more cores builds the same configuration - and it is the one cell this
+repository's CI does not verify.
 
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
 place the build steps exist. They differ in which `preset` and `triplet` they pass, in which
