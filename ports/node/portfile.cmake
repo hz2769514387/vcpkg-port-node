@@ -1063,6 +1063,55 @@ foreach(_node_cfg IN LISTS _node_configs)
         unset(_node_out_dir)
     endif()
 
+    # -----------------------------------------------------------------------
+    # Windows shared: name the DLL that is missing, instead of reporting its absence.
+    #
+    # The snapshot action runs `node_mksnapshot.exe` and Windows reports a missing dependency
+    # only as 0xC0000135 - `FAILED: [code=3221225781] gen/node_snapshot.cc` and nothing else.
+    # Copying the 27 dependency DLLs into the output root did not fix it, and one line of
+    # diagnostic was worth more than three rounds of guessing: build the tool on its own (it
+    # links fine; it is *running* it that fails), then ask it what it imports and which of those
+    # files are not where the loader looks.
+    # -----------------------------------------------------------------------
+    if(VCPKG_TARGET_IS_WINDOWS AND _node_shared_build)
+        vcpkg_execute_required_process(
+            COMMAND "${NINJA}" -C "${SOURCE_PATH}/out/${_node_cfg}" ${_node_ninja_jobs} node_mksnapshot
+            WORKING_DIRECTORY "${SOURCE_PATH}"
+            LOGNAME "mksnapshot-${_node_cfg}"
+        )
+        find_program(_node_dumpbin NAMES dumpbin)
+        if(_node_dumpbin)
+            execute_process(
+                COMMAND "${_node_dumpbin}" /nologo /dependents
+                        "${SOURCE_PATH}/out/${_node_cfg}/node_mksnapshot.exe"
+                OUTPUT_VARIABLE _node_mksnapshot_deps
+                ERROR_QUIET)
+            string(REGEX MATCHALL "[A-Za-z0-9_.-]+[.]dll" _node_mksnapshot_dlls "${_node_mksnapshot_deps}")
+            list(REMOVE_DUPLICATES _node_mksnapshot_dlls)
+            set(_node_missing_dlls "")
+            foreach(_node_dll IN LISTS _node_mksnapshot_dlls)
+                if(NOT EXISTS "${SOURCE_PATH}/out/${_node_cfg}/${_node_dll}")
+                    string(APPEND _node_missing_dlls " ${_node_dll}")
+                endif()
+            endforeach()
+            if(_node_missing_dlls STREQUAL "")
+                message(STATUS
+                    "node port: ${_node_cfg} node_mksnapshot imports "
+                    "${_node_mksnapshot_dlls}, all present in the output root")
+            else()
+                message(STATUS
+                    "node port: ${_node_cfg} node_mksnapshot imports a DLL that is NOT in the "
+                    "output root:${_node_missing_dlls}")
+            endif()
+            unset(_node_missing_dlls)
+            unset(_node_mksnapshot_deps)
+            unset(_node_mksnapshot_dlls)
+        else()
+            message(STATUS "node port: ${_node_cfg} dumpbin not found; cannot name the missing DLL")
+        endif()
+        unset(_node_dumpbin)
+    endif()
+
     set(_node_ninja_targets libnode)
     if(_node_cfg STREQUAL "Release" AND "tools" IN_LIST FEATURES)
         list(APPEND _node_ninja_targets node)
