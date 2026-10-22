@@ -31,6 +31,37 @@ cmake_minimum_required(VERSION 3.24)
 project(node_port_test LANGUAGES CXX)
 
 # ---------------------------------------------------------------------------
+# A Debug link against a static libnode does not fit in a runner's memory with GNU ld.
+#
+# Measured 2026-10-22 on ubuntu-latest (7 GB), twice, at the same edge:
+#
+#   [11/16] Linking CXX executable embedding/coexist_consumer
+#   collect2: fatal error: ld terminated with signal 9 [Killed]
+#
+# Signal 9 is the OOM killer, and the job then reports "the runner has received a shutdown
+# signal", which reads like infrastructure and is why the first two looks at this were wrong.
+# A Debug libnode.a carries gigabytes of debug information and bfd's symbol table for it is
+# several times the size of the archive. lld builds the same binary in a fraction of the memory,
+# and `--no-keep-memory` is bfd's own answer when lld is not installed.
+#
+# Debug only: a Release consumer links against a much smaller library and does not need this.
+# ---------------------------------------------------------------------------
+if(CMAKE_SYSTEM_NAME STREQUAL "Linux")
+  find_program(_node_port_lld NAMES ld.lld)
+  if(_node_port_lld)
+    message(STATUS
+      "Debug links will use lld (${_node_port_lld}): bfd runs out of memory linking against a "
+      "Debug libnode.a on a 7 GB runner")
+    string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG " -fuse-ld=lld")
+  else()
+    message(STATUS
+      "lld not found; Debug links get -Wl,--no-keep-memory so bfd can link against a Debug libnode.a")
+    string(APPEND CMAKE_EXE_LINKER_FLAGS_DEBUG " -Wl,--no-keep-memory")
+  endif()
+  unset(_node_port_lld)
+endif()
+
+# ---------------------------------------------------------------------------
 # Knobs (CI overrides these with -D)
 #
 # Careful with docstrings: an unescaped double quote inside a set(... CACHE STRING "...")
