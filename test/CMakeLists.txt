@@ -213,7 +213,12 @@ endfunction()
 if(WIN32 AND DEFINED node_LIBRARY_KIND AND node_LIBRARY_KIND STREQUAL "shared"
    AND DEFINED node_EXECUTABLE AND DEFINED node_TOOLS_DIR)
   get_filename_component(_node_bin_dir "${node_SHARED_LIBRARY}" DIRECTORY)
-  file(GLOB _node_tool_dlls "${_node_bin_dir}/*.dll")
+  get_filename_component(_node_prefix "${_node_bin_dir}" DIRECTORY)
+  # bin/ *and* lib/, for the same reason the consumer executables sweep both: `lib/LIEF.dll` is
+  # a dependency of libnode.dll that vcpkg does not install under bin/, and a Windows process
+  # missing a DLL waits on a message box instead of failing. Measured on windows-shared: every
+  # `smoke.*.tools` case timed out - 180 s each - because `tools/node/node.exe` could not start.
+  file(GLOB _node_tool_dlls "${_node_bin_dir}/*.dll" "${_node_prefix}/lib/*.dll")
   if(_node_tool_dlls)
     add_custom_target(node_tools_dlls ALL
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
@@ -222,6 +227,7 @@ if(WIN32 AND DEFINED node_LIBRARY_KIND AND node_LIBRARY_KIND STREQUAL "shared"
   endif()
   unset(_node_tool_dlls)
   unset(_node_bin_dir)
+  unset(_node_prefix)
 endif()
 
 add_subdirectory(embedder)
