@@ -17,3 +17,7 @@ target_link_libraries(layered_app PRIVATE embedding_engine)
 add_executable(layered_cli cli.cpp)
 target_compile_features(layered_cli PRIVATE cxx_std_20)
 target_link_libraries(layered_cli PRIVATE embedding_engine unofficial::node::node)
+
+# Its DLLs live next to the library, not next to this executable (Windows shared only).
+node_test_runtime_libs(layered_app)
+node_test_runtime_libs(layered_cli)

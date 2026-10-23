@@ -225,13 +225,12 @@ add_subdirectory(zlib)
 add_subdirectory(symbols)
 add_subdirectory(official_suite)
 
-foreach(_node_exe IN ITEMS node_embedder coexist_consumer thread_loop host_loop
-                           layered_app layered_cli)
-  if(TARGET ${_node_exe})
-    node_test_runtime_libs(${_node_exe})
-  endif()
-endforeach()
-unset(_node_exe)
+# node_test_runtime_libs is called from the directory that creates each executable, not from
+# here: add_custom_command(TARGET ...) may only name a target created in the *same* directory,
+# and every one of these is created in a subdirectory. Measured on windows-shared, the first leg
+# that got far enough to exercise this: six errors, "TARGET 'node_embedder' was not created in
+# this directory", one per executable. The Unix branch of the same function is a property and
+# would have been fine from here; the Windows branch is a build command and is not.
 
 message(STATUS "node consumer test project")
 message(STATUS "  node version      : ${unofficial-node_VERSION} (from share/unofficial-node)")

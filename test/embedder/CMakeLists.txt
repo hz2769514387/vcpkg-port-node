@@ -15,3 +15,6 @@ set_target_properties(node_embedder PROPERTIES OUTPUT_NAME node_embed)
 # Node.js only ever exports symbols through its own DLL list when built shared; for the
 # static library everything stays visible, which is what this binary needs.
 install(TARGETS node_embedder RUNTIME DESTINATION bin)
+
+# Its DLLs live next to the library, not next to this executable (Windows shared only).
+node_test_runtime_libs(node_embedder)

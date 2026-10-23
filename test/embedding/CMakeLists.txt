@@ -122,3 +122,8 @@ set_tests_properties(embedding.host_loop PROPERTIES
   FAIL_REGULAR_EXPRESSION "host_loop:|host: timer never fired|host: timer fired at iteration"
   TIMEOUT 180
   LABELS "smoke")
+
+# Its DLLs live next to the library, not next to this executable (Windows shared only).
+node_test_runtime_libs(coexist_consumer)
+node_test_runtime_libs(thread_loop)
+node_test_runtime_libs(host_loop)
