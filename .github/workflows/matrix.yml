@@ -57,7 +57,7 @@ jobs:
       suite-configs: Release
       expect-arch: x64
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   windows-md-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -70,7 +70,7 @@ jobs:
       suite-configs: Release
       expect-arch: ARM64
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   windows-shared:
     uses: ./.github/workflows/build-test.yml
@@ -83,7 +83,7 @@ jobs:
       suite-configs: Release
       expect-arch: x64
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   windows-shared-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -96,7 +96,7 @@ jobs:
       suite-configs: Release
       expect-arch: ARM64
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   linux-shared:
     uses: ./.github/workflows/build-test.yml
@@ -108,7 +108,7 @@ jobs:
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   linux-shared-arm64:
     uses: ./.github/workflows/build-test.yml
@@ -120,7 +120,7 @@ jobs:
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   macos-shared:
     uses: ./.github/workflows/build-test.yml
@@ -133,7 +133,7 @@ jobs:
       suite-configs: Release
       expect-arch: arm64
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   macos-shared-x64:
     uses: ./.github/workflows/build-test.yml
@@ -146,7 +146,7 @@ jobs:
       suite-configs: Release
       expect-arch: x86_64
       experimental: true
-      timeout-minutes: 240
+      timeout-minutes: 330
 
   logs:
     needs: [windows-md, windows-md-arm64, windows-shared, windows-shared-arm64,
