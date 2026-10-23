@@ -218,6 +218,17 @@ if(node_LIBRARY_LINKAGE STREQUAL "dynamic")
     "Node.js test suite: shared libnode, skipping test-abort-backtrace (the native trace "
     "attributes node frames to the library, and the case requires the executable name)")
   list(APPEND _skips "test-abort-backtrace")
+
+  # Two cases copy the running executable somewhere else and run it there. That only works for a
+  # self-contained binary: this project's shell needs libnode next to it, exactly as any consumer
+  # of a shared libnode does, and no copy of one file carries those. Measured on windows-shared
+  # (run 39954561931), where both fail for that reason and pass on every static cell.
+  message(STATUS
+    "Node.js test suite: shared libnode, skipping test-child-process-fork-exec-path and "
+    "test-module-loading-globalpaths (both copy the executable elsewhere and run it; a shared "
+    "libnode is not relocatable as a single file)")
+  list(APPEND _skips "test-child-process-fork-exec-path")
+  list(APPEND _skips "test-module-loading-globalpaths")
 endif()
 
 list(REMOVE_DUPLICATES _skips)
