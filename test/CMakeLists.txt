@@ -172,8 +172,14 @@ function(node_test_runtime_libs _target)
     # separate arguments.
     get_filename_component(_node_bin_dir "${node_SHARED_LIBRARY}" DIRECTORY)
     get_filename_component(_node_prefix "${_node_bin_dir}" DIRECTORY)
-    file(GLOB _node_dlls_release "${_node_bin_dir}/*.dll")
-    file(GLOB _node_dlls_debug "${_node_prefix}/debug/bin/*.dll")
+    # `bin/` and `lib/`, both configurations: vcpkg's convention is bin/, but not every port
+    # follows it - LIEF ships `lib/LIEF.dll` next to its import library, and libnode.dll imports
+    # it. Measured on windows-shared: with only bin/ swept, the consumer executables started and
+    # blocked on Windows' "DLL not found" message box - which nobody clicks in CI, so
+    # zlib.cross_paths.runtime timed out at 120 s and both suite shards at 5400 s each, four
+    # hours burned on a missing file.
+    file(GLOB _node_dlls_release "${_node_bin_dir}/*.dll" "${_node_prefix}/lib/*.dll")
+    file(GLOB _node_dlls_debug "${_node_prefix}/debug/bin/*.dll" "${_node_prefix}/debug/lib/*.dll")
     add_custom_command(TARGET ${_target} POST_BUILD
       COMMAND ${CMAKE_COMMAND} -E copy_if_different
               "$<TARGET_RUNTIME_DLLS:${_target}>"
