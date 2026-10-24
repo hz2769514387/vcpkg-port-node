@@ -1644,6 +1644,30 @@ if(NOT _node_module_version OR NOT _node_napi_version)
         "regexes in ports/node/portfile.cmake to match the new headers.")
 endif()
 
+# The version a consumer sees from find_package(unofficial-node CONFIG) comes from the *source
+# tree*, not from a literal in this file. It was a literal, and it went stale on the 26.12.1 bump:
+# the package said 26.12.0 while the executable it delivered said 26.12.1, and the test project's
+# assertions - correctly - failed on all six cells (run 40102604734). Reading the tree also turns a
+# manifest that disagrees with the tarball into a build-time error instead of a package that lies
+# about itself.
+foreach(_part MAJOR MINOR PATCH)
+    file(STRINGS "${SOURCE_PATH}/src/node_version.h" _node_version_${_part}_line
+         REGEX "^#define NODE_${_part}_VERSION [0-9]+$")
+    string(REGEX MATCH "[0-9]+" _node_version_${_part} "${_node_version_${_part}_line}")
+    if(NOT _node_version_${_part})
+        message(FATAL_ERROR
+            "could not read NODE_${_part}_VERSION from ${SOURCE_PATH}/src/node_version.h; "
+            "update the regex in ports/node/portfile.cmake to match the new header.")
+    endif()
+endforeach()
+set(_node_source_version "${_node_version_MAJOR}.${_node_version_MINOR}.${_node_version_PATCH}")
+if(NOT _node_source_version STREQUAL "${VERSION}")
+    message(FATAL_ERROR
+        "the Node.js source tree is ${_node_source_version} while the manifest says ${VERSION}; "
+        "the tarball, the manifest version and versions.json have to agree.")
+endif()
+message(STATUS "node port: source tree is Node.js ${_node_source_version} (matches the manifest)")
+
 # Which artifact the consumer gets, for the test project's decisions that are about linkage
 # rather than about versions: the symbol audit and one suite case read it. Stated rather than
 # inferred from the file names, because both linkages install a file called "libnode*".
@@ -2057,7 +2081,7 @@ endif()
 
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config.cmake" "${_cfg}")
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config-version.cmake"
-"set(PACKAGE_VERSION \"26.12.0\")\n"
+"set(PACKAGE_VERSION \"${_node_source_version}\")\n"
 "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n"
 "  set(PACKAGE_VERSION_COMPATIBLE FALSE)\n"
 "else()\n"
