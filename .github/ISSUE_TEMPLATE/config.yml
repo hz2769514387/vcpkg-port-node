@@ -1,0 +1,11 @@
+blank_issues_enabled: true
+contact_links:
+  - name: A security problem
+    url: https://github.com/hz2769514387/vcpkg-port-node/security/advisories/new
+    about: Use private vulnerability reporting, not an issue. See SECURITY.md.
+  - name: How a leg is built, and what it verifies
+    url: https://github.com/hz2769514387/vcpkg-port-node/blob/main/docs/ci.md
+    about: Read this before reporting a CI failure — it explains how to read the run's log archive.
+  - name: What is already known to fail
+    url: https://github.com/hz2769514387/vcpkg-port-node/blob/main/README.md#known-limits
+    about: The README's known limits, with the measurement behind each one.

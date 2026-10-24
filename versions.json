@@ -1,7 +1,7 @@
 {
   "port": {
-    "version": "20261018",
-    "released": false,
+    "version": "20261024",
+    "released": true,
     "manifest_version": "26.12.0",
     "manifest_port_version": 16
   },

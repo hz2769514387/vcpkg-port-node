@@ -400,6 +400,10 @@ catches an upstream API change before the daily run does.
 
 ## 8. What CI does not do
 
-No tags, no releases, no publishing anywhere. The project is in its development period
-(AGENTS.md, section 5), so `main` may be red and no interface is promised to consumers.
-Releasing is the maintainer's decision.
+No tags, no releases, no publishing anywhere. Releasing is the maintainer's decision, and the
+checklist that has to be true first is in `docs/versioning.md` §4 — CI verifies, nothing tags.
+
+One workflow exists only for that checklist: `benchmark.yml`, dispatched by hand, which compares
+the built node against the official binary of the same version (startup plus a fixed four-case
+workload under `tools/benchmark_workload.js`). It is not on push on purpose — a benchmark needs a
+quiet machine, and a number that moves with the runner's neighbours is worse than no number.

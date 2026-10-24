@@ -11,7 +11,9 @@ target_link_libraries(my_app PRIVATE unofficial::node::node)
 
 ## Status
 
-Early development: there is no release yet, no tag, and no stable interface.
+Released: **`20261024_26.12.0_vcpkg-2026.07.29`** is the first release, and this repository is in
+its maintenance period — every change goes through a pull request, and the full matrix is green on
+`main` on every push.
 
 |             |                                                 |
 | ----------- | ----------------------------------------------- |
@@ -284,13 +286,16 @@ carries the test counts and the first error.
 | `.github/workflows/` | Continuous integration; see `docs/ci.md`                                               |
 | `docs/`              | Design notes, dependency disposition, build and CI reference                           |
 | `docs/decisions/`    | Architecture decision records                                                          |
+| `tools/`             | Repository tooling: version tree, hygiene check, release watchers, benchmark comparison |
 
 ## Documentation
 
 - `docs/` — reference material, English, versioned with the code.
 - `docs/decisions/` — why things are the way they are.
 - `AGENTS.md` — working rules for this repository (useful for humans too).
-- A full usage guide arrives with the first release.
+- `CHANGELOG.md` — one entry per release tag, the same text as that tag's release body.
+- `CONTRIBUTING.md` — the short version of `AGENTS.md` for a pull request.
+- `SECURITY.md` — how to report a problem privately, and what is in scope here.
 
 ## License
 

@@ -1,0 +1,68 @@
+name: Something is broken
+description: A leg fails, a consumer does not build, or the delivered library does not behave like Node.js.
+labels: ["bug"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Before you write: `docs/ci.md` explains what each leg verifies and how to read a run's
+        merged log archive, and the README's *Known limits* section lists what is already known to
+        fail and why. A report that names one of those limits is still useful if the limit is
+        narrower or wider than it says.
+
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: The symptom, in one or two sentences, and the exact output that shows it.
+      placeholder: |
+        The linux-shared leg fails at Configure with:
+        CMake Error at ... (message): ...
+    validations:
+      required: true
+
+  - type: input
+    id: run
+    attributes:
+      label: Run, or the three versions
+      description: |
+        A CI run link is the most useful thing in this report. Without one, name the release tag or
+        the three numbers from `versions.json` — Node.js, vcpkg, port-version.
+      placeholder: "https://github.com/.../actions/runs/… or 20261024 / 26.12.0 / #16"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: cell
+    attributes:
+      label: Which cell
+      description: Pick the closest; say more below if it is a combination.
+      multiple: true
+      options:
+        - Windows x64
+        - Windows arm64
+        - Linux x64
+        - Linux arm64
+        - macOS arm64
+        - macOS x64
+        - not specific to a platform
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: What you expected instead
+      description: If it is a claim about Node.js behaviour, say how the official binary behaves.
+    validations:
+      required: true
+
+  - type: textarea
+    id: tried
+    attributes:
+      label: What you already ruled out
+      description: |
+        Optional, and the most valuable optional field there is. "I checked X and it was fine"
+        saves a round trip.
+    validations:
+      required: false

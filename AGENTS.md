@@ -68,25 +68,28 @@ lives in `docs/decisions/`.
 
 ## 5. Workflow: development period vs maintenance period
 
-The project is in its **development period** until the first version tag.
+The **development period ended on 2026-10-24** with the first release tag,
+`20261024_26.12.0_vcpkg-2026.07.29`. Everything below the line is now the rule.
 
-Development period (now):
+Development period (2026-10-… → 2026-10-24, closed):
 
 - Work directly on `main`. Small, frequent commits. `main` is allowed to be broken.
-- CI runs on every push (`docs/ci.md`): a lint job, then the port built through `test/` on the
-  platform matrix. Linux and macOS legs are marked experimental and do not block a merge
-  until each has a full passing build.
 - CI may be red while work is in flight; failures are worked down, not hidden.
 - Self-review is acceptable.
 - No interface stability is promised to consumers; change whatever needs changing.
-- **No tags.** Releasing is the maintainer's decision alone.
+- No tags — and then exactly one, cut by the maintainer with the checklist in
+  `docs/versioning.md` §4 satisfied.
 
-Maintenance period (after the first tag):
+Maintenance period (now):
 
-- Everything through pull requests; `main` protected.
-- Conventional review: description, linked issue, green CI, changelog entry.
-- Add the community files then: `CONTRIBUTING.md`, `CODE_OF_CONDUCT.md`,
-  `CHANGELOG.md`, `SECURITY.md`, issue and pull request templates.
+- Everything through pull requests; `main` protected. The release commit and the tag are the
+  maintainer's, and are the only things that do not go through a pull request.
+- Conventional review: description, linked issue, green CI, changelog entry at tag time.
+- The community files exist and are part of the contract: `CONTRIBUTING.md`,
+  `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `SECURITY.md`, and the issue and pull request templates.
+- A change that does not keep a documented guarantee gets the guarantee amended in the same pull
+  request, not afterwards.
+- The full matrix is expected green on `main`. A red leg is an incident, not a background state.
 
 Where things go:
 
