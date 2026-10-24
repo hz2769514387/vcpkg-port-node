@@ -1,0 +1,35 @@
+name: Benchmark against the official binary
+
+# Step 5 of the release checklist in docs/versioning.md, and the reason it is its own workflow:
+# a comparison against the official Node.js binary only means something on a quiet machine, so it
+# is dispatched by hand when a release is being prepared, never run on a push.
+#
+# It reuses build-test.yml rather than repeating the build steps - the leg installs the port,
+# builds the consumer, and the only thing this adds is the measurement. The shared Linux cell is
+# the one used because it is the leg this repository already installs release-only, so the
+# comparison costs an install rather than a dual one.
+#
+# The numbers live in the run: the job summary carries the table, and the release body links it.
+
+on:
+  workflow_dispatch:
+
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  benchmark:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: ubuntu-latest
+      preset: x64-linux-dynamic
+      triplet: x64-linux-dynamic-release
+      consumer-configs: Release
+      suite-configs: ""
+      benchmark: true
+      timeout-minutes: 240

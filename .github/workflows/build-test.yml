@@ -72,6 +72,11 @@ on:
         required: false
         type: boolean
         default: false
+      benchmark:
+        description: "Also compare the built node against the official binary of the same version (startup plus a slice of Node.js's benchmark directory). Step 5 of the release checklist; on a quiet machine only, so nothing sets this on a push."
+        required: false
+        type: boolean
+        default: false
       install-timeout-minutes:
         description: "Job timeout for the install job of a split leg. 360 is GitHub's ceiling for any job."
         required: false
@@ -367,6 +372,17 @@ jobs:
               | tee "$RUNNER_TEMP/ci-logs/build-$cfg.log"
             echo "::endgroup::"
           done
+      - name: Compare against the official binary
+        if: ${{ inputs.benchmark && runner.os == 'Linux' }}
+        shell: bash
+        env:
+          PRESET: ${{ inputs.preset }}
+          TRIPLET: ${{ inputs.triplet }}
+        run: |
+          set -euo pipefail
+          chmod +x tools/benchmark_compare.sh
+          tools/benchmark_compare.sh | tee -a "$GITHUB_STEP_SUMMARY"
+
       - name: Assert the architecture of the built executable
         if: ${{ inputs.expect-arch != '' }}
         shell: bash
