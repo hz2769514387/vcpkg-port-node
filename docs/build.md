@@ -3,7 +3,10 @@
 Reference for the `gyp → ninja` route on the v26 line: the externalization mechanism, the
 platform behaviour that is not obvious from upstream's documentation, and the fixes the
 port has to carry. Findings marked **measured** were reproduced on this machine against
-`node-v26.12.0`; see §5 for the exact commands.
+`node-v26.12.0`; see §5 for the exact commands. The upgrade to v26.12.1 is a security patch with the
+same V8 (14.6.202.34), so these findings are carried over rather than re-measured - the parts that
+did move are the dependency versions, and those are in
+[dependency-disposition.md](dependency-disposition.md).
 
 The disposition of individual dependencies is in
 [dependency-disposition.md](dependency-disposition.md).
@@ -261,8 +264,9 @@ The port builds `libnode.lib` successfully on `x64-windows-static` with Node.js 
 The fixes in §4 were necessary but not sufficient. Three additional problems surfaced
 during the full build:
 
-1. **simdutf `atomic_*` symbols missing.** V8 v26.12.0 bundles simdutf 7.7.0; vcpkg ships
-   8.2.0. V8 calls `simdutf::atomic_binary_to_base64` and `simdutf::atomic_base64_to_binary_safe`,
+1. **simdutf `atomic_*` symbols missing.** V8 bundles simdutf 7.7.0 (identical in v26.12.0 and
+   v26.12.1 - same V8); the 2026.07.29 baseline shipped 8.2.0, and the 2026.10.16 baseline ships
+   9.1.1 while this repository's overlay stays on 8.2.0, the version V8 vendors. V8 calls `simdutf::atomic_binary_to_base64` and `simdutf::atomic_base64_to_binary_safe`,
    which are gated by `SIMDUTF_ATOMIC_REF` (requires `__cpp_lib_atomic_ref >= 201806L`, a
    C++20 feature). vcpkg's simdutf defaults to `SIMDUTF_CXX_STANDARD=11`, so the `atomic_*`
    functions are not compiled into the library. Fix: an overlay port `ports/simdutf` that
@@ -307,7 +311,9 @@ Fix: a `ports/sqlite3` overlay port that adds `SQLITE_ENABLE_FTS3_PARENTHESIS`
 to the `fts3` feature and `SQLITE_ENABLE_RBU` to the `session` feature, and
 adds the corresponding `#cmakedefine` entries to `sqlite3-vcpkg-config.h.in`
 so they are visible to `sqlite3.c` at compile time. All other files are
-identical to the vcpkg 2026.07.29 `sqlite3` port.
+identical to the vcpkg 2026.07.29 `sqlite3` port, which is where this overlay was derived from; the
+baseline has since moved to 2026.10.16 and the overlay has not been re-derived, so its version
+(3.54.0) is now ahead of the registry's 3.53.4 rather than behind it.
 
 ### 6.4 Test suite
 

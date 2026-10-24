@@ -81,10 +81,14 @@ else()
         "(only release / debug / unset).")
 endif()
 
+# The URL and the file name come from the manifest version rather than repeating it: the two
+# drifted apart once already (the portfile kept 26.12.0 in the file name while the manifest said
+# something else), and a mismatch between them is a build that fails with "file not found" a week
+# after the bump looked fine.
 vcpkg_download_distfile(NODE_ARCHIVE
-    URLS "https://nodejs.org/dist/v26.12.0/node-v26.12.0.tar.xz"
-    SHA512 c3c41462198c6bedc1f2136a7f421a7cc757996ae49486c4c82b7ee75b2294b298c14f7e838b83da04a789f50722247ab448dd3bac8a07ac0d49047ee33c1c05
-    FILENAME node-v26.12.0.tar.xz
+    URLS "https://nodejs.org/dist/v${VERSION}/node-v${VERSION}.tar.xz"
+    SHA512 f6f76e258af33f7f877c65a2141d281ea307aae017a90bb8a75a7d4df271ad9d17c7d0edfd5751a977edd6bdb03c704d727628c4c7215c878d421787a35240f2
+    FILENAME node-v${VERSION}.tar.xz
 )
 
 # The patch set fixes defects in gyp's ninja/MSVC emulation that upstream never
