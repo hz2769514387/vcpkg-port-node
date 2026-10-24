@@ -1,7 +1,7 @@
 # Changelog
 
-One entry per release tag. Each entry is the same content as that tag's GitHub Release body, kept
-here because a repository should read without a network. Versions are dates: see
+One entry per release tag: the same facts as that tag's GitHub Release body, kept here so the
+repository reads without a network. Versions are dates — see
 [docs/versioning.md](docs/versioning.md) for why, and for what the three numbers mean.
 
 ## 20261024 — first release
@@ -27,6 +27,12 @@ dynamic CRT on Windows and a shared libnode everywhere). All green on the commit
 fit GitHub's six-hour job, issue #26); ICU date formatting in a Windows x64 Debug consumer (aborts
 in ICU's own destructor, issue #27, README known limits); one intermittent suite case on the
 x64-osx shared cell (issue #28).
+
+**Benchmark** (release checklist step 5): against the official binary of the same version on the
+shared Linux cell, [run 40063990752](https://github.com/hz2769514387/vcpkg-port-node/actions/runs/40063990752) —
+OpenSSL identical, gzip 11% faster (chromium's zlib fork rather than madler), startup 16% slower
+because that cell delivers a *shared* libnode, and V8's JSON and the buffer paths within a few
+percent. The table is in the run's summary.
 
 **Upstream already moved on.** Node.js v26.12.1 and vcpkg 2026.10.16 were published while this was
 being finished (issues #24, #25). Both are routine bumps on `main` in the maintenance period, each
