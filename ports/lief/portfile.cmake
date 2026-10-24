@@ -37,7 +37,14 @@ vcpkg_cmake_configure(
         -DLIEF_PRECOMPILED=OFF
         -DLIEF_OPT_NLOHMANN_JSON_EXTERNAL=ON
         -DLIEF_OPT_EXTERNAL_EXPECTED=ON
-        -DLIEF_OPT_UTFCPP_EXTERNAL=ON
+        # LIEF 1.0.0 vendors utf8cpp and calls the three-argument
+        # `internal::validate_next(it, end, cp)`, which utfcpp **removed in 4.0**. The
+        # 2026.10.16 baseline ships 4.2.1, so externalizing this dependency stopped compiling
+        # (run 40093642104: `no matching function for call to validate_next` in src/utils.cpp).
+        # LIEF's own copy is the one Node.js compiles, it is header-only, and it introduces no
+        # symbols a consumer could collide with - so the faithful choice is to use it rather
+        # than to pin a second copy of a header library for one consumer.
+        -DLIEF_OPT_UTFCPP_EXTERNAL=OFF
         -DLIEF_OPT_FROZEN_EXTERNAL=ON
         -DLIEF_EXTERNAL_SPDLOG=ON
         -DLIEF_OPT_MBEDTLS_EXTERNAL=ON
