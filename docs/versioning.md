@@ -54,8 +54,9 @@ One file, at the repository root, machine-read and hand-edited only in the `port
 }
 ```
 
-`port.released` is `false` until the first tag exists — during the development period the
-version is the date the record was last touched, and nothing claims it was released.
+`port.released` is `false` while no tag exists for that version. It went `true` on 2026-10-24 with
+the first release, `20261024_26.12.0_vcpkg-2026.07.29`; from then on the version is set when a
+release is prepared and nowhere else.
 `node.lts_start` / `node.eol` are Node.js's published schedule for the line (they are what §6
 is derived from), not something this repository decides.
 
@@ -74,7 +75,7 @@ Rules:
 
 | Branch | Tracks | Accepts | Guarantee |
 |---|---|---|---|
-| `main` | the current Node.js LTS line's latest patch, and the newest vcpkg release | everything; version upgrades happen **only here** | builds and the full matrix pass (development period: the matrix may be red, but never silently) |
+| `main` | the current Node.js LTS line's latest patch, and the newest vcpkg release | everything, through a pull request; version upgrades happen **only here** | builds and the full matrix passes on every push (maintenance period, since the 20261024 tag) |
 | `<node version>_vcpkg-<vcpkg release>` e.g. `26.12.0_vcpkg-2026.07.29` | frozen at that pair | security fixes, build fixes that keep the pair | still builds and passes its tests; **no Node.js or vcpkg line upgrades** |
 | `legacy/…` | whatever it was | nothing — read-only | none. It may not build; it is kept for reference |
 
