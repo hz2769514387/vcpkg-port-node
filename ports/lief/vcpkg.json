@@ -3,11 +3,12 @@
   "version-semver": "1.0.0",
   "description": [
     "LIEF - Library to Instrument Executable Formats (overlay: pinned to the version Node.js v26.12.0 ships, which is ahead of the vcpkg baseline 0.17.6).",
-    "All of LIEF's own third-party dependencies are externalized to vcpkg ports - none of them is embedded, so a consumer can still bring the vcpkg port of the same library: nlohmann-json, spdlog, tl-expected from the registry; utf8cpp is LIEF's own vendored copy because the registry's 4.x removed the API LIEF 1.0.0 calls, frozen and mbedtls from overlay ports pinned to what LIEF ships (mbedtls 4.0.0 is required by LIEF's external branch, not merely preferred), and tcb-span from an overlay that carries the no-exceptions include fix LIEF's tree has. See ports/lief/portfile.cmake for the per-dependency version comparison."
+    "All of LIEF's own third-party dependencies are externalized to vcpkg ports - none of them is embedded, so a consumer can still bring the vcpkg port of the same library: nlohmann-json, spdlog, tl-expected from the registry, utf8cpp from an overlay at 4.1.1 because 4.2 removed the API LIEF 1.0.0 calls, frozen and mbedtls from overlay ports pinned to what LIEF ships (mbedtls 4.0.0 is required by LIEF's external branch, not merely preferred), and tcb-span from an overlay that carries the no-exceptions include fix LIEF's tree has. See ports/lief/portfile.cmake for the per-dependency version comparison."
   ],
   "homepage": "https://lief.quarkslab.com",
   "license": "Apache-2.0",
   "dependencies": [
+    "utfcpp",
     "frozen",
     "mbedtls",
     "nlohmann-json",
