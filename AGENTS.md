@@ -1,147 +1,91 @@
 # AGENTS.md — working rules for this repository
 
-Entry point for AI agents (and humans acting like one) working here. Read it before
-changing anything.
+Read this before changing anything. The reasoning behind each rule is in `docs/` and
+`docs/decisions/`; this file says what to do, not why.
 
-## 1. Non-negotiable rules
+## 1. Non-negotiable
 
-This is a **public GitHub repository**. Everything that lands here — commits, pull
-requests, issues, wiki pages, releases — is public and permanent. Therefore:
+This is a **public GitHub repository**: everything that lands here — commits, pull requests,
+issues, releases — is public and permanent.
 
-- Nothing unlawful, hateful, violent, political, or sexually explicit. No political
-  commentary of any kind, anywhere.
-- No reverse engineering. No attacking, scanning, or probing third-party systems. No
-  retry loops that hammer a remote service.
-- **Never write to anything outside this repository** — no posting, commenting, filing
-  upstream issues or pull requests, no pushes to other repositories — unless the
-  maintainer explicitly asks for it in the current session.
-- Never commit credentials, tokens, cookies, or private keys, not even "temporarily".
-  Enforced twice: the pre-commit hook (`.githooks/`, enabled once per clone with
-  `git config core.hooksPath .githooks`) scans the staged lines, and lint.yml runs
-  `tools/check_secrets.py --all` over the whole history on every push. A value the
-  scanner flags but that is genuinely not a secret gets reworded (env read,
-  placeholder) rather than excluded.
-- Respect `robots.txt`, upstream licenses, and upstream NOTICE files when vendoring or
-  patching code.
-- Silence is not permission. If an action is not clearly sanctioned by this file, by the
-  maintainer's instructions, or by the relevant license, treat it as forbidden.
+- Nothing unlawful, hateful, violent, political or sexually explicit. No political commentary,
+  anywhere.
+- No reverse engineering, no attacking or scanning third-party systems, no retry loops against a
+  remote service.
+- **Never write outside this repository** — no upstream issues or pull requests, no pushes to other
+  repositories — unless the maintainer asks for it in the current session.
+- Never commit credentials, tokens, cookies or keys, not even "temporarily". Two scanners enforce
+  it: `.githooks/` over the staged lines (enable once per clone with
+  `git config core.hooksPath .githooks`) and `tools/check_secrets.py --all` over the whole history
+  in lint. A flagged value that is not a secret gets reworded, not excluded.
+- Respect `robots.txt`, upstream licences and NOTICE files.
+- Silence is not permission: an action not sanctioned here, by the maintainer, or by a licence is
+  forbidden.
 
-## 2. Where to look first
+`.user_local/`, when present, is the maintainer's untracked working copy: read it, including
+`.user_local/用户原话*.txt`, and never edit it. It also carries how work is expected to be done in
+this checkout.
 
-1. **`.user_local/`** — if that directory exists, this checkout is the maintainer's
-   personal working copy. It is untracked and holds the maintainer's own notes, including
-   the authoritative record of standing decisions. Read
-   `.user_local/用户原话*.txt` and follow it, but **never edit it**: it is the user's to
-   maintain. It also records how work is expected to be done here (git workflow,
-   verification expectations, local tooling).
-2. If `.user_local/` does not exist, you are in a plain clone: behave like an outside
-   contributor and follow this file (plus `CONTRIBUTING.md`, added at the first release).
+## 2. File hygiene
 
-## 3. Language and file hygiene
+- **English only** in tracked files — code, comments, docs, commit and issue text. Personal notes in
+  Chinese belong in `.user_local/`; the one exception is a literal path into it.
+- **LF only** (`.gitattributes`: `text=auto eol=lf`). A CR is a defect: patches are applied with
+  `git apply` and `versions/` holds git tree hashes, so a stray CR changes results per machine.
+- UTF-8, no BOM, trailing newline. No empty directories, no build outputs, no downloaded sources.
 
-- **Every tracked file is English** — code, comments, documentation, commit messages, pull
-  request and issue text. No CJK in tracked files. Personal notes in Chinese belong in
-  `.user_local/`, which is untracked. The one permitted exception is a literal path into
-  `.user_local/` when telling a reader where to look.
-- **LF only.** `.gitattributes` sets `text=auto eol=lf`. A CR in a tracked file is a
-  defect, not a style preference: our patches are applied with `git apply`, and the
-  version-tree hash under `versions/` is a git tree object hash, so a stray CR changes the
-  result from one machine to the next.
-- UTF-8, no BOM, trailing newline at end of file.
-- Do not commit empty directories; a directory appears together with its first real
-  content.
-- Do not commit build outputs, downloaded sources, or local editor state (see
-  `.gitignore`).
+## 3. What this repository is
 
-## 4. What this repository is
+The Node.js source tree (V8 included) built as a **linkable library**, delivered as vcpkg **overlay
+ports**, so a consumer writes `find_package(unofficial-node CONFIG REQUIRED)` and links
+`unofficial::node::node`. It has to be an overlay: V8 is a Node-maintained fork with no externalize
+channel, so no curated-registry port can replace the tree.
 
-Wrap the **Node.js source tree** (including its V8) and build it into a **linkable
-library**, delivered as **vcpkg overlay ports**, so a consumer project can write
-`find_package(unofficial-node CONFIG REQUIRED)` and link `unofficial::node::node`.
+Current target: Node.js **v26.12.1** on vcpkg **2026.10.16**. Versions, branches and tags follow
+[docs/versioning.md](docs/versioning.md).
 
-It is an overlay port on purpose: `ports/node` is meant to be referenced through
-`overlay-ports`. V8 is a Node.js-maintained fork with no externalize channel, so the
-Node.js source tree can never be replaced by curated-registry ports.
+## 4. Workflow
 
-Current target: Node.js **v26.12.1** on the vcpkg baseline **2026.10.16**. The reasoning
-lives in `docs/decisions/`.
+Maintenance period, since the `20261024` tag:
 
-## 5. Workflow: development period vs maintenance period
-
-The **development period ended on 2026-10-24** with the first release tag,
-`20261024_26.12.0_vcpkg-2026.07.29`. Everything below the line is now the rule.
-
-Development period (2026-10-… → 2026-10-24, closed):
-
-- Work directly on `main`. Small, frequent commits. `main` is allowed to be broken.
-- CI may be red while work is in flight; failures are worked down, not hidden.
-- Self-review is acceptable.
-- No interface stability is promised to consumers; change whatever needs changing.
-- No tags — and then exactly one, cut by the maintainer with the checklist in
-  `docs/versioning.md` §4 satisfied.
-
-Maintenance period (now):
-
-- Everything through pull requests; `main` protected. The release commit and the tag are the
-  maintainer's, and are the only things that do not go through a pull request.
-- Conventional review: description, linked issue, green CI, changelog entry at tag time.
-- The community files exist and are part of the contract: `CONTRIBUTING.md`,
-  `CODE_OF_CONDUCT.md`, `CHANGELOG.md`, `SECURITY.md`, and the issue and pull request templates.
-- A change that does not keep a documented guarantee gets the guarantee amended in the same pull
-  request, not afterwards.
+- Everything through a pull request; `main` is protected. Only the release commit and the tag are
+  the maintainer's alone.
+- A pull request carries what and why, a linked issue, green CI, and a changelog entry at tag time.
 - The full matrix is expected green on `main`. A red leg is an incident, not a background state.
+- A change that breaks a documented guarantee amends the guarantee in the same pull request.
 
 Where things go:
 
-- **Durable decisions and reference material → `docs/` in this repository, in English.**
-  Versioned with the code they describe, reviewable in a pull request, searchable forever.
-  Decisions are recorded as ADRs under `docs/decisions/`.
-- **Work items → GitHub issues.** One issue per verifiable task, with a closing condition.
-  Research spikes get an issue too; the conclusion is written up under `docs/`.
-- **Not the wiki** for decisions or research: a GitHub wiki is a separate repository, so it
-  is not cloned with the code, is not in the commit history, and cannot be reviewed in a
-  pull request. It is reserved for user-facing material, if we ever need it.
+- **Decisions and reference material → `docs/`, in English.** Decisions are ADRs under
+  `docs/decisions/`; an accepted ADR is never edited — a changed mind gets a new ADR that supersedes
+  it.
+- **Work items → GitHub issues**, one per verifiable task, with a closing condition.
+- **Not the wiki**: it is a separate repository, so it is not cloned, not in the commit history and
+  not reviewable in a pull request.
 
-## 6. Technical invariants
+## 5. Invariants
 
-- Build route: **gyp → ninja** (`configure.py` → `gyp -f ninja` → `ninja`) on all three
-  platforms. Do not reintroduce a gyp→CMake translation layer; that route was tried and
-  removed.
-- `ports/node` is **self-contained**: `portfile.cmake`, `vcpkg.json`, `usage`, `patches/`,
-  `scripts/` — and nothing referencing paths outside its own directory. It must not carry
-  triplets or toolchains; those belong to the consumer.
-- **Consumers use stock vcpkg triplets.** Anything a consumer would otherwise have to
-  hand-copy — compiler discovery, the MSVC command-line environment, manifest embedding,
-  stack size, the C++20 requirement — is the port's job to provide.
-- The exported CMake config is `unofficial-node`, with targets in the
-  `unofficial::node::` namespace. vcpkg requires the `unofficial-` prefix whenever upstream
-  ships no CMake config of its own.
-- Editing anything under `ports/node` invalidates the version-tree hash: rerun
-  `tools/version_tree.py`, and let CI's `--check` catch it if you forget.
-- **A packaging change bumps `port-version`.** vcpkg's package identity comes from the
-  manifest, not from the portfile text: fix a portfile option, add a patch, change an install
-  rule — and move `"port-version"` in the same commit (0 is implicit, so the first packaging
-  revision is `1`). Without it, an installed tree or a binary-cache entry built from the old
-  portfile can still count as current, and the fix silently does not reach anyone until some
-  other input changes. An upstream version bump does not need it; a build-flag or packaging
-  change under a released version does.
-- Node.js sources are downloaded and hash-verified by the port. Never vendor a Node.js tree
-  into this repository.
-- **Versions, branches and tags follow [docs/versioning.md](docs/versioning.md)** (decision:
-  ADR 0006). The release version is a date, the port's manifest version stays the Node.js
-  version, `main` is the only branch that upgrades Node.js or vcpkg, and tags are
-  `<release>_<node>_vcpkg-<vcpkg>`. `versions.json` records the pins and
-  `tools/check_repo.py` fails when it drifts from the portfile, the manifest or the CI pin.
+- Build route is **`configure.py` → `gyp -f ninja` → `ninja`** on all three platforms. No gyp→CMake
+  translation layer.
+- `ports/node` is **self-contained**: portfile, manifest, usage, patches, scripts, and nothing
+  outside its own directory. Triplets and toolchains belong to the consumer, never to the port.
+- **Consumers use stock vcpkg triplets.** Compiler discovery, the MSVC environment, manifest
+  embedding, stack size, C++20 — all of that is the port's job.
+- Exported config is `unofficial-node`; targets live in `unofficial::node::`.
+- **A packaging change bumps `port-version`** in the same commit (0 is implicit, so the first
+  revision is 1); an upstream version bump resets it to 0.
+- Editing `ports/` invalidates the version tree — rerun `tools/version_tree.py`.
+- Node.js sources are downloaded and hash-verified by the port. **Never vendor a Node.js tree.**
+- `versions.json` records the three pins, and `tools/check_repo.py` fails when it drifts from the
+  portfile, the manifest or the CI pin.
 
-## 7. Before you say "done"
+## 6. Before you say "done"
 
-- Run the same thing CI runs when it is affordable:
-  `cmake --preset <triplet> && cmake --build --preset <triplet>` then
-  `ctest --test-dir build/<triplet> -C Release -LE node-suite` from `test/`. A preset is named
-  after the vcpkg triplet it selects. The suite
-  (`-R node-suite`) is what decides the result is still Node.js, and it is worth its hour
-  before anything that touches the build.
+- Run what CI runs, from `test/`, when it is affordable: `cmake --preset <triplet>`,
+  `cmake --build --preset <triplet>`, then `ctest --test-dir build/<triplet> -C Release -LE
+  node-suite`. The suite (`-R node-suite`) is worth its hour before anything touching the build.
+  Keep `-j` at what CI uses: REPL cases fail on timing above it.
 - Say what changed, what you verified, and what you did **not** verify.
-- Prefer evidence to reasoning: exact commands, file paths, versions, log excerpts.
-- If verification needs a heavy build or a CI run, hand it over explicitly instead of
-  implying success.
+- Evidence over reasoning: exact commands, paths, versions, log excerpts.
+- If verification needs a heavy build or a CI run, hand it over explicitly instead of implying
+  success.

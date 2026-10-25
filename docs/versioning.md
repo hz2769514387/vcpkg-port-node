@@ -116,13 +116,12 @@ Rules:
   tag is the only immutable statement this repository makes; branches and `main` move.
 - **One GitHub Release per tag**, with the same name as the tag. Body: the three numbers, the
   CI run that verified it (link), what changed since the previous tag, and any delta in the
-  documented limits. During the development period there are no tags at all (the maintainer
-  decides when the first one is worth cutting); the format applies from then on.
+  documented limits.
 - Tags are cut for **every maintained-branch backport too** — the branch name stays, the tag
   identifies the exact state.
 - **Cutting a tag and publishing a release is the maintainer's decision, never an automated
   step.** The watchers report, CI verifies, and the checklist below says what has to be true;
-  none of them tags anything. No tag exists while the repository is in its development period.
+  none of them tags anything.
 
 Preparing a release is a checklist, and the lint covers half of it:
 
@@ -177,20 +176,3 @@ from Node's release schedule by hand.
 | tags are immutable, releases carry a CI link | review |
 | a maintained branch still builds | CI on `*_vcpkg-*` |
 | an upstream release does not go unnoticed | the two watchers (§5); Lint runs both in `--dry-run` so a broken parser fails there first |
-
-## 8. Decisions taken on the first draft
-
-The first draft of this policy left three things open; the maintainer settled them on
-2026-10-18, and they are folded into the sections above:
-
-1. **Backports may bump dependency versions** (§3). A maintained branch is not frozen at every
-   version: a security fix in an overlay port is a backport, it is recorded in that branch's
-   `versions.json`, and it is tagged. What a branch does *not* take is a new Node.js line or a
-   new vcpkg release.
-2. **vcpkg releases are watched** (§5). `.github/workflows/vcpkg-release-watch.yml` runs daily
-   against GitHub's API, files one issue per available release with the commit the upgrade
-   needs, and never edits a pin itself.
-3. **Tags and releases are the maintainer's explicit decision** (§4). No automation creates
-   them: not the watchers, not CI. The checklist above is what has to be true first; cutting
-   the tag is a human act, and that is deliberate — a tag is the only immutable statement this
-   repository makes.
