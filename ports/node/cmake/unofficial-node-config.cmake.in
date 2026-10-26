@@ -1,0 +1,382 @@
+# Consumer config for the node port, expanded by configure_package_config_file().
+#
+# Everything the consumer receives is decided at build time and substituted here as a plain
+# value: @NODE_PORT_*@ markers are replaced, `@VAR@` normal configure_package_config_file
+# expansion. Nothing in this file recomputes a version or an archive name from the source tree -
+# that is the port's job, and it is why the package can no longer claim a version it does not
+# deliver.
+@PACKAGE_INIT@
+
+set(NODE_PORT_SHARED        "@NODE_PORT_SHARED@")
+set(NODE_PORT_HAS_DEBUG     "@NODE_PORT_HAS_DEBUG@")
+set(NODE_PORT_HAS_TOOLS     "@NODE_PORT_HAS_TOOLS@")
+set(NODE_PORT_HAS_SUITE     "@NODE_PORT_HAS_SUITE@")
+set(NODE_PORT_IS_WINDOWS    "@NODE_PORT_IS_WINDOWS@")
+set(NODE_PORT_IS_APPLE      "@NODE_PORT_IS_APPLE@")
+set(NODE_PORT_CRT_STATIC    "@NODE_PORT_CRT_STATIC@")
+set(NODE_PORT_LINK_GROUP    "@NODE_PORT_LINK_GROUP@")
+set(NODE_PORT_ARCHIVES      "@NODE_PORT_ARCHIVES@")
+set(NODE_PORT_DEPENDENCIES  "@NODE_PORT_DEPENDENCIES@")
+set(NODE_PORT_TEST_ABI      "@NODE_PORT_ABI@")
+
+include(CMakeFindDependencyMacro)
+
+# --- zlib -------------------------------------------------------------------
+# Two things have to be solved around zlib, and neither is obvious:
+#
+#   1. Which imported name exists is not ours to choose. vcpkg's zlib ships a config file that
+#      exports ZLIB::ZLIBSTATIC, and ZLIB::ZLIB only appears when the vcpkg toolchain intercepts
+#      the lookup through its cmake wrapper. Depending on one of the two would silently tie this
+#      config to being used together with the vcpkg toolchain, so pick whichever exists and
+#      normalize it onto unofficial::node::zlib.
+#   2. hdr_histogram's config asks for ZLIB in *module* mode, and FindZLIB cannot find zs.lib (the
+#      Windows static name) by itself - so do it here and hand FindZLIB the cache variables it
+#      needs. The location itself is usually only set per configuration
+#      (IMPORTED_LOCATION_<CONFIG>), which is why reading IMPORTED_LOCATION alone is not enough.
+find_dependency(ZLIB CONFIG)
+if(NOT TARGET unofficial::node::zlib)
+  add_library(unofficial::node::zlib INTERFACE IMPORTED)
+  if(TARGET ZLIB::ZLIB)
+    set(_node_zlib_target ZLIB::ZLIB)
+  elseif(TARGET ZLIB::ZLIBSTATIC)
+    set(_node_zlib_target ZLIB::ZLIBSTATIC)
+  else()
+    message(FATAL_ERROR
+      "This node install needs zlib, and neither ZLIB::ZLIB nor ZLIB::ZLIBSTATIC was "
+      "exported by the zlib that was found. Check the zlib package.")
+  endif()
+  set_target_properties(unofficial::node::zlib PROPERTIES
+    INTERFACE_LINK_LIBRARIES "${_node_zlib_target}")
+  set(_node_zlib_loc "")
+  get_target_property(_node_zlib_configs ${_node_zlib_target} IMPORTED_CONFIGURATIONS)
+  foreach(_node_zlib_config IN LISTS _node_zlib_configs)
+    get_target_property(_node_zlib_config_loc ${_node_zlib_target}
+      IMPORTED_LOCATION_${_node_zlib_config})
+    if(_node_zlib_config_loc AND
+       (_node_zlib_config STREQUAL "RELEASE" OR _node_zlib_loc STREQUAL ""))
+      set(_node_zlib_loc "${_node_zlib_config_loc}")
+    endif()
+  endforeach()
+  if(NOT _node_zlib_loc)
+    get_target_property(_node_zlib_loc ${_node_zlib_target} IMPORTED_LOCATION)
+  endif()
+  if(_node_zlib_loc)
+    set(ZLIB_LIBRARY "${_node_zlib_loc}" CACHE FILEPATH "Path to zlib library")
+  endif()
+  get_target_property(_node_zlib_inc ${_node_zlib_target} INTERFACE_INCLUDE_DIRECTORIES)
+  if(_node_zlib_inc)
+    set(ZLIB_INCLUDE_DIR "${_node_zlib_inc}" CACHE PATH "Path to zlib headers")
+  endif()
+  unset(_node_zlib_target)
+  unset(_node_zlib_configs)
+  unset(_node_zlib_config)
+  unset(_node_zlib_config_loc)
+  unset(_node_zlib_loc)
+  unset(_node_zlib_inc)
+endif()
+
+# --- the rest of the dependency chain ---------------------------------------
+# LIEF's own config pulls its dependencies in turn (MbedTLS, spdlog, nlohmann_json, frozen,
+# tl-expected, utf8cpp).
+find_dependency(OpenSSL)
+find_dependency(libuv CONFIG)
+find_dependency(llhttp CONFIG)
+find_dependency(c-ares CONFIG)
+find_dependency(unofficial-brotli CONFIG)
+find_dependency(ada CONFIG)
+find_dependency(simdjson CONFIG)
+find_dependency(simdutf CONFIG)
+find_dependency(ngtcp2 CONFIG)
+find_dependency(zstd CONFIG)
+find_dependency(ICU COMPONENTS uc i18n data)
+find_dependency(unofficial-sqlite3 CONFIG)
+find_dependency(hdr_histogram CONFIG)
+find_dependency(hwy CONFIG)
+find_dependency(LIEF)
+
+# --- what this install is ---------------------------------------------------
+set(_node_lib "${PACKAGE_PREFIX_DIR}/lib")
+set(node_INSTALLED_LIBRARIES "@NODE_PORT_INSTALLED_LIBRARIES@")
+set(node_LIBRARY_LINKAGE     "@NODE_PORT_LINKAGE@")
+set(node_MODULE_VERSION      "@NODE_PORT_MODULE_VERSION@")
+set(node_NAPI_VERSION        "@NODE_PORT_NAPI_VERSION@")
+
+# A release-only install cannot serve a Debug consumer: MSVC's Debug configuration is the debug
+# CRT (/MTd or /MDd) plus _ITERATOR_DEBUG_LEVEL=2, and a Release static library carries the release
+# values, so the link ends in LNK2038. Two ways a consumer can ask for Debug, and they are not the
+# same: a single-config generator states it in CMAKE_BUILD_TYPE, which is a fact about this build -
+# refuse it; a multi-config generator always lists Debug among its configuration types whether or
+# not it is ever built, and CMAKE_BUILD_TYPE is empty there - warn instead of refusing to configure
+# because a configuration merely exists.
+if(NOT EXISTS "${_node_lib}")
+  message(FATAL_ERROR "This node install has no lib directory at '${_node_lib}'.")
+endif()
+if(NOT NODE_PORT_HAS_DEBUG)
+  if(CMAKE_BUILD_TYPE STREQUAL "Debug")
+    message(FATAL_ERROR
+      "This node install is release-only (VCPKG_BUILD_TYPE=release); there is no debug library.\n"
+      "On Windows a Debug consumer (/MTd or /MDd) cannot link a Release (/MT or /MD) node.\n"
+      "Use a dual triplet (e.g. x64-windows-static) or build the consumer as Release\n"
+      "or RelWithDebInfo - RelWithDebInfo is the release ABI with debug information,\n"
+      "which is what you want when the need is to debug your own code.")
+  elseif(CMAKE_CONFIGURATION_TYPES)
+    message(WARNING
+      "This node install is release-only (VCPKG_BUILD_TYPE=release); there is no debug library,\n"
+      "so building this project's Debug configuration will fail with LNK2038 RuntimeLibrary\n"
+      "mismatches. Release and RelWithDebInfo are fine. Use a dual triplet (e.g.\n"
+      "x64-windows-static) if you need Debug.")
+  endif()
+endif()
+
+if(NODE_PORT_IS_WINDOWS)
+  if(NODE_PORT_CRT_STATIC)
+    if(MSVC AND (NOT DEFINED CMAKE_MSVC_RUNTIME_LIBRARY
+                 OR CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL ""
+                 OR CMAKE_MSVC_RUNTIME_LIBRARY MATCHES "DLL"))
+      message(FATAL_ERROR
+        "This node install uses the static CRT (/MT) but the consumer's CMake\n"
+        "defaults to the dynamic one (/MD): CMAKE_MSVC_RUNTIME_LIBRARY = '${CMAKE_MSVC_RUNTIME_LIBRARY}'.\n"
+        "Set it yourself, e.g. set(CMAKE_MSVC_RUNTIME_LIBRARY MultiThreaded), or\n"
+        "set(CMAKE_MSVC_RUNTIME_LIBRARY \"MultiThreaded$<$<CONFIG:Debug>:Debug>\") for Debug.\n"
+        "Otherwise the link fails with a wall of LNK2038 RuntimeLibrary mismatches.")
+    endif()
+  else()
+    if(MSVC AND DEFINED CMAKE_MSVC_RUNTIME_LIBRARY
+       AND NOT CMAKE_MSVC_RUNTIME_LIBRARY STREQUAL ""
+       AND NOT CMAKE_MSVC_RUNTIME_LIBRARY MATCHES "DLL")
+      message(FATAL_ERROR
+        "This node install uses the dynamic CRT (/MD) but the consumer was set to the\n"
+        "static one: '${CMAKE_MSVC_RUNTIME_LIBRARY}'. The two must match.")
+    endif()
+  endif()
+endif()
+
+if(NODE_PORT_HAS_TOOLS)
+  set(node_TOOLS_DIR  "${PACKAGE_PREFIX_DIR}/tools/node")
+  set(node_EXECUTABLE "${PACKAGE_PREFIX_DIR}/tools/node/@NODE_PORT_EXE_NAME@")
+  set(node_NPM        "${PACKAGE_PREFIX_DIR}/tools/node/npm@NODE_PORT_SHIM_EXT@")
+  set(node_NPX        "${PACKAGE_PREFIX_DIR}/tools/node/npx@NODE_PORT_SHIM_EXT@")
+  set(NODE_PORT_HAS_COREPACK "@NODE_PORT_HAS_COREPACK@")
+  if(NODE_PORT_HAS_COREPACK)
+    set(node_COREPACK "${PACKAGE_PREFIX_DIR}/tools/node/corepack@NODE_PORT_SHIM_EXT@")
+  endif()
+  unset(NODE_PORT_HAS_COREPACK)
+endif()
+
+if(NODE_PORT_SHARED)
+  set(node_LIBRARY_KIND "shared")
+  if(NOT TARGET unofficial::node::libnode)
+    add_library(unofficial::node::libnode SHARED IMPORTED)
+    if(NODE_PORT_IS_WINDOWS)
+      set_target_properties(unofficial::node::libnode PROPERTIES
+        IMPORTED_IMPLIB   "${PACKAGE_PREFIX_DIR}/lib/@NODE_PORT_IMPLIB_FILE@"
+        IMPORTED_LOCATION "${PACKAGE_PREFIX_DIR}/bin/@NODE_PORT_SHLIB_FILE@")
+      set(node_SHARED_LIBRARY "${PACKAGE_PREFIX_DIR}/bin/@NODE_PORT_SHLIB_FILE@")
+    else()
+      set_target_properties(unofficial::node::libnode PROPERTIES
+        IMPORTED_LOCATION "${_node_lib}/@NODE_PORT_SHLIB_FILE@")
+      set(node_SHARED_LIBRARY "${_node_lib}/@NODE_PORT_SHLIB_FILE@")
+    endif()
+    if(NODE_PORT_HAS_DEBUG)
+      if(NODE_PORT_IS_WINDOWS)
+        set_target_properties(unofficial::node::libnode PROPERTIES
+          IMPORTED_IMPLIB_DEBUG   "${PACKAGE_PREFIX_DIR}/debug/lib/@NODE_PORT_IMPLIB_FILE@"
+          IMPORTED_LOCATION_DEBUG "${PACKAGE_PREFIX_DIR}/debug/bin/@NODE_PORT_SHLIB_FILE@")
+      else()
+        set_target_properties(unofficial::node::libnode PROPERTIES
+          IMPORTED_LOCATION_DEBUG "${PACKAGE_PREFIX_DIR}/debug/lib/@NODE_PORT_SHLIB_FILE@")
+      endif()
+    endif()
+  endif()
+else()
+  # A static install ships every archive gyp produced for this build. Each one becomes an imported
+  # target of its own so a consumer can link a subset, and all of them plus the dependency graph
+  # are attached to unofficial::node::node below. A shared build has none of this to import: the
+  # library already contains these archives, and linking them again would put a second copy of
+  # each symbol into the process.
+  set(node_LIBRARY_KIND "static")
+  foreach(_entry IN LISTS NODE_PORT_ARCHIVES)
+    string(REPLACE ":" ";" _pair "${_entry}")
+    list(GET _pair 0 _name)
+    list(GET _pair 1 _file)
+    if(NOT TARGET unofficial::node::${_name})
+      add_library(unofficial::node::${_name} STATIC IMPORTED)
+      set_target_properties(unofficial::node::${_name} PROPERTIES
+        IMPORTED_LOCATION "${_node_lib}/${_file}")
+      if(NODE_PORT_HAS_DEBUG)
+        set_target_properties(unofficial::node::${_name} PROPERTIES
+          IMPORTED_LOCATION_DEBUG "${PACKAGE_PREFIX_DIR}/debug/lib/${_file}")
+      endif()
+    endif()
+    list(APPEND _node_archives_link unofficial::node::${_name})
+  endforeach()
+  unset(_entry)
+  unset(_pair)
+  unset(_name)
+  unset(_file)
+
+  # abseil ships one archive per component and its vcpkg config exposes them as individual
+  # absl::<component> targets with no aggregate, so import them by file name here. That stays
+  # correct across abseil versions without tracking target names, and the archives always sit in
+  # the same prefix as this port. An empty glob is a configure error rather than a link error far
+  # away.
+  file(GLOB _node_absl_libs "${_node_lib}/absl_*.lib" "${_node_lib}/libabsl_*.a")
+  if(NOT _node_absl_libs)
+    message(FATAL_ERROR
+      "no abseil archives found under '${_node_lib}' (looked for absl_*.lib and libabsl_*.a).\n"
+      "This config imports abseil's component archives by filename because vcpkg's abseil\n"
+      "exposes no aggregate target; if abseil renamed or re-split its libraries, update\n"
+      "the glob in ports/node/cmake/unofficial-node-config.cmake.in.")
+  endif()
+  if(NODE_PORT_HAS_DEBUG)
+    file(GLOB _node_absl_debug_libs "${PACKAGE_PREFIX_DIR}/debug/lib/absl_*.lib"
+                                    "${PACKAGE_PREFIX_DIR}/debug/lib/libabsl_*.a")
+  endif()
+  foreach(_l IN LISTS _node_absl_libs)
+    get_filename_component(_n "${_l}" NAME_WE)
+    string(REGEX REPLACE "^lib" "" _n "${_n}")
+    if(NOT TARGET unofficial::node::${_n})
+      add_library(unofficial::node::${_n} STATIC IMPORTED)
+      set_target_properties(unofficial::node::${_n} PROPERTIES IMPORTED_LOCATION "${_l}")
+      foreach(_d IN LISTS _node_absl_debug_libs)
+        get_filename_component(_dn "${_d}" NAME_WE)
+        string(REGEX REPLACE "^lib" "" _dn "${_dn}")
+        if(_dn STREQUAL _n)
+          set_target_properties(unofficial::node::${_n} PROPERTIES IMPORTED_LOCATION_DEBUG "${_d}")
+        endif()
+      endforeach()
+    endif()
+    list(APPEND _node_absl_links unofficial::node::${_n})
+  endforeach()
+  unset(_node_absl_libs)
+  unset(_node_absl_debug_libs)
+
+  # nghttp2 and libffi ship no CMake config. find_library can fall back to a system copy, which
+  # would be built with a different CRT - refuse to.
+  foreach(_dep_pair "nghttp2:unofficial::node::nghttp2:@NODE_PORT_NGHTTP2_FILE@"
+                    "ffi:unofficial::node::ffi:@NODE_PORT_FFI_FILE@")
+    string(REPLACE ":" ";" _parts "${_dep_pair}")
+    list(GET _parts 0 _libname)
+    list(GET _parts 1 _target)
+    list(GET _parts 2 _debugfile)
+    find_library(_node_lib_path_${_libname} ${_libname} HINTS ${_node_lib} REQUIRED)
+    string(FIND "${_node_lib_path_${_libname}}" "${PACKAGE_PREFIX_DIR}" _pos)
+    if(NOT _pos EQUAL 0)
+      message(FATAL_ERROR
+        "${_libname} resolved to '${_node_lib_path_${_libname}}', which is outside this install\n"
+        "prefix ('${PACKAGE_PREFIX_DIR}'). A system copy would be built with a different CRT.")
+    endif()
+    if(NOT TARGET ${_target})
+      add_library(${_target} STATIC IMPORTED)
+      set_target_properties(${_target} PROPERTIES
+        IMPORTED_LOCATION "${_node_lib_path_${_libname}}")
+      if(NODE_PORT_HAS_DEBUG)
+        set_target_properties(${_target} PROPERTIES
+          IMPORTED_LOCATION_DEBUG "${PACKAGE_PREFIX_DIR}/debug/lib/${_debugfile}")
+      endif()
+    endif()
+  endforeach()
+  unset(_dep_pair)
+  unset(_parts)
+  unset(_libname)
+  unset(_target)
+  unset(_debugfile)
+  unset(_pos)
+endif()
+
+# --- the target a consumer links --------------------------------------------
+if(NOT TARGET unofficial::node::node)
+  add_library(unofficial::node::node INTERFACE IMPORTED)
+endif()
+set_target_properties(unofficial::node::node PROPERTIES
+  INTERFACE_INCLUDE_DIRECTORIES
+  "${PACKAGE_PREFIX_DIR}/include;${PACKAGE_PREFIX_DIR}/include/node;${PACKAGE_PREFIX_DIR}/include/node-v8")
+set_property(TARGET unofficial::node::node PROPERTY INTERFACE_COMPILE_FEATURES cxx_std_20)
+
+# V8 compares four of its own build-time switches against the embedder's at InitializePlatform
+# startup (deps/v8/src/api/api.cc, "Embedder-vs-V8 build configuration mismatch") and refuses to
+# run if they disagree. Three of them - pointer compression, the sandbox, the target OS - are the
+# same for both configurations. The fourth is not: configure.py sets v8_enable_v8_checks to 1 for
+# Debug and 0 for Release, so a consumer whose code is compiled Debug has to define
+# V8_ENABLE_CHECKS to match the Debug library, and must not define it against the Release one. The
+# generator expression says exactly that, which is what keeps a multi-config consumer that builds
+# both configurations out of one project correct.
+if(NODE_PORT_HAS_DEBUG)
+  set_property(TARGET unofficial::node::node APPEND PROPERTY
+    INTERFACE_COMPILE_DEFINITIONS "$<$<CONFIG:Debug>:V8_ENABLE_CHECKS>")
+endif()
+if(NODE_PORT_IS_WINDOWS)
+  if(MSVC AND NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+    target_compile_options(unofficial::node::node INTERFACE "/Zc:__cplusplus")
+  endif()
+endif()
+
+if(NODE_PORT_SHARED)
+  # One imported SHARED target and nothing else on the consumer's link line: every externalized
+  # dependency is already inside the library, and the system libraries it needs are its own
+  # business.
+  target_link_libraries(unofficial::node::node INTERFACE unofficial::node::libnode)
+else()
+  # The gyp archives have real cycles (libnode <-> node_base, v8_compiler ->
+  # v8_base_without_compiler). Windows' link.exe rescans the whole list and Apple's ld64 has no
+  # rescan construct, so both are flat; GNU linkers get CMake's $<LINK_GROUP:RESCAN>.
+  set(_node_deps_link ${NODE_PORT_DEPENDENCIES})
+  if(NODE_PORT_LINK_GROUP)
+    if(CMAKE_VERSION VERSION_LESS 3.24)
+      message(FATAL_ERROR "This port uses $<LINK_GROUP:RESCAN> (CMake 3.24).")
+    endif()
+    set(_node_group_items ${_node_archives_link} ${_node_deps_link})
+    string(REPLACE ";" "," _node_group_items "${_node_group_items}")
+    target_link_libraries(unofficial::node::node INTERFACE
+      "$<LINK_GROUP:RESCAN,${_node_group_items}>")
+  else()
+    target_link_libraries(unofficial::node::node INTERFACE
+      ${_node_archives_link} ${_node_deps_link})
+  endif()
+  if(NODE_PORT_IS_APPLE)
+    target_link_libraries(unofficial::node::node INTERFACE
+      "-framework CoreFoundation" "-framework Security")
+  endif()
+endif()
+
+if(NODE_PORT_IS_WINDOWS)
+  # winmm: V8's timeGetTime. compiler-rt builtins: __cpu_model. crypt32 is not optional decoration:
+  # OpenSSL's CAPI and winstore providers need the Windows certificate APIs, and Node.js's own
+  # GatherCertsForLocation needs them too. Depending on how OpenSSL was located (vcpkg's config
+  # file hands multi-config consumers over to module mode) those dependencies do not always arrive
+  # with OpenSSL::Crypto, so they are stated here.
+  if(NOT NODE_PORT_SHARED)
+    if(NOT TARGET unofficial::node::clang_rt_builtins)
+      add_library(unofficial::node::clang_rt_builtins STATIC IMPORTED)
+      set_target_properties(unofficial::node::clang_rt_builtins PROPERTIES
+        IMPORTED_LOCATION "${_node_lib}/clang_rt.builtins-@NODE_PORT_RT_ARCH@.lib")
+      if(NODE_PORT_HAS_DEBUG)
+        set_target_properties(unofficial::node::clang_rt_builtins PROPERTIES
+          IMPORTED_LOCATION_DEBUG
+          "${PACKAGE_PREFIX_DIR}/debug/lib/clang_rt.builtins-@NODE_PORT_RT_ARCH@.lib")
+      endif()
+    endif()
+    target_link_libraries(unofficial::node::node INTERFACE
+      winmm ntdll bcrypt crypt32 ws2_32 unofficial::node::clang_rt_builtins)
+  else()
+    target_link_libraries(unofficial::node::node INTERFACE winmm ntdll bcrypt crypt32 ws2_32)
+  endif()
+
+  # The stack reserve and the manifest are properties of the executable that hosts Node.js, not of
+  # the library, so a shared build needs them too. Both are MSVC linker options and passing /STACK
+  # to g++ or ld is a hard error, hence the platform guard.
+  target_link_options(unofficial::node::node INTERFACE "/STACK:@NODE_PORT_STACK_RESERVE@")
+  set(node_NODE_SOURCE_MANIFEST "${PACKAGE_PREFIX_DIR}/share/node/node.exe.extra.manifest")
+  if(EXISTS "${node_NODE_SOURCE_MANIFEST}")
+    target_link_options(unofficial::node::node INTERFACE
+      "/MANIFEST:EMBED"
+      "/MANIFESTINPUT:${node_NODE_SOURCE_MANIFEST}"
+      "/INCREMENTAL:NO")
+  endif()
+endif()
+
+if(NODE_PORT_HAS_SUITE)
+  if(EXISTS "${CMAKE_CURRENT_LIST_DIR}/../node/test-suite/tools/test.py")
+    set(node_TEST_SUITE_DIR "${CMAKE_CURRENT_LIST_DIR}/../node/test-suite")
+  endif()
+endif()
