@@ -11,7 +11,7 @@ target_link_libraries(my_app PRIVATE unofficial::node::node)
 
 ## Status
 
-Released: **`20261024.1_26.12.1_vcpkg-2026.10.16`** (the first release was
+Released: **`20261026_26.12.1_vcpkg-2026.10.16`** (the first release was
 `20261024_26.12.0_vcpkg-2026.07.29`), and this repository is in its maintenance period — every
 change goes through a pull request, and the full matrix is green on `main` on every push.
 

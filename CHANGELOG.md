@@ -4,15 +4,15 @@ One entry per release tag: the same facts as that tag's GitHub Release body, kep
 repository reads without a network. Versions are dates — see
 [docs/versioning.md](docs/versioning.md) for why, and for what the three numbers mean.
 
-## 20261024.1 — Node.js 26.12.1, vcpkg 2026.10.16
+## 20261026 — Node.js 26.12.1, vcpkg 2026.10.16
 
-`20261024.1_26.12.1_vcpkg-2026.10.16`
+`20261026_26.12.1_vcpkg-2026.10.16`
 
 | | |
 |---|---|
 | Node.js | v26.12.1 (a security release: 10 CVEs; V8 14.6.202.34, `NODE_MODULE_VERSION` 147, napi 8, npm 11.20.0) |
 | vcpkg | 2026.10.16 (`9eec002df1cd109f8f104cd966a763daf9751489`), pinned |
-| port | `node` 26.12.1, `port-version` 0 (reset by the upstream bump), 25 patches |
+| port | `node` 26.12.1, `port-version` 1, 25 patches |
 
 Two bumps in one release, and one of them is the reason the other is not optional.
 
@@ -31,6 +31,22 @@ the very CVEs the release is about:
 **vcpkg 2026.10.16** moves the registry to the versions Node.js v26.12.1 vendors for the
 dependencies that matter most here: libuv 1.52.1, nghttp2 1.70.0 and ngtcp2 1.25.0 all now match
 the tree exactly, where 2026.07.29 was behind on two of them.
+
+**What the upgrade found, and fixed.** Four defects, each caught by the matrix rather than by
+reading: utfcpp 4.2 removed `internal::validate_next(it, end, cp)`, which LIEF 1.0.0 calls, so
+`ports/utfcpp` pins 4.1.1 (same major, same target, same layout); the exported package version was a
+literal and said 26.12.0 while delivering 26.12.1, so it now comes from `src/node_version.h` and is
+compared against the manifest; `process.execve` crashes with SIGBUS on the x64 macOS (Rosetta) cell
+intermittently, the fourth member of a family `node-suite-skips.txt` already documents and skips
+under its own standing rule; and `sequential/test-watch-mode.mjs` was intermittent on that cell's
+shared linkage, now skipped for it in CMake.
+
+**Verified** by CI [40200474799](https://github.com/hz2769514387/vcpkg-port-node/actions/runs/40200474799)
+(six Release cells with Node.js's own suite),
+[40200474837](https://github.com/hz2769514387/vcpkg-port-node/actions/runs/40200474837) (Debug, five
+cells) and
+[40200474803](https://github.com/hz2769514387/vcpkg-port-node/actions/runs/40200474803) (Matrix,
+eight cells) - all green.
 
 **Not in this release, on purpose:** `ports/openssl` is still derived from the 2026.07.29 port
 (3.6.3) while the new baseline ships 3.6.5. It is a whole portfile rather than a version line, and
