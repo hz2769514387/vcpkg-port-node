@@ -1620,16 +1620,6 @@ set(NODE_PORT_LINKAGE             "${_node_linkage_str}")
 set(NODE_PORT_MODULE_VERSION      "${node_module_version}")
 set(NODE_PORT_NAPI_VERSION        "${node_napi_version}")
 set(NODE_PORT_INSTALLED_LIBRARIES "${_node_installed_libs}")
-set(NODE_PORT_DEPENDENCIES
-    OpenSSL::SSL OpenSSL::Crypto libuv::uv_a c-ares::cares
-    unofficial::brotli::brotlidec unofficial::brotli::brotlienc
-    unofficial::brotli::brotlicommon unofficial::node::zlib ada::ada simdjson::simdjson
-    simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static
-    ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3
-    hdr_histogram::hdr_histogram_static unofficial::node::nghttp2 llhttp::llhttp_static
-    hwy::hwy \${_node_absl_links}
-    LIEF::LIEF unofficial::node::ffi)
-
 if(VCPKG_TARGET_IS_WINDOWS)
     set(NODE_PORT_EXE_NAME "node.exe")
     set(NODE_PORT_SHIM_EXT ".cmd")

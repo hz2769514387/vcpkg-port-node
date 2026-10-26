@@ -16,7 +16,6 @@ set(NODE_PORT_IS_APPLE      "@NODE_PORT_IS_APPLE@")
 set(NODE_PORT_CRT_STATIC    "@NODE_PORT_CRT_STATIC@")
 set(NODE_PORT_LINK_GROUP    "@NODE_PORT_LINK_GROUP@")
 set(NODE_PORT_ARCHIVES      "@NODE_PORT_ARCHIVES@")
-set(NODE_PORT_DEPENDENCIES  "@NODE_PORT_DEPENDENCIES@")
 set(NODE_PORT_TEST_ABI      "@NODE_PORT_ABI@")
 
 include(CMakeFindDependencyMacro)
@@ -253,9 +252,11 @@ else()
 
   # nghttp2 and libffi ship no CMake config. find_library can fall back to a system copy, which
   # would be built with a different CRT - refuse to.
-  foreach(_dep_pair "nghttp2:unofficial::node::nghttp2:@NODE_PORT_NGHTTP2_FILE@"
-                    "ffi:unofficial::node::ffi:@NODE_PORT_FFI_FILE@")
-    string(REPLACE ":" ";" _parts "${_dep_pair}")
+  # Separator is "|", not ":": these fields are CMake target names, and a target name is written
+  # with "::" in it, which a colon split would tear apart.
+  foreach(_dep_pair "nghttp2|unofficial::node::nghttp2|@NODE_PORT_NGHTTP2_FILE@"
+                    "ffi|unofficial::node::ffi|@NODE_PORT_FFI_FILE@")
+    string(REPLACE "|" ";" _parts "${_dep_pair}")
     list(GET _parts 0 _libname)
     list(GET _parts 1 _target)
     list(GET _parts 2 _debugfile)
@@ -320,7 +321,18 @@ else()
   # The gyp archives have real cycles (libnode <-> node_base, v8_compiler ->
   # v8_base_without_compiler). Windows' link.exe rescans the whole list and Apple's ld64 has no
   # rescan construct, so both are flat; GNU linkers get CMake's $<LINK_GROUP:RESCAN>.
-  set(_node_deps_link ${NODE_PORT_DEPENDENCIES})
+  # Evaluated here rather than at the top of the file: the list names ${_node_absl_links}, which
+  # the abseil glob above fills in. Setting it earlier silently produced an empty entry, and the
+  # consumer link failed with 36 unresolved absl symbols out of v8_libbase.
+  set(_node_deps_link
+      OpenSSL::SSL OpenSSL::Crypto libuv::uv_a c-ares::cares
+      unofficial::brotli::brotlidec unofficial::brotli::brotlienc
+      unofficial::brotli::brotlicommon unofficial::node::zlib ada::ada simdjson::simdjson
+      simdutf::simdutf ngtcp2::ngtcp2_static zstd::libzstd_static
+      ICU::uc ICU::i18n ICU::data unofficial::sqlite3::sqlite3
+      hdr_histogram::hdr_histogram_static unofficial::node::nghttp2 llhttp::llhttp_static
+      hwy::hwy ${_node_absl_links}
+      LIEF::LIEF unofficial::node::ffi)
   if(NODE_PORT_LINK_GROUP)
     if(CMAKE_VERSION VERSION_LESS 3.24)
       message(FATAL_ERROR "This port uses $<LINK_GROUP:RESCAN> (CMake 3.24).")
