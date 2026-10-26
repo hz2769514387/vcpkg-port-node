@@ -1,25 +1,25 @@
 {
   "port": {
-    "version": "20261024",
+    "version": "20261024.1",
     "released": true,
-    "manifest_version": "26.12.0",
-    "manifest_port_version": 16
+    "manifest_version": "26.12.1",
+    "manifest_port_version": 1
   },
   "node": {
-    "version": "26.12.0",
-    "released": "2026-10-14",
+    "version": "26.12.1",
+    "released": "2026-10-21",
     "lts": false,
     "lts_start": "2026-10-28",
     "eol": "2029-04-30",
-    "url": "https://nodejs.org/dist/v26.12.0/node-v26.12.0.tar.xz",
-    "sha512": "c3c41462198c6bedc1f2136a7f421a7cc757996ae49486c4c82b7ee75b2294b298c14f7e838b83da04a789f50722247ab448dd3bac8a07ac0d49047ee33c1c05",
+    "url": "https://nodejs.org/dist/v26.12.1/node-v26.12.1.tar.xz",
+    "sha512": "f6f76e258af33f7f877c65a2141d281ea307aae017a90bb8a75a7d4df271ad9d17c7d0edfd5751a977edd6bdb03c704d727628c4c7215c878d421787a35240f2",
     "v8": "14.6.202.34",
     "module_version": 147,
     "napi_version": 8,
     "npm": "11.20.0"
   },
   "vcpkg": {
-    "release": "2026.07.29",
-    "commit": "9e593bb18ea69cc5095e012465dcd675a822ed0d"
+    "release": "2026.10.16",
+    "commit": "9eec002df1cd109f8f104cd966a763daf9751489"
   }
 }

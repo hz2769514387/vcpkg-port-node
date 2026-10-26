@@ -16,7 +16,9 @@ vcpkg_from_github(
 #   nlohmann-json 3.12.0 == what LIEF vendors    -> registry port as-is
 #   spdlog        1.17.0 == what LIEF vendors    -> registry port as-is
 #   tl-expected    1.3.1 == what LIEF vendors    -> registry port as-is
-#   utfcpp         4.0.9 <  registry 4.1.1       -> registry port as-is (ahead)
+#   utfcpp         4.0.9 <  registry 4.2.1       -> overlay pin (ports/utfcpp) at 4.1.1:
+#       4.2 removed the three-argument validate_next LIEF 1.0.0 calls; 4.1.1 is the last
+#       release that still has it, and it is what the 2026.07.29 baseline shipped
 #   frozen      61dce5a  >  registry 1.2.0       -> overlay pin (ports/frozen)
 #   mbedtls   4.0.0 snapshot > registry 3.6.5    -> overlay pin (ports/mbedtls);
 #       required, not just policy: LIEF's external branch does

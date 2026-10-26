@@ -1,7 +1,7 @@
 {
   "name": "ada-url",
   "version": "4.0.0",
-  "description": "WHATWG-compliant and fast URL parser written in modern C++ (overlay: pinned to the version Node.js v26.12.0 ships (its amalgamation says ADA_VERSION 4.0.0); the vcpkg baseline has 3.4.4, a major version behind)",
+  "description": "WHATWG-compliant and fast URL parser written in modern C++ (overlay: pinned to the version Node.js v26.12.1 ships (its amalgamation says ADA_VERSION 4.0.0); the vcpkg baseline has 3.4.4, a major version behind)",
   "homepage": "https://ada-url.com/",
   "license": "MIT OR Apache-2.0",
   "dependencies": [

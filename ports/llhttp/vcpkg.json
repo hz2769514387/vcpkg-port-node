@@ -1,7 +1,7 @@
 {
   "name": "llhttp",
   "version": "9.4.3",
-  "description": "Port of http_parser to llparse. (overlay: pinned to the release Node.js v26.12.0 ships; the vcpkg baseline has 9.3.1, and the generated parser differs)",
+  "description": "Port of http_parser to llparse. (overlay: pinned to the release Node.js v26.12.1 ships; the vcpkg baseline has 9.3.1, and the generated parser differs)",
   "homepage": "https://github.com/nodejs/llhttp",
   "license": "MIT",
   "dependencies": [

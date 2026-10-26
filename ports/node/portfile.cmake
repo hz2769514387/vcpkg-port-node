@@ -81,10 +81,14 @@ else()
         "(only release / debug / unset).")
 endif()
 
+# The URL and the file name come from the manifest version rather than repeating it: the two
+# drifted apart once already (the portfile kept 26.12.0 in the file name while the manifest said
+# something else), and a mismatch between them is a build that fails with "file not found" a week
+# after the bump looked fine.
 vcpkg_download_distfile(NODE_ARCHIVE
-    URLS "https://nodejs.org/dist/v26.12.0/node-v26.12.0.tar.xz"
-    SHA512 c3c41462198c6bedc1f2136a7f421a7cc757996ae49486c4c82b7ee75b2294b298c14f7e838b83da04a789f50722247ab448dd3bac8a07ac0d49047ee33c1c05
-    FILENAME node-v26.12.0.tar.xz
+    URLS "https://nodejs.org/dist/v${VERSION}/node-v${VERSION}.tar.xz"
+    SHA512 f6f76e258af33f7f877c65a2141d281ea307aae017a90bb8a75a7d4df271ad9d17c7d0edfd5751a977edd6bdb03c704d727628c4c7215c878d421787a35240f2
+    FILENAME node-v${VERSION}.tar.xz
 )
 
 # The patch set fixes defects in gyp's ninja/MSVC emulation that upstream never
@@ -1640,6 +1644,30 @@ if(NOT _node_module_version OR NOT _node_napi_version)
         "regexes in ports/node/portfile.cmake to match the new headers.")
 endif()
 
+# The version a consumer sees from find_package(unofficial-node CONFIG) comes from the *source
+# tree*, not from a literal in this file. It was a literal, and it went stale on the 26.12.1 bump:
+# the package said 26.12.0 while the executable it delivered said 26.12.1, and the test project's
+# assertions - correctly - failed on all six cells (run 40102604734). Reading the tree also turns a
+# manifest that disagrees with the tarball into a build-time error instead of a package that lies
+# about itself.
+foreach(_part MAJOR MINOR PATCH)
+    file(STRINGS "${SOURCE_PATH}/src/node_version.h" _node_version_${_part}_line
+         REGEX "^#define NODE_${_part}_VERSION [0-9]+$")
+    string(REGEX MATCH "[0-9]+" _node_version_${_part} "${_node_version_${_part}_line}")
+    if(NOT _node_version_${_part})
+        message(FATAL_ERROR
+            "could not read NODE_${_part}_VERSION from ${SOURCE_PATH}/src/node_version.h; "
+            "update the regex in ports/node/portfile.cmake to match the new header.")
+    endif()
+endforeach()
+set(_node_source_version "${_node_version_MAJOR}.${_node_version_MINOR}.${_node_version_PATCH}")
+if(NOT _node_source_version STREQUAL "${VERSION}")
+    message(FATAL_ERROR
+        "the Node.js source tree is ${_node_source_version} while the manifest says ${VERSION}; "
+        "the tarball, the manifest version and versions.json have to agree.")
+endif()
+message(STATUS "node port: source tree is Node.js ${_node_source_version} (matches the manifest)")
+
 # Which artifact the consumer gets, for the test project's decisions that are about linkage
 # rather than about versions: the symbol audit and one suite case read it. Stated rather than
 # inferred from the file names, because both linkages install a file called "libnode*".
@@ -2053,7 +2081,7 @@ endif()
 
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config.cmake" "${_cfg}")
 file(WRITE "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config-version.cmake"
-"set(PACKAGE_VERSION \"26.12.0\")\n"
+"set(PACKAGE_VERSION \"${_node_source_version}\")\n"
 "if(PACKAGE_VERSION VERSION_LESS PACKAGE_FIND_VERSION)\n"
 "  set(PACKAGE_VERSION_COMPATIBLE FALSE)\n"
 "else()\n"

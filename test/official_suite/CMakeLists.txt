@@ -231,6 +231,20 @@ if(node_LIBRARY_LINKAGE STREQUAL "dynamic")
   list(APPEND _skips "test-module-loading-globalpaths")
 endif()
 
+# sequential/test-watch-mode.mjs is intermittent on the x64-osx **shared** cell and passes on the
+# same architecture's static cell and on every other cell: runs 40025248617, 40063985432 and
+# 40130285788 failed it, and re-running 40063985432's leg passed it. File-system events, a shared
+# libnode and an x64 binary under Rosetta is the environment rather than this port; issue #28 holds
+# the data and the criterion ("two failures in five rounds") this skip is standing on. Linkage and
+# architecture are both part of the reason, which the per-platform list cannot express.
+if(node_LIBRARY_LINKAGE STREQUAL "dynamic" AND APPLE AND
+   CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
+  message(STATUS
+    "Node.js test suite: shared libnode on x64 macOS, skipping test-watch-mode (intermittent; "
+    "issue #28)")
+  list(APPEND _skips "test-watch-mode")
+endif()
+
 list(REMOVE_DUPLICATES _skips)
 list(JOIN _skips "," _skips_csv)
 

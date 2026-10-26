@@ -63,7 +63,7 @@ It is an overlay port on purpose: `ports/node` is meant to be referenced through
 `overlay-ports`. V8 is a Node.js-maintained fork with no externalize channel, so the
 Node.js source tree can never be replaced by curated-registry ports.
 
-Current target: Node.js **v26.12.0** on the vcpkg baseline **2026.07.29**. The reasoning
+Current target: Node.js **v26.12.1** on the vcpkg baseline **2026.10.16**. The reasoning
 lives in `docs/decisions/`.
 
 ## 5. Workflow: development period vs maintenance period

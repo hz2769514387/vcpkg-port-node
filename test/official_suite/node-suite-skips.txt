@@ -112,3 +112,4 @@ test-runner-reporters | windows | NO_COLOR and FORCE_COLOR both present in the r
 test-process-execve-throws | macos-x64 | SIGBUS under Rosetta 2; the official binary crashes the sibling execve-socket there instead (runs 39294243423 / 39342169919)
 test-process-execve-socket | macos-x64 | SIGBUS under Rosetta 2; the official binary fails this very case on the same image (run 39342169919)
 test-process-execve-on-exit | macos-x64 | SIGBUS under Rosetta 2, a third member of the same family; added under the standing rule above (run 39351011619)
+test-process-execve-permission-granted | macos-x64 | SIGBUS under Rosetta 2, a fourth member of the same family; the standing rule above says to add it rather than treat it as a new defect (runs 40130285780 crashed, passed on rerun; 40130285788 crashed)
