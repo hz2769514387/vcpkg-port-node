@@ -14,6 +14,16 @@ set_tests_properties(smoke.externalization.embedder PROPERTIES
   TIMEOUT 180
   LABELS "smoke")
 
+# The two ABI numbers a consumer reads without linking anything: NODE_MODULE_VERSION decides which
+# prebuilt addon may be loaded, NAPI_VERSION which native API surface may be called. The config
+# publishes both; nothing compared them with the runtime until this case. A wrong number fails in
+# the consumer's addon load, with a message that names neither this port nor this file.
+add_test(NAME smoke.abi COMMAND node_embedder "${CMAKE_CURRENT_SOURCE_DIR}/abi.mjs")
+set_tests_properties(smoke.abi PROPERTIES
+  ENVIRONMENT "NODE_PORT_MODULE_VERSION=${node_MODULE_VERSION};NODE_PORT_NAPI_VERSION=${node_NAPI_VERSION}"
+  TIMEOUT 180
+  LABELS "smoke")
+
 # The startup snapshot is a build artefact nothing else asserts, and losing it is silent: the
 # runtime still works, it just compiles the builtins at every startup.
 add_test(NAME smoke.snapshot.embedder

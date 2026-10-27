@@ -221,6 +221,32 @@ def discover_ports(root):
     )
 
 
+def check_port_usage(report, root, ports):
+    """`ports/<port>/usage` is installed into the package and read by a consumer.
+
+    It must not name a version. It is shipped *by* the port, so a version written into it is a
+    second place that has to be updated on every bump - and it was: the usage of the node port said
+    v26.12.0 while the package delivered 26.12.1. The same file must also not describe how to build
+    the port; a consumer installing a binary package does not build anything.
+    """
+    version = re.compile(r"[0-9]+[.][0-9]+[.][0-9]+")
+    for port in ports:
+        usage = os.path.join(root, "ports", port, "usage")
+        if not os.path.isfile(usage):
+            continue
+        with open(usage, "r", encoding="utf-8") as handle:
+            for number, line in enumerate(handle, 1):
+                match = version.search(line)
+                if match:
+                    report.error(
+                        "ports/%s/usage" % port,
+                        "line %d names the version '%s'. The file is installed by the port, so a "
+                        "version in it is a second place to update on every bump and it has "
+                        "already drifted once; the package version is what consumers read."
+                        % (number, match.group(0)),
+                    )
+
+
 def check_overlay_disclosure(report, root, ports):
     """Every port must be disclosed in docs/overlay-replacements.md.
 
@@ -354,6 +380,7 @@ def main(argv=None):
     check_port_patches(report, root, ports)
     check_port_versions(report, root, ports)
     check_overlay_disclosure(report, root, ports)
+    check_port_usage(report, root, ports)
     check_versions_json(report, root)
 
     for line in report.warnings:

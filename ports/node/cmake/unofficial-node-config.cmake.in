@@ -163,7 +163,6 @@ if(NODE_PORT_HAS_TOOLS)
 endif()
 
 if(NODE_PORT_SHARED)
-  set(node_LIBRARY_KIND "shared")
   if(NOT TARGET unofficial::node::libnode)
     add_library(unofficial::node::libnode SHARED IMPORTED)
     if(NODE_PORT_IS_WINDOWS)
@@ -193,7 +192,6 @@ else()
   # are attached to unofficial::node::node below. A shared build has none of this to import: the
   # library already contains these archives, and linking them again would put a second copy of
   # each symbol into the process.
-  set(node_LIBRARY_KIND "static")
   foreach(_entry IN LISTS NODE_PORT_ARCHIVES)
     string(REPLACE ":" ";" _pair "${_entry}")
     list(GET _pair 0 _name)

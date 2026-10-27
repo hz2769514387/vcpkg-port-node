@@ -11,6 +11,22 @@ did move are the dependency versions, and those are in
 The disposition of individual dependencies is in
 [dependency-disposition.md](dependency-disposition.md).
 
+## 0. What the machine needs
+
+A consumer installing the package needs none of this; it is the price of *building* the tree.
+
+- **Python 3** - `configure.py`, the code generators, and the suite's own driver.
+- **cargo** - Node.js 26 compiles its Temporal crate (`deps/crates`) with `cargo rustc`. The port
+  looks for it in the usual places and fails at configure time with a message naming this
+  requirement, rather than somewhere inside ninja.
+- **clang-cl on Windows** (Visual Studio 2022's LLVM component, or a standalone install) - an
+  upstream requirement for Node.js 24 and later, which `vcbuild.bat` hard-codes. The port finds it,
+  assembles the MSVC command-line environment, and needs nothing from the consumer's triplet.
+- **the Rust standard library for the target architecture, on a cross build.** `cargo --target`
+  builds the crates, and a rustup toolchain ships the standard library only for the architecture it
+  was installed for - so an arm64 machine building `x64-osx` needs
+  `rustup target add x86_64-apple-darwin`. CI provisions this per leg (`docs/ci.md` §2.3).
+
 ## 1. The route
 
 `configure.py` → `gyp -f ninja` → `ninja`. Upstream drives the same generator through

@@ -7,6 +7,6 @@ The package provides CMake targets:
         MbedTLS::mbedtls       # TLS protocol layer
     )
 
-This overlay pins a 4.0.0 development snapshot (see portfile.cmake); the
+This overlay pins a development snapshot of the 4.x line (see portfile.cmake); the
 exported target set matches that snapshot's tf-psa-crypto / mbedx509 / mbedtls
 split, which the 3.x line does not have.
