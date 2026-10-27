@@ -5,9 +5,9 @@ against a *specific* vcpkg release — so its own "version" cannot mean what it 
 library. It is three numbers in a fixed relationship, and the rules below exist to keep the
 relationship visible: which Node.js, which vcpkg, and which build of this repository.
 
-Status: **active**. The formats, the enforcement in [§7](#7-what-is-enforced-and-what-is-not)
-and the three decisions that were open in the first draft (§8) are settled; the decision to
-adopt the scheme is [ADR 0006](decisions/0006-versioning-and-branch-policy.md).
+Status: **active**. The formats and the enforcement in
+[§7](#7-what-is-enforced-and-what-is-not) are settled; the decision to adopt the scheme is
+[ADR 0006](decisions/0006-versioning-and-branch-policy.md).
 
 ## 1. The three numbers
 
