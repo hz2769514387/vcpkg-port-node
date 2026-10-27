@@ -42,6 +42,8 @@ runs:
   steps:
     - name: Report the starting point
       shell: bash
+      env:
+        SUITE_CONFIGS: ${{ inputs.suite-configs }}
       run: |
         # Every log this job produces is tee'd under $RUNNER_TEMP/ci-logs, so the uploaded
         # artifact is one directory no matter which step failed. It is spelled with the
@@ -51,9 +53,10 @@ runs:
         mkdir -p "$RUNNER_TEMP/ci-logs"
         echo "### Port build"
         echo "- runner: ${{ inputs.runner }} ($RUNNER_OS/$RUNNER_ARCH)"
-        echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }}, consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
+        echo "- preset: ${{ inputs.preset }} (triplet ${{ inputs.triplet }})"
+        echo "- consumer configurations: ${{ inputs.consumer-configs }}"
+        echo "- Node.js suite on: ${SUITE_CONFIGS:-<none>}"
         echo "- vcpkg: ${{ inputs.vcpkg-commit }}"
-        echo "- suite on: ${{ inputs.suite-configs }}"
         echo ""
         echo "Free space before:"; df -h . || true
 
@@ -100,11 +103,10 @@ runs:
         # somewhere: cargo for Node.js 26's Temporal crate, python for gyp and for the
         # official test driver, clang-cl on Windows (upstream requirement since 24).
         #
-        # The CMake version is reported but deliberately not enforced. vcpkg's scripts have
-        # had CMake-version requirements (the node24 line needed CMake 4 for
-        # `string(JSON ... STRING_ENCODE)`), yet the images used here ship 3.x and build
-        # this port fine - a hard gate on the version would therefore fail working legs.
-        # Reported, a mismatch is visible; enforced, it is a false alarm.
+        # The CMake on PATH is reported here and *fixed* further down ("Ensure CMake 4 or
+        # newer"): vcpkg's scripts call `string(JSON ... STRING_ENCODE)`, which CMake grew in
+        # 4.0, and an image that still ships 3.31 fails on the first dependency. What this
+        # line is for is knowing which of the two that step found.
         echo "cargo         : $(cargo --version || echo MISSING)"
         echo "python        : $(python --version 2>&1 || echo MISSING)"
         echo "python3       : $(python3 --version 2>&1 || echo MISSING)"
