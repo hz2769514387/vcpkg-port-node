@@ -34,6 +34,12 @@ jobs:
       - name: Repository hygiene
         run: python3 tools/check_repo.py
 
+      - name: The overlay table matches the ports
+        # docs/overlay-replacements.md is what a consumer reads to learn what they will get by
+        # depending on this port; it is prose, and prose drifts. The version columns are checked,
+        # the sentences beside them are not - a tool cannot write "why this fork matters".
+        run: python3 tools/overlay_table.py --check
+
       - name: No credentials in the history
         # The same scanner the pre-commit hook runs on staged lines, here over
         # every blob reachable from any ref. A hook is opt-in per clone, so
