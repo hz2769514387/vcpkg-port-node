@@ -126,12 +126,12 @@ measured in this repository, so 2022 is the floor rather than a ceiling. The pre
 machine whose newest is 2019 fails inside the port's build, with gyp's or the compiler's  
 message, instead of at generator lookup.
 
-### Overlaying this repository replaces ten registry ports for your whole dependency graph
+### Overlaying this repository replaces nineteen registry ports for your whole dependency graph
 
 Declaring `overlay-ports` gives every consumer in the graph this repository's build of any port  
-it ships under a registry name. Sixteen do: the zlib Chromium fork, `simdutf`, `sqlite3`,  
-`simdjson`, `nghttp2`, `llhttp`, `hdr-histogram`, `ada-url`, `libuv`, `brotli`, `libffi`,  
-`mbedtls`, `frozen`, `tcb-span`, `lief` and `perfetto`. The full table -  
+it ships under a registry name. Nineteen do: the zlib Chromium fork, `simdutf`, `sqlite3`,  
+`simdjson`, `nghttp2`, `llhttp`, `hdr-histogram`, `ada-url`, `libuv`, `brotli`, `c-ares`,  
+`libffi`, `mbedtls`, `openssl`, `utfcpp`, `frozen`, `tcb-span`, `lief` and `perfetto`. The full table -  
 the version each one replaces, what the graph gets instead, and what it means if you also link  
 that library directly - is in [docs/overlay-replacements.md](docs/overlay-replacements.md).  
 Read the `mbedtls` row first: the overlay is 4.0 while the registry at the pinned baseline  
