@@ -20,9 +20,11 @@ copy in one process is exactly what must not happen.
 
 The config also publishes the three facts a consumer asks about:
 
-    node_MODULE_VERSION   NODE_MODULE_VERSION, which a prebuilt addon has to match
-    node_NAPI_VERSION     NAPI_VERSION
-    node_LIBRARY_LINKAGE  static or dynamic
+    node_MODULE_VERSION     NODE_MODULE_VERSION, which a prebuilt addon has to match
+    node_NAPI_VERSION       the N-API a module gets when it does not ask for one
+    node_NAPI_VERSION_MAX   the newest N-API this runtime supports - what decides whether a
+                            prebuilt addon may be loaded, and what process.versions.napi reports
+    node_LIBRARY_LINKAGE    static or dynamic
 
 Two things to know before you build:
 

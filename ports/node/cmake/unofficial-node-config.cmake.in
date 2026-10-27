@@ -98,7 +98,8 @@ set(_node_lib "${PACKAGE_PREFIX_DIR}/lib")
 set(node_INSTALLED_LIBRARIES "@NODE_PORT_INSTALLED_LIBRARIES@")
 set(node_LIBRARY_LINKAGE     "@NODE_PORT_LINKAGE@")
 set(node_MODULE_VERSION      "@NODE_PORT_MODULE_VERSION@")
-set(node_NAPI_VERSION        "@NODE_PORT_NAPI_VERSION@")
+set(node_NAPI_VERSION        "@NODE_PORT_NAPI_VERSION@")      # what a module gets by default
+set(node_NAPI_VERSION_MAX    "@NODE_PORT_NAPI_VERSION_MAX@")  # newest supported; process.versions.napi
 
 # A release-only install cannot serve a Debug consumer: MSVC's Debug configuration is the debug
 # CRT (/MTd or /MDd) plus _ITERATOR_DEBUG_LEVEL=2, and a Release static library carries the release

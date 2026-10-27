@@ -20,7 +20,7 @@ set_tests_properties(smoke.externalization.embedder PROPERTIES
 # the consumer's addon load, with a message that names neither this port nor this file.
 add_test(NAME smoke.abi COMMAND node_embedder "${CMAKE_CURRENT_SOURCE_DIR}/abi.mjs")
 set_tests_properties(smoke.abi PROPERTIES
-  ENVIRONMENT "NODE_PORT_MODULE_VERSION=${node_MODULE_VERSION};NODE_PORT_NAPI_VERSION=${node_NAPI_VERSION}"
+  ENVIRONMENT "NODE_PORT_MODULE_VERSION=${node_MODULE_VERSION};NODE_PORT_NAPI_VERSION=${node_NAPI_VERSION};NODE_PORT_NAPI_VERSION_MAX=${node_NAPI_VERSION_MAX}"
   TIMEOUT 180
   LABELS "smoke")
 
