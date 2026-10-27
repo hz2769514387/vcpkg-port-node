@@ -1,7 +1,7 @@
 {
   "name": "perfetto",
   "version": "58.2",
-  "description": "System profiling, app tracing and trace analysis (overlay: pinned to the version Node.js v26.12.1 ships, which is ahead of the vcpkg baseline)",
+  "description": "System profiling, app tracing and trace analysis (overlay: pinned to the version Node.js v26 ships, which is ahead of the vcpkg baseline)",
   "homepage": "https://perfetto.dev",
   "license": "Apache-2.0",
   "supports": "!uwp & !x86",

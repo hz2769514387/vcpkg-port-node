@@ -1,7 +1,7 @@
 {
   "name": "utfcpp",
   "version-semver": "4.1.1",
-  "description": "UTF-8 with C++ in a Portable Way. (overlay: 4.1.1 rather than the baseline's 4.2.1, because 4.2 removed `internal::validate_next(it, end, cp)` and LIEF 1.0.0 - the version Node.js v26.12.1 ships - calls it. Same major, so the CMake target and the install layout consumers see are unchanged)",
+  "description": "UTF-8 with C++ in a Portable Way. (overlay: 4.1.1 rather than the baseline's 4.2.1, because 4.2 removed `internal::validate_next(it, end, cp)` and LIEF 1.0.0 - the version Node.js v26 ships - calls it. Same major, so the CMake target and the install layout consumers see are unchanged)",
   "homepage": "https://github.com/nemtrif/utfcpp",
   "license": "BSL-1.0",
   "dependencies": [

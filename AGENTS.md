@@ -67,8 +67,8 @@ Where things go:
 
 - Build route is **`configure.py` → `gyp -f ninja` → `ninja`** on all three platforms. No gyp→CMake
   translation layer.
-- `ports/node` is **self-contained**: portfile, manifest, usage, patches, scripts, and nothing
-  outside its own directory. Triplets and toolchains belong to the consumer, never to the port.
+- `ports/node` is **self-contained**: portfile, manifest, usage, patches, cmake modules, and nothing outside its own
+  directory. Triplets and toolchains belong to the consumer, never to the port.
 - **Consumers use stock vcpkg triplets.** Compiler discovery, the MSVC environment, manifest
   embedding, stack size, C++20 — all of that is the port's job.
 - Exported config is `unofficial-node`; targets live in `unofficial::node::`.

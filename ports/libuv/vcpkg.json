@@ -1,7 +1,7 @@
 {
   "name": "libuv",
   "version-semver": "1.52.1",
-  "description": "libuv is a multi-platform support library with a focus on asynchronous I/O. (overlay: same 1.52.1 version as the vcpkg baseline, plus the four backports Node.js v26.12.1 carries - unix/fs.c, uv-common.c, win/fs-event.c, win/tcp.c - which the registry build does not have)",
+  "description": "libuv is a multi-platform support library with a focus on asynchronous I/O. (overlay: same 1.52.1 version as the vcpkg baseline, plus the four backports Node.js v26 carries - unix/fs.c, uv-common.c, win/fs-event.c, win/tcp.c - which the registry build does not have)",
   "homepage": "https://github.com/libuv/libuv",
   "license": "BSD-3-Clause",
   "supports": "!uwp",

@@ -39,9 +39,9 @@ Two things to know before you build:
 
 Features, when the port was built with them:
 
-  * `tools` installs the node executable and npm / npx / corepack into
-    <prefix>/tools/node, exported as node_TOOLS_DIR, node_EXECUTABLE, node_NPM,
-    node_NPX and node_COREPACK.
+  * `tools` installs the node executable and npm / npx into <prefix>/tools/node,
+    exported as node_TOOLS_DIR, node_EXECUTABLE, node_NPM and node_NPX. (Node.js 26
+    does not ship corepack, and neither does this port.)
   * `test-suite` installs Node.js's own suite and its driver into
     <prefix>/share/node/test-suite, exported as node_TEST_SUITE_DIR and runnable as
         python <node_TEST_SUITE_DIR>/tools/test.py \

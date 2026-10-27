@@ -1,5 +1,5 @@
-# node - build the Node.js v26.12.0 source tree (V8 included) into a linkable
-# static library, using Node.js's own gyp -> ninja route.
+# node - build the Node.js v26 source tree (V8 included) into a linkable library, using
+# Node.js's own gyp -> ninja route. The patch version lives in vcpkg.json and nowhere else.
 #
 # Why gyp -> ninja and not a CMake translation: upstream's only build entry
 # point is gyp - MSBuild on Windows, Make on Unix, both through
@@ -11,7 +11,7 @@
 # usage, nothing outside its own directory, and no triplet or toolchain (those
 # belong to the consumer). A stock vcpkg triplet is enough: on Windows this
 # port locates clang-cl and assembles the MSVC command-line environment itself
-# (see scripts/node-msvc-env.cmake).
+# (see cmake/msvc-environment.cmake).
 #
 # Dependencies come from vcpkg through the official --shared-* channels, and
 # ICU goes through --with-intl=system-icu (the bundled icu-small does not build
@@ -34,7 +34,7 @@ set(NODE_PORT_DIR "${CMAKE_CURRENT_LIST_DIR}")
 # ONLY_STATIC_LIBRARY)` used to say so - without any evidence that a shared
 # libnode cannot be built, which is what it takes for a restriction to belong
 # in the README's *Known limits* rather than in an issue. Read from the
-# Node.js v26.12.0 tree: `--shared` is a first-class configure.py option; on
+# Node.js v26 tree: `--shared` is a first-class configure.py option; on
 # Windows the DLL is linked once and then relinked against a module-definition
 # file derived from its own export table, so the export set is whatever the
 # DLL already exported (node.gyp, tools/gen_node_def.cc) and

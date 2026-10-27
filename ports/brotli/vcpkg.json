@@ -1,7 +1,7 @@
 {
   "name": "brotli",
   "version": "1.2.1",
-  "description": "a generic-purpose lossless compression algorithm that compresses data using a combination of a modern variant of the LZ77 algorithm, Huffman coding and 2nd order context modeling. (overlay: 1.2.1 rather than the baseline's 1.2.0, because CVE-2026-111497 is fixed there and Node.js v26.12.1's own brotli carries the same fix; plus Node.js's c/common/platform.h, which the registry build does not carry)",
+  "description": "a generic-purpose lossless compression algorithm that compresses data using a combination of a modern variant of the LZ77 algorithm, Huffman coding and 2nd order context modeling. (overlay: 1.2.1 rather than the baseline's 1.2.0, because CVE-2026-111497 is fixed there and Node.js v26's own brotli carries the same fix; plus Node.js's c/common/platform.h, which the registry build does not carry)",
   "homepage": "https://github.com/google/brotli",
   "license": "MIT",
   "dependencies": [

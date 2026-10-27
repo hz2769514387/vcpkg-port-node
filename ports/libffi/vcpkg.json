@@ -1,7 +1,7 @@
 {
   "name": "libffi",
   "version": "3.8.0",
-  "description": "Portable, high level programming interface to various calling conventions (overlay: pinned to the version Node.js v26.12.1 ships, which now equals the vcpkg baseline 2026.10.16)",
+  "description": "Portable, high level programming interface to various calling conventions (overlay: pinned to the version Node.js v26 ships, which now equals the vcpkg baseline 2026.10.16)",
   "homepage": "https://github.com/libffi/libffi",
   "license": "MIT",
   "dependencies": [

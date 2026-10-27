@@ -1,4 +1,4 @@
-# Optional features: `tools` (the node executable and the npm/npx/corepack shims) and
+# Optional features: `tools` (the node executable and the npm/npx shims) and
 # `test-suite` (Node.js's own test tree and its tools/test.py driver).
 #
 # Both are install-time only: they move files that a normal build already produced.
@@ -6,7 +6,7 @@
 # Expects from the portfile: _node_configs, the build output directory, CURRENT_PACKAGES_DIR.
 
 # ---------------------------------------------------------------------------
-# 4) tools feature: node executable + npm / npx / corepack.
+# 4) tools feature: node executable + npm / npx.
 # ---------------------------------------------------------------------------
 if("tools" IN_LIST FEATURES)
     set(_node_tools "${CURRENT_PACKAGES_DIR}/tools/${PORT}")
@@ -36,26 +36,21 @@ if("tools" IN_LIST FEATURES)
     endif()
     file(INSTALL "${SOURCE_PATH}/deps/npm/" DESTINATION "${_node_tools}/node_modules/npm"
         USE_SOURCE_PERMISSIONS)
-    if(EXISTS "${SOURCE_PATH}/deps/corepack/package.json")
-        file(INSTALL "${SOURCE_PATH}/deps/corepack/" DESTINATION "${_node_tools}/node_modules/corepack"
-            USE_SOURCE_PERMISSIONS)
-    endif()
+    # The shims are the ones the source tree ships. They resolve node and the package next to
+    # themselves, which is this layout, so a copy here would only be a second version to keep in
+    # step - and an out-of-date one: the four this port used to carry were 13-16 line rewrites of
+    # upstream's 20-65 line scripts, without their WSL and Cygwin handling.
+    #
+    # Node.js 26 no longer ships corepack, so there is no third shim: `deps/corepack` does not
+    # exist in the tree, and the port used to install one anyway whenever a path happened to exist.
     foreach(_shim IN ITEMS npm npx)
-        file(INSTALL "${NODE_PORT_DIR}/scripts/${_shim}" DESTINATION "${_node_tools}"
+        file(INSTALL "${SOURCE_PATH}/deps/npm/bin/${_shim}" DESTINATION "${_node_tools}"
             RENAME "${_shim}"
             FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
                             GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-        file(INSTALL "${NODE_PORT_DIR}/scripts/${_shim}.cmd" DESTINATION "${_node_tools}"
+        file(INSTALL "${SOURCE_PATH}/deps/npm/bin/${_shim}.cmd" DESTINATION "${_node_tools}"
             RENAME "${_shim}.cmd")
     endforeach()
-    if(EXISTS "${SOURCE_PATH}/deps/corepack/package.json")
-        file(INSTALL "${NODE_PORT_DIR}/scripts/corepack" DESTINATION "${_node_tools}"
-            RENAME "corepack"
-            FILE_PERMISSIONS OWNER_READ OWNER_WRITE OWNER_EXECUTE
-                            GROUP_READ GROUP_EXECUTE WORLD_READ WORLD_EXECUTE)
-        file(INSTALL "${NODE_PORT_DIR}/scripts/corepack.cmd" DESTINATION "${_node_tools}"
-            RENAME "corepack.cmd")
-    endif()
     unset(_shim)
 endif()
 
@@ -74,7 +69,9 @@ if("test-suite" IN_LIST FEATURES)
     file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${_node_suite}/src" USE_SOURCE_PERMISSIONS
         FILES_MATCHING PATTERN "*.h" PATTERN "*.hpp" PATTERN "*.cc")
     file(INSTALL "${SOURCE_PATH}/CHANGELOG.md" DESTINATION "${_node_suite}")
-    foreach(_dep IN ITEMS npm corepack acorn undici)
+    # corepack is not in this list because Node.js 26 does not ship it; the rest are the
+    # dependencies the suite reaches into.
+    foreach(_dep IN ITEMS npm acorn undici)
         if(EXISTS "${SOURCE_PATH}/deps/${_dep}")
             file(INSTALL "${SOURCE_PATH}/deps/${_dep}" DESTINATION "${_node_suite}/deps"
                 USE_SOURCE_PERMISSIONS)
