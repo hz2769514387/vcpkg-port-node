@@ -360,7 +360,24 @@ repository (`gh` only, `origin` only, nothing without a token), so the safety ru
 drift apart between them. `lint.yml` runs both with `--dry-run` on every push, which is what
 catches an upstream API change before the daily run does.
 
-## 8. What CI does not do
+## 8. The official-binary baseline
+
+`official-binary-baseline.yml` answers one question: **is this failure ours, or the machine's?** It
+downloads the official Node.js binary for the pinned version and the suite from the same release's
+source tarball, then runs the suites with `tools/test.py --shell=<official binary>` — the same
+driver, the same cases, a different binary. Four legs: both Windows architectures and both macOS
+ones, since those are the cells where this repository has questions and upstream's CI has no answer.
+
+It is a **measurement, not a gate**: `workflow_dispatch` only, one `suites` input (space-separated
+directory names, default `parallel`), about an hour per leg. The skip lists ask for exactly this
+comparison — *official passes and ours fails means look here, not at Node.js* — and two entries in
+`node-suite-skips.txt` were decided by it: the `process.execve` family on x64 macOS (issue #33) and
+the Windows ACL cases (issue #21).
+
+Nothing runs it automatically, and nothing should: a baseline from a runner whose load differs from
+the leg being compared proves nothing.
+
+## 9. What CI does not do
 
 No tags, no releases, no publishing anywhere. Releasing is the maintainer's decision, and the
 checklist that has to be true first is in `docs/versioning.md` §4 — CI verifies, nothing tags.

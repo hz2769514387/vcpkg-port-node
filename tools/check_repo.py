@@ -157,15 +157,23 @@ def check_port_patches(report, root, ports):
             report.error("ports/%s/portfile.cmake" % port, "port directory has no portfile.cmake")
             continue
         with open(portfile, "r", encoding="utf-8") as fh:
-            content = fh.read()
+            lines = fh.readlines()
         missing = []
         # Paths built with a generator expression or a variable ($<TARGET_FILE:...>,
-        # scripts/${_shim}) are resolved later; only literal references are checkable.
-        for referenced in re.findall(r'"\$\{CMAKE_CURRENT_LIST_DIR\}/([^"]+)"', content):
-            if "${" in referenced:
+        # scripts/${_shim}) are resolved later; only literal references are checkable. Neither is a
+        # glob, a placeholder in a comment, or anything else that is not meant to name one file:
+        # `"${CMAKE_CURRENT_LIST_DIR}/patches/*.patch"` is how the patch list is discovered, and a
+        # comment that spells a convention out is prose, not a reference.
+        for number, line in enumerate(lines, 1):
+            if line.lstrip().startswith("#"):
                 continue
-            if not os.path.isfile(os.path.join(root, "ports", port, referenced)):
-                missing.append(referenced)
+            for referenced in re.findall(r'"\$\{CMAKE_CURRENT_LIST_DIR\}/([^"]+)"', line):
+                if "${" in referenced:
+                    continue
+                if any(ch in referenced for ch in "*?[]") or "..." in referenced:
+                    continue
+                if not os.path.isfile(os.path.join(root, "ports", port, referenced)):
+                    missing.append(referenced)
         for referenced in missing:
             report.error(
                 "ports/%s/portfile.cmake" % port,
