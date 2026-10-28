@@ -98,7 +98,8 @@ set(_node_lib "${PACKAGE_PREFIX_DIR}/lib")
 set(node_INSTALLED_LIBRARIES "@NODE_PORT_INSTALLED_LIBRARIES@")
 set(node_LIBRARY_LINKAGE     "@NODE_PORT_LINKAGE@")
 set(node_MODULE_VERSION      "@NODE_PORT_MODULE_VERSION@")
-set(node_NAPI_VERSION        "@NODE_PORT_NAPI_VERSION@")
+set(node_NAPI_VERSION        "@NODE_PORT_NAPI_VERSION@")      # what a module gets by default
+set(node_NAPI_VERSION_MAX    "@NODE_PORT_NAPI_VERSION_MAX@")  # newest supported; process.versions.napi
 
 # A release-only install cannot serve a Debug consumer: MSVC's Debug configuration is the debug
 # CRT (/MTd or /MDd) plus _ITERATOR_DEBUG_LEVEL=2, and a Release static library carries the release
@@ -155,15 +156,9 @@ if(NODE_PORT_HAS_TOOLS)
   set(node_EXECUTABLE "${PACKAGE_PREFIX_DIR}/tools/node/@NODE_PORT_EXE_NAME@")
   set(node_NPM        "${PACKAGE_PREFIX_DIR}/tools/node/npm@NODE_PORT_SHIM_EXT@")
   set(node_NPX        "${PACKAGE_PREFIX_DIR}/tools/node/npx@NODE_PORT_SHIM_EXT@")
-  set(NODE_PORT_HAS_COREPACK "@NODE_PORT_HAS_COREPACK@")
-  if(NODE_PORT_HAS_COREPACK)
-    set(node_COREPACK "${PACKAGE_PREFIX_DIR}/tools/node/corepack@NODE_PORT_SHIM_EXT@")
-  endif()
-  unset(NODE_PORT_HAS_COREPACK)
 endif()
 
 if(NODE_PORT_SHARED)
-  set(node_LIBRARY_KIND "shared")
   if(NOT TARGET unofficial::node::libnode)
     add_library(unofficial::node::libnode SHARED IMPORTED)
     if(NODE_PORT_IS_WINDOWS)
@@ -193,7 +188,6 @@ else()
   # are attached to unofficial::node::node below. A shared build has none of this to import: the
   # library already contains these archives, and linking them again would put a second copy of
   # each symbol into the process.
-  set(node_LIBRARY_KIND "static")
   foreach(_entry IN LISTS NODE_PORT_ARCHIVES)
     string(REPLACE ":" ";" _pair "${_entry}")
     list(GET _pair 0 _name)

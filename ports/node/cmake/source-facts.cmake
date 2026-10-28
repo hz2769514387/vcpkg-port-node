@@ -43,10 +43,21 @@ string(REGEX MATCH "[0-9]+" node_module_version "${_node_module_line}")
 file(STRINGS "${SOURCE_PATH}/src/js_native_api_types.h" _node_napi_line
      REGEX "^#define NAPI_VERSION [0-9]+$")
 string(REGEX MATCH "[0-9]+" node_napi_version "${_node_napi_line}")
-if(NOT node_module_version OR NOT node_napi_version)
+# Two N-API numbers, and they are not the same fact. This port published one of them as if it were
+# the other until smoke.abi compared it with the runtime:
+#
+#   NAPI_VERSION                     8   what a module gets when it does not ask for more
+#   NODE_API_SUPPORTED_VERSION_MAX  10   the newest N-API the runtime supports - what
+#                                       process.versions.napi reports, and what decides whether a
+#                                       prebuilt addon may be loaded at all
+file(STRINGS "${SOURCE_PATH}/src/node_version.h" _node_api_max_line
+     REGEX "^#define NODE_API_SUPPORTED_VERSION_MAX [0-9]+$")
+string(REGEX MATCH "[0-9]+" node_napi_version_max "${_node_api_max_line}")
+if(NOT node_module_version OR NOT node_napi_version OR NOT node_napi_version_max)
     message(FATAL_ERROR
-        "could not read NODE_MODULE_VERSION / NAPI_VERSION from the Node.js source tree "
-        "(module='${node_module_version}', napi='${node_napi_version}'); update the regexes in "
+        "could not read NODE_MODULE_VERSION / NAPI_VERSION / NODE_API_SUPPORTED_VERSION_MAX from "
+        "the Node.js source tree (module='${node_module_version}', napi='${node_napi_version}', "
+        "napi-max='${node_napi_version_max}'); update the regexes in "
         "ports/node/cmake/source-facts.cmake to match the new headers.")
 endif()
 
@@ -72,4 +83,4 @@ endif()
 
 message(STATUS
     "node port: source tree is Node.js ${node_version_string} "
-    "(module ${node_module_version}, napi ${node_napi_version})")
+    "(module ${node_module_version}, napi ${node_napi_version}, max ${node_napi_version_max})")

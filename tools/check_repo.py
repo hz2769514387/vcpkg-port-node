@@ -221,6 +221,70 @@ def discover_ports(root):
     )
 
 
+def check_port_usage(report, root, ports):
+    """`ports/<port>/usage` is installed into the package and read by a consumer.
+
+    It must not name a version. It is shipped *by* the port, so a version written into it is a
+    second place that has to be updated on every bump - and it was: the usage of the node port said
+    v26.12.0 while the package delivered 26.12.1. The same file must also not describe how to build
+    the port; a consumer installing a binary package does not build anything.
+    """
+    version = re.compile(r"[0-9]+[.][0-9]+[.][0-9]+")
+    for port in ports:
+        usage = os.path.join(root, "ports", port, "usage")
+        # The portfile's own header is the same claim in the same place: it said "build the Node.js
+        # v26.12.0 source tree" long after the manifest had moved on. Only the leading comment block
+        # is scanned - a later comment recording which version a measurement came from is history.
+        header = []
+        portfile = os.path.join(root, "ports", port, "portfile.cmake")
+        # Only this project's own port. An overlay's header exists to name the two versions it sits
+        # between - what it pins and what the registry has - so a version there is the point.
+        if port == "node" and os.path.isfile(portfile):
+            with open(portfile, "r", encoding="utf-8") as handle:
+                for line in handle:
+                    if not line.startswith("#") and line.strip():
+                        break
+                    header.append(line)
+        targets = []
+        if header:
+            targets.append(("ports/%s/portfile.cmake" % port, header, 1))
+        if os.path.isfile(usage):
+            with open(usage, "r", encoding="utf-8") as handle:
+                targets.append(("ports/%s/usage" % port, handle.readlines(), 1))
+        for where, lines, first in targets:
+            for number, line in enumerate(lines, first):
+                match = version.search(line)
+                if match:
+                    report.error(
+                        where,
+                        "line %d names the version '%s'. These files are shipped by the port, so a "
+                        "version in them is a second place to update on every bump and it has "
+                        "already drifted once; the manifest is the only place a version lives."
+                        % (number, match.group(0)),
+                    )
+
+
+def check_node_patch_version_in_descriptions(report, root, ports):
+    """An overlay description must not name the Node.js *patch* version it was derived from.
+
+    It says "the version Node.js v26 ships" for a reason, and the reason survives a patch bump -
+    while the sentence does not: nine descriptions said "v26.12.0" and then "v26.12.1" within two
+    weeks, each time because a number had been typed where a major version was meant. The library
+    versions beside them are the pin itself and stay.
+    """
+    pattern = re.compile(r"Node[.]js v[0-9]+[.][0-9]+[.][0-9]+")
+    for port in ports:
+        manifest = os.path.join(root, "ports", port, "vcpkg.json")
+        with open(manifest, "r", encoding="utf-8") as handle:
+            description = json.dumps(json.load(handle).get("description", ""))
+        for match in pattern.finditer(description):
+            report.error(
+                "ports/%s/vcpkg.json" % port,
+                "the description names '%s'. Say the major version instead - the patch version "
+                "drifts on every bump and this sentence is not what pins it." % match.group(0),
+            )
+
+
 def check_overlay_disclosure(report, root, ports):
     """Every port must be disclosed in docs/overlay-replacements.md.
 
@@ -354,6 +418,8 @@ def main(argv=None):
     check_port_patches(report, root, ports)
     check_port_versions(report, root, ports)
     check_overlay_disclosure(report, root, ports)
+    check_port_usage(report, root, ports)
+    check_node_patch_version_in_descriptions(report, root, ports)
     check_versions_json(report, root)
 
     for line in report.warnings:

@@ -318,7 +318,7 @@ foreach(_node_cfg IN LISTS _node_configs)
     # states every source it compiles, so one pass over it is the whole check.
     # -----------------------------------------------------------------------
     vcpkg_execute_required_process(
-        COMMAND "${PYTHON3}" "${NODE_PORT_DIR}/scripts/check_no_vendored_build.py"
+        COMMAND "${PYTHON3}" "${NODE_PORT_DIR}/check-no-vendored-build.py"
                 --build-dir "${SOURCE_PATH}/out/${_node_cfg}"
         WORKING_DIRECTORY "${SOURCE_PATH}"
         LOGNAME "vendored-check-${_node_cfg}"

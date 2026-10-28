@@ -146,7 +146,7 @@ endif()
 # Unix: the library's directory goes into the build RPATH, which is what
 # libnode's own install name asks for ($ORIGIN on Linux, @rpath on macOS).
 function(node_test_runtime_libs _target)
-  if(NOT DEFINED node_LIBRARY_KIND OR NOT node_LIBRARY_KIND STREQUAL "shared")
+  if(NOT DEFINED node_LIBRARY_LINKAGE OR NOT node_LIBRARY_LINKAGE STREQUAL "dynamic")
     return()
   endif()
   if(WIN32)
@@ -210,7 +210,7 @@ endfunction()
 # semicolons, so a PATH value with more than one directory is truncated at
 # the first one and the inherited PATH is lost with it. Measured, and the
 # truncation is silent.
-if(WIN32 AND DEFINED node_LIBRARY_KIND AND node_LIBRARY_KIND STREQUAL "shared"
+if(WIN32 AND DEFINED node_LIBRARY_LINKAGE AND node_LIBRARY_LINKAGE STREQUAL "dynamic"
    AND DEFINED node_EXECUTABLE AND DEFINED node_TOOLS_DIR)
   get_filename_component(_node_bin_dir "${node_SHARED_LIBRARY}" DIRECTORY)
   get_filename_component(_node_prefix "${_node_bin_dir}" DIRECTORY)

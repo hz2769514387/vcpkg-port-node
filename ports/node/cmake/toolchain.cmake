@@ -4,8 +4,8 @@
 # Unix, the CRT channel, compiler-rt builtins, the macOS frameworks the archives drag in,
 # and cargo (which vcpkg cannot acquire).
 #
-# Expects from the portfile: nothing. Publishes _node_cc / _node_cxx / _node_dynamic_crt /
-# _node_rt_arch and, on Windows, the environment configure.py and gyp inherit.
+# Expects from the portfile: nothing. Publishes _node_cc / _node_cxx / _node_rt_arch and, on
+# Windows, the environment configure.py and gyp inherit.
 
 # ---------------------------------------------------------------------------
 # Compiler and environment.
@@ -20,13 +20,12 @@ set(_node_cxx "")
 set(_node_clang_cl_arg "")
 set(_node_rt_builtins_lib "")
 set(_node_rt_arch "")
-set(_node_dynamic_crt 0)
 
 if(VCPKG_TARGET_IS_WINDOWS)
     # Put INCLUDE / LIB / PATH together for the gyp/ninja build (nmake, MSVC and
     # SDK headers, rc.exe/mt.exe) and publish NODE_PORT_VS_INSTALL_ROOT and
     # NODE_PORT_HOST_ARCH.
-    include("${NODE_PORT_DIR}/scripts/node-msvc-env.cmake")
+    include("${NODE_PORT_DIR}/cmake/msvc-environment.cmake")
 
     # --- locate clang-cl ---
     #   (1) NODE_PORT_LLVM_BIN     explicit override (CI pins the runner layout)
@@ -184,7 +183,6 @@ if(VCPKG_TARGET_IS_WINDOWS)
     # identical to upstream (0 is false). vcpkg_replace_string makes an upstream
     # wording change fail loudly rather than silently.
     if(VCPKG_CRT_LINKAGE STREQUAL "dynamic")
-        set(_node_dynamic_crt 1)
         set(ENV{NODE_PORT_FORCE_DYNAMIC_CRT} "1")
         message(STATUS "node port: VCPKG_CRT_LINKAGE=dynamic -> /MD, /MDd")
     else()

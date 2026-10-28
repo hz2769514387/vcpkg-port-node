@@ -2,7 +2,7 @@
   "name": "node",
   "version": "26.12.1",
   "description": [
-    "Builds the Node.js v26.12.1 source tree (V8 included) into a linkable static library with Node's own gyp -> ninja route, and installs the headers plus a CMake consumer config.",
+    "Builds the Node.js v26 source tree (V8 included) into a linkable static library with Node's own gyp -> ninja route, and installs the headers plus a CMake consumer config.",
     "Contract: (1) the bundled V8 is the one Node.js ships, not vcpkg's `v8` port; (2) VCPKG_LIBRARY_LINKAGE selects a static or a shared libnode, and both are built and tested - a shared one already contains the externalized dependencies, so a consumer that only uses Node.js's own API links the library and nothing else - one that calls a dependency directly has to link that dependency too, as with any vcpkg package - and has to make the library findable at run time; (3) Node.js itself is compiled with clang-cl on Windows, gcc on Linux and clang on macOS, which is what upstream builds and tests with - the port provides the compiler and, on Windows, the MSVC command-line environment, so a stock triplet is enough, and a consumer's own compiler is theirs to choose and is not constrained by this; (4) the build follows the triplet: an unset VCPKG_BUILD_TYPE (dual triplet) builds Release and Debug, VCPKG_CRT_LINKAGE selects the static (/MT) or dynamic (/MD) CRT; a consumer can be Release or RelWithDebInfo against any install, and Debug against a dual one - on Windows a Debug consumer is the debug CRT and cannot link a Release library; (5) Node.js's own dependencies come from vcpkg through the official --shared-* channels, and the four third-party libraries V8 would otherwise compile into the artifacts (abseil, highway, simdutf, zlib) are externalized too; (6) consumers need C++20 - declared on the INTERFACE by this port (MSVC also gets /Zc:__cplusplus automatically)."
   ],
   "license": "MIT",
@@ -50,5 +50,5 @@
       "description": "Also install the node executable plus npm / npx / corepack into tools/node (the layout of the official distribution: executable + node_modules/{npm,corepack} + shims). Enable it when you need a standalone node/npm; otherwise only the library and headers are installed. About 25 MB."
     }
   },
-  "port-version": 3
+  "port-version": 4
 }

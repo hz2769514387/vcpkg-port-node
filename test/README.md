@@ -28,9 +28,15 @@ ctest --test-dir build/x64-windows-static -C Release --output-on-failure
 ```
 
 A preset is named after the vcpkg triplet it selects, so the name you type is the triplet you
-install. That rule was set on 2026-10-17 and it still holds for the preset you should copy:
-**no suffix means this repository's recommendation for its platform.** A suffix names one
-deliberate deviation from that recommendation, and the only suffix today is `-msvc` on Windows.
+install. **No suffix means this repository's recommendation for its platform**; a suffix names one
+deliberate deviation, and there are two: `-msvc` (a cl.exe *consumer*, see below) and `-debug`.
+
+Tests have presets of their own, so nobody has to remember a label expression:
+
+```sh
+ctest --preset x64-windows-static-fast     # everything that takes seconds
+ctest --preset x64-windows-static-all      # everything, including Node.js's own suite
+```
 
 ### Which compiler you get, and how to change it
 
@@ -70,12 +76,40 @@ verified. Nothing here detects or rejects it.
 | `RelWithDebInfo` | any install, **release-only included** | the release ABI plus full debug information: this is what to use when the need is to debug your own code |
 | `Debug` | a **dual** install (stock triplet, `VCPKG_BUILD_TYPE` unset) | on Windows a Debug consumer is `/MTd`/`/MDd` and cannot link a Release library (`LNK2038`) |
 
-Presets carry no configuration, so `CMAKE_BUILD_TYPE` and `--config` decide it. With an unset
-`VCPKG_BUILD_TYPE` a stock triplet makes the port build Release **and** Debug, so a Debug
-consumer is possible - configure with `-DCMAKE_BUILD_TYPE=Debug` and build with `--config Debug`.
-CI also names vcpkg's community **release-only** triplets (`*-release`), whose install has no
-debug library; the port's exported config says so at configure time on Windows rather than
-letting the link fail with a wall of `LNK2038`.
+The presets inherit one of two configuration bases, `release` or `debug`, and say so in a `-debug`
+variant where that is a configure-time decision: `x64-linux-debug` and `arm64-osx-debug` (Ninja
+fixes the configuration at configure time), plus `x64-windows-static-debug` and
+`arm64-windows-static-debug` as *build* presets (a Visual Studio generator chooses at build time).
+With an unset `VCPKG_BUILD_TYPE` a stock triplet makes the port build Release **and** Debug, so a
+Debug consumer is possible; CI also names vcpkg's community **release-only** triplets
+(`*-release`), whose install has no debug library, and the port's exported config says so at
+configure time on Windows rather than letting the link fail with a wall of `LNK2038`.
+
+### Debugging it
+
+The dual triplets install both configurations, so nothing has to be prepared beyond picking the
+Debug one:
+
+- **Visual Studio** - open this folder, let it read `CMakePresets.json`, and choose
+  `x64-windows-static-debug` in the configuration dropdown. The startup item is `node_embedder`.
+- **Visual Studio Code** - the CMake Tools extension picks the presets up; a launch entry is all
+  that is missing:
+
+  ```json
+  {
+    "name": "node_embedder",
+    "type": "cppvsdbg",
+    "request": "launch",
+    "program": "${command:cmake.launchTargetPath}",
+    "cwd": "${workspaceFolder}/test"
+  }
+  ```
+
+- **Command line**, on Linux or macOS where the configuration is fixed at configure time:
+
+  ```sh
+  cmake --preset x64-linux-debug && cmake --build --preset x64-linux-debug
+  ```
 
 ### The rest of the matrix
 
