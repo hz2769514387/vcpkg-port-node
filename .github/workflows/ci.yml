@@ -27,7 +27,21 @@ on:
       # still built. `legacy/*` is deliberately absent - those are frozen, unmaintained, and
       # may not build at all.
       - "*_vcpkg-*"
+    paths:
+      - 'ports/**'
+      - 'test/**'
+      - 'tools/**'
+      - '.github/**'
+      - 'versions.json'
+      - 'versions/**'
   pull_request:
+    paths:
+      - 'ports/**'
+      - 'test/**'
+      - 'tools/**'
+      - '.github/**'
+      - 'versions.json'
+      - 'versions/**'
   workflow_dispatch:
 
 concurrency:
