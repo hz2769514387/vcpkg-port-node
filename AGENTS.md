@@ -51,7 +51,9 @@ Maintenance period, since the `20261024` tag:
 - Everything through a pull request; `main` is protected. Only the release commit and the tag are
   the maintainer's alone.
 - A pull request carries what and why, a linked issue, green CI, and a changelog entry at tag time.
-- The full matrix is expected green on `main`. A red leg is an incident, not a background state.
+- The full matrix is expected green on `main` for every commit that touched a build-affecting
+  path. A documentation-only change runs Lint alone - it has no matrix question
+  (ADR 0010). A red leg is an incident, not a background state.
 - A change that breaks a documented guarantee amends the guarantee in the same pull request.
 
 Where things go:
