@@ -18,7 +18,21 @@ on:
     branches:
       - main
       - "*_vcpkg-*"
+    paths:
+      - 'ports/**'
+      - 'test/**'
+      - 'tools/**'
+      - '.github/**'
+      - 'versions.json'
+      - 'versions/**'
   pull_request:
+    paths:
+      - 'ports/**'
+      - 'test/**'
+      - 'tools/**'
+      - '.github/**'
+      - 'versions.json'
+      - 'versions/**'
   schedule:
     - cron: '23 5 * * 1'
   workflow_dispatch:

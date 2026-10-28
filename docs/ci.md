@@ -4,18 +4,37 @@ What runs, where, and what each run actually proves. Every workflow lives in
 `.github/workflows/`; anything about *why* the gates are shaped this way is in the ADRs, not
 here ([0002](decisions/0002-node-version-policy.md), [0003](decisions/0003-vcpkg-baseline-policy.md),
 [0004](decisions/0004-continuous-integration.md),
-[0005](decisions/0005-vcpkg-pin-without-a-manifest-baseline.md)).
+[0005](decisions/0005-vcpkg-pin-without-a-manifest-baseline.md),
+[0010](decisions/0010-build-cells-run-when-a-change-can-affect-the-build.md)).
 
 ## 1. The gates
 
 | Workflow | Trigger | Cost | Decides |
 |---|---|---|---|
 | `lint.yml` | push to `main`, pull request, manual | seconds | the repository still obeys its own rules: version files match the ports, tracked files are English/LF/UTF-8, referenced patches exist |
-| `ci.yml` | push to `main`, pull request, manual | tens of minutes to a few hours per leg | the port **builds and can be consumed**, as a Release and as a RelWithDebInfo consumer, and **what was built is still Node.js** - Node.js's own suite runs on the Release consumer of every leg |
-| `debug.yml` | push to `main`, pull request, weekly, manual | about twice `ci.yml` per leg | the same for the **Debug** configuration, which needs a Debug library and therefore its own install |
-| `matrix.yml` | push to `main`, pull request, weekly, manual | about twice `ci.yml` per leg | the rest of the matrix: the **dynamic CRT** on Windows and a **shared libnode** on every platform |
+| `ci.yml` | a build-affecting push or pull request, manual | tens of minutes to a few hours per leg | the port **builds and can be consumed**, as a Release and as a RelWithDebInfo consumer, and **what was built is still Node.js** - Node.js's own suite runs on the Release consumer of every leg |
+| `debug.yml` | a build-affecting push or pull request, weekly, manual | about twice `ci.yml` per leg | the same for the **Debug** configuration, which needs a Debug library and therefore its own install |
+| `matrix.yml` | a build-affecting push or pull request, weekly, manual | about twice `ci.yml` per leg | the rest of the matrix: the **dynamic CRT** on Windows and a **shared libnode** on every platform |
 | `node-release-watch.yml` | daily (06:23 UTC), manual | seconds | whether upstream has published a newer Node.js release (ADR 0002) |
 | `vcpkg-release-watch.yml` | daily (06:53 UTC), manual | seconds | whether upstream has published a newer vcpkg release (docs/versioning.md) |
+
+### When the build cells run
+
+The three build workflows trigger only when a path that can change what is built has changed:
+`ports/**`, `test/**`, `tools/**`, `.github/**`, `versions.json`, `versions/**`. A change to
+documentation alone - `docs/**`, the repository's own markdown - runs **Lint only**, which is the tier
+that can fail on it (`check_repo.py`, `version_tree.py --check`, `check_secrets.py`,
+`check_workflows.py`, `overlay_table.py --check`).
+
+That is [ADR 0010](decisions/0010-build-cells-run-when-a-change-can-affect-the-build.md), and it
+changes what "green" means for such a commit: Lint green, and no matrix result *because there was no
+matrix question*. Scheduled and manual runs are not filtered - their purpose is to notice drift, not
+to judge a change.
+
+The failure mode to watch is the list itself: a file a build reads that is not on it stops being
+built, silently. The list is short, it lives in three files that are themselves under `.github/**`
+(so editing it reruns the cells), and anything new at the repository root that a build consumes has
+to be added in the same commit.
 
 Every dimension this repository verifies is exercised on push - and the one it does not verify is
 named rather than implied (see the Debug subsection below). What is *not* true is that every
