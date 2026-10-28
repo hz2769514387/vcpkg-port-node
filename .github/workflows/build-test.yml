@@ -264,60 +264,12 @@ jobs:
               2>&1 | tee "$RUNNER_TEMP/ci-logs/ctest-$cfg.log"
             echo "::endgroup::"
           done
-      - name: Summarize the run
-        if: always()
-        shell: bash
-        run: |
-          set -uo pipefail
-          {
-            echo "## ${{ inputs.triplet }} (consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
-            echo ""
-            echo '```'
-            # The pass/fail counts go first: they are the whole answer to "did this leg work",
-            # and they are easy to miss at the end of a few thousand lines.
-            # One log per configuration, so the counts are read out of all of
-            # them; a leg that builds three configurations and reports one is
-            # not reporting what it did.
-            for f in "$RUNNER_TEMP"/ci-logs/ctest-*.log; do
-              [ -f "$f" ] || continue
-              echo "-- $(basename "$f")"
-              grep -E "tests passed|tests failed|Total Test time" "$f" | head -n 5 || true
-              awk '/The following tests FAILED/{found=1} found' "$f" | head -n 40 || true
-            done
-            echo '```'
-            # The first error, from whichever stream failed first: the port's own diagnostics
-            # live in vcpkg's buildtrees, the consumer's in the tee'd logs.
-            echo ""
-            echo '### First error'
-            echo '```'
-            {
-              grep -m1 -hE "error|Error" "$RUNNER_TEMP/ci-logs"/*.log 2>/dev/null || true
-              for f in $(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 100); do
-                if grep -m1 -hE "error:|CMake Error|BUILD_FAILED" "$f" 2>/dev/null; then break; fi
-              done
-            } | head -n 15
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Collect the logs
-        if: always()
-        shell: bash
-        run: |
-          set -uo pipefail
-          mkdir -p "$RUNNER_TEMP/ci-logs/vcpkg"
-          # The port's own stdout and stderr are separate files in vcpkg's buildtrees
-          # (build-<config>-out.log / -err.log), and the manifest log embeds only one of them.
-          # Without them a diagnostic printed to the other stream is lost.
-          while IFS= read -r f; do
-            cp "$f" "$RUNNER_TEMP/ci-logs/vcpkg/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
-          done < <(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 200)
-          # The consumer build's own CMake logs, which are not under buildtrees.
-          while IFS= read -r f; do
-            cp "$f" "$RUNNER_TEMP/ci-logs/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
-          done < <(find test/build -name '*.log' -type f 2>/dev/null | head -n 200)
-          du -sh "$RUNNER_TEMP/ci-logs" || true
-          ls -la "$RUNNER_TEMP/ci-logs" || true
-
+      - name: Report the run
+        uses: ./.github/actions/report
+        with:
+          triplet: ${{ inputs.triplet }}
+          consumer-configs: ${{ inputs.consumer-configs }}
+          suite-configs: ${{ inputs.suite-configs }}
       - name: Upload this leg's logs
         if: always()
         uses: actions/upload-artifact@v4
