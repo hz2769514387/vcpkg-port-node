@@ -8,9 +8,9 @@ description: >
   an install job and a consumer job - and the two must start from the same environment. The
   step bodies are the ones that used to sit inline there; nothing was rewritten on the way.
 
-  `manifest-hash` is an input because `hashFiles` is not something to rely on inside a
-  composite action: the caller evaluates it, after its own checkout, which is also the point
-  where it means something (the cache key hashes ports/ and the test manifest on disk).
+  `cache-hash` is an input because `hashFiles` is not something to rely on inside a composite
+  action: the caller evaluates it, after its own checkout, which is also the point where it means
+  something (it hashes the test manifest on disk).
 
 inputs:
   runner:
@@ -33,8 +33,14 @@ inputs:
   vcpkg-commit:
     description: vcpkg commit to check out (ADR 0005 - the pin is the checkout).
     required: true
-  manifest-hash:
-    description: Cache-key component covering ports/ and test/vcpkg.json, from the caller.
+  cache-hash:
+    description: >
+      Cache-key component covering test/vcpkg.json, from the caller. It deliberately does *not*
+      cover ports/: vcpkg looks every package up by its own ABI hash, so an archive that holds
+      entries for other ABIs is harmless - vcpkg misses and rebuilds only what changed. Hashing
+      ports/ meant every portfile edit (and every commit of a refactor) discarded the cache and
+      rebuilt twenty dependencies from source, which is what pushed the Linux Debug install past
+      the six-hour job limit.
     required: true
 
 runs:
@@ -68,7 +74,7 @@ runs:
         # manifest: any of those changing changes the ABI of what gets built, so a stale
         # entry would restore the wrong binaries. The triplet is part of the ABI too, so
         # legs that install different triplets must not share an entry.
-        key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-${{ inputs.manifest-hash }}
+        key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-${{ inputs.cache-hash }}
         restore-keys: |
           vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-
 

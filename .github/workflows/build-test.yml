@@ -93,15 +93,13 @@ permissions:
 
 jobs:
   install:
-    # The expensive half of a split leg - a dual triplet builds Node.js twice - and the whole
-    # reason the split exists, since the six-hour limit applies per job, not per leg.
+    # The expensive half of a split leg - a dual triplet builds Node.js twice - and the whole reason
+    # the split exists, since the six-hour limit applies per job, not per leg.
     #
-    # **No leg uses this today**, so it is skipped everywhere: the only caller was the two Linux
-    # Debug legs, and those are gone (docs/ci.md, "Debug is verified on four cells"). It is kept
-    # because a larger runner would want exactly this shape, and because the two lessons about
-    # it are written down there - the artifact has to be a tar if anything relies on file
-    # modes, and the saving is bounded. Delete it together with the input if nothing has used
-    # it by the time a bigger runner is clearly not coming.
+    # It has exactly one caller: `debug.yml`'s x64 Linux leg, where a single job cannot finish the
+    # dual install. Two lessons are attached to it - the artifact has to be a tar if anything relies
+    # on file modes, and the saving is bounded by the install itself, which is the half that takes
+    # the six hours.
     #
     # Deliberately *not* continue-on-error, whatever `experimental` says: a leg whose install
     # failed has nothing to consume, and letting this job report success would hand an empty
@@ -135,7 +133,7 @@ jobs:
           vcpkg-commit: ${{ inputs.vcpkg-commit }}
           # Evaluated here, after the checkout, and handed in: hashFiles is not something to
           # rely on inside a composite action.
-          manifest-hash: ${{ hashFiles('ports/**', 'test/vcpkg.json') }}
+          cache-hash: ${{ hashFiles('test/vcpkg.json') }}
       - name: Configure the consumer test project
         uses: ./.github/actions/configure
         with:
@@ -264,10 +262,11 @@ jobs:
 
   build:
     needs: install
-    # Runs when the install job was skipped (the leg is not split) and when it succeeded.
-    # Not when it failed or the run was cancelled: `needs` would let it start, and it would
-    # then build against nothing.
-    if: ${{ !cancelled() && needs.install.result != 'failure' }}
+    # Runs when the install job was skipped (the leg is not split) and when it succeeded. Not when
+    # it failed, and not when it was cancelled - a cancelled install is the six-hour platform limit
+    # firing, and letting the build job start then turns "the install never finished" into
+    # "artifact not found", which reads like a compile error and is not.
+    if: ${{ !cancelled() && needs.install.result != 'failure' && needs.install.result != 'cancelled' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     # continue-on-error has to live here rather than on the caller: a job that calls a
@@ -300,7 +299,7 @@ jobs:
           vcpkg-commit: ${{ inputs.vcpkg-commit }}
           # Evaluated here, after the checkout, and handed in: hashFiles is not something to
           # rely on inside a composite action.
-          manifest-hash: ${{ hashFiles('ports/**', 'test/vcpkg.json') }}
+          cache-hash: ${{ hashFiles('test/vcpkg.json') }}
       - name: Download the installed tree
         if: ${{ inputs.split-install }}
         uses: actions/download-artifact@v4
