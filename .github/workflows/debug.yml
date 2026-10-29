@@ -83,39 +83,10 @@ jobs:
       expect-arch: ARM64
       timeout-minutes: 330
 
-  # --- the Linux Debug cell, as two jobs ------------------------------------------------
-  # Measured 2026-10-22 (run 39706746229): a dual install of the port on a four-core Linux runner
-  # is 4.1 hours for node alone and 4.5 for the job - inside the six-hour ceiling, but with less
-  # margin than Windows or macOS, where clang-cl does the same work in two to three hours. So the
-  # install gets a job of its own and hands the installed tree to a second job, which is where the
-  # consumer and the tests run.
-  #
-  # Two attempts to make this cheaper were measured and dropped rather than kept as folklore:
-  #
-  #   * a Release-only prepare job (`VCPKG_BUILD_TYPE=release`) would have halved the install.
-  #     Neither a step-level `env:` nor an action input reached vcpkg in manifest mode: run
-  #     39534901582 printed "vcpkg: VCPKG_BUILD_TYPE=release" from the shell and
-  #     "-- node port: VCPKG_BUILD_TYPE unset -> building Release + Debug" from the port.
-  #   * a separate prepare job that fills the binary cache so this install is a hit. It worked
-  #     when the cache was warm (12 minutes instead of 4.5 hours) and did not when it was not:
-  #     run 39758350009 spent its whole six hours rebuilding, because the Actions cache is 10 GB
-  #     per repository and ten legs' archives evict each other. A dependency that works half the
-  #     time is worse than no dependency.
-  linux:
-    uses: ./.github/workflows/build-test.yml
-    secrets: inherit
-    with:
-      runner: ubuntu-latest
-      preset: x64-linux
-      triplet: x64-linux
-      consumer-configs: Debug
-      suite-configs: ""
-      split-install: true
-      install-timeout-minutes: 360
-      timeout-minutes: 120
-
-  # No arm64 Linux leg: the same dual install on `ubuntu-24.04-arm` did not finish in six hours
-  # in any of three attempts, and there is no smaller unit to split it into.
+  # No Linux Debug leg; docs/ci.md §3 records why, with the three measurements. The short of it:
+  # a dual install of the port is 5h36m of vcpkg work on four cores, so the leg lands on either
+  # side of the six-hour job ceiling depending on runner load, and a leg that reports by luck is
+  # worse than a gap that is written down.
 
   macos:
     uses: ./.github/workflows/build-test.yml
@@ -142,7 +113,7 @@ jobs:
       timeout-minutes: 330
 
   logs:
-    needs: [windows, windows-arm64, linux, macos, macos-x64]
+    needs: [windows, windows-arm64, macos, macos-x64]
     if: always()
     uses: ./.github/workflows/logs.yml
     secrets: inherit

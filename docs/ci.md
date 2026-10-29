@@ -72,16 +72,17 @@ Four things were measured on 2026-10-21/22 and each changed the shape of this:
   input reaches vcpkg in manifest mode (run 39534901582 printed `VCPKG_BUILD_TYPE=release` from
   the shell and `-- node port: VCPKG_BUILD_TYPE unset` from the port).
 
-### Debug is five cells: four single-job, one in two
+### Debug is four cells
 
-`debug.yml` runs Windows x64, Windows arm64, macOS arm64, macOS x64 and Linux x64. Windows and
-macOS build the same dual install in two to three hours with clang-cl; Linux x64 takes 4.5 and
-gets its own install job.
+`debug.yml` runs Windows x64, Windows arm64, macOS arm64 and macOS x64. All four build the same dual
+install in one job, in two to three hours: clang-cl and Apple's clang do the work that a four-core
+Linux runner needs more than six hours for.
 
-**Linux arm64 has no Debug leg.** Its dual install did not finish in six hours in three separate
-attempts, so there is no smaller unit to split it into. That is a runner limit, not a port limit
-- a machine with more cores builds the same configuration - and it is the one cell this
-repository's CI does not verify.
+**Neither Linux cell has a Debug leg.** The dual install is 5h36m of vcpkg work on four cores with
+every dependency cached, so the x64 leg landed on either side of the six-hour ceiling from one run to
+the next, and arm64 never finished at all. Both are gone; the measurements are in the section below
+the cell table. That is a runner limit, not a port limit - a machine with more cores builds the same
+configuration - and it is the one dimension this repository's CI does not verify on Linux.
 
 The build-and-test workflows all call `.github/workflows/build-test.yml`, which is the only
 place the build steps exist. They differ in which `preset` and `triplet` they pass, in which
@@ -230,7 +231,7 @@ Every cell below is a promise a consumer can hold this repository to, and each o
 | `ci.yml` | arm64 Linux | `ubuntu-24.04-arm` | `arm64-linux` | `arm64-linux-release` | Release, RelWithDebInfo | Release | yes |
 | `ci.yml` | arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release, RelWithDebInfo | Release | yes |
 | `ci.yml` | x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release, RelWithDebInfo | Release | yes |
-| `debug.yml` | five: the six above minus arm64 Linux ([#26](https://github.com/hz2769514387/vcpkg-port-node/issues/26)) | as above | as above | stock (dual) | **Debug** | — (off) | yes |
+| `debug.yml` | four: the six above minus **both** Linux legs ([#26](https://github.com/hz2769514387/vcpkg-port-node/issues/26), [#46](https://github.com/hz2769514387/vcpkg-port-node/issues/46)) | as above | as above | stock (dual) | **Debug** | — (off) | yes |
 | `matrix.yml` | x64 Windows, `/MD` | `windows-2022` | `x64-windows-static-md` | `x64-windows-static-md-release` | Release, RelWithDebInfo | Release | no — new cell |
 | `matrix.yml` | arm64 Windows, `/MD` | `windows-11-arm` | `arm64-windows-static-md` | `arm64-windows-static-md-release` | Release, RelWithDebInfo | Release | no — new cell |
 | `matrix.yml` | x64 Windows, shared | `windows-2022` | `x64-windows` | `x64-windows-release` | Release, RelWithDebInfo | Release | no — new cell |
@@ -239,6 +240,28 @@ Every cell below is a promise a consumer can hold this repository to, and each o
 | `matrix.yml` | arm64 Linux, shared | `ubuntu-24.04-arm` | `arm64-linux-dynamic` | `arm64-linux-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
 | `matrix.yml` | arm64 macOS, shared | `macos-latest` | `arm64-osx-dynamic` | `arm64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
 | `matrix.yml` | x64 macOS, shared | `macos-15` | `x64-osx-dynamic` | `x64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
+
+### Why no Linux Debug cell
+
+A Debug consumer needs a Debug library, so the port has to be installed for both configurations -
+Node.js built twice - and on a four-core runner that install is **5h36m of pure vcpkg work with every
+dependency cached**. GitHub's ceiling is six hours *per job*, which is why the leg was once split into
+an install job and a build job; the split does not help, because the install is the half that takes
+the time.
+
+Three consecutive runs of the x64 leg, with the measurements that decided it:
+
+| `linux / install` | outcome |
+|---|---|
+| 6h00m | cancelled at the ceiling |
+| 5h47m | passed - by thirteen minutes |
+| 6h05m | cancelled at the ceiling |
+
+arm64 never finished in any of three attempts. A leg that decides by runner load is worse than a gap
+that is written down: it makes every pull request's signal depend on the queue. So both Linux Debug
+legs are gone, and **Debug is verified on four cells** - both Windows architectures and both macOS
+ones. Bringing it back needs a runner with more cores, not a cleverer workflow; the split shape is in
+`git log -- .github/workflows/build-test.yml` if that day comes.
 
 Every cell in that table has completed a build end to end, and the eight `matrix.yml` cells are
 green as well: the port's claim to support them is verified rather than aspirational.

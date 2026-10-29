@@ -13,15 +13,13 @@ name: Build and test the node port
 # is what keeps a leg from building Release *and* Debug, which would double its wall-clock
 # time. This repository carries no triplet file of its own.
 #
-# A leg runs either as one job or as two, because a dual-triplet install can exceed one job's
-# six-hour ceiling while neither half does:
-#
-#   * `split-install: false` (the default) - one job does everything. A release-only install
-#     is minutes, so splitting it would only add an artifact transfer.
-#   * `split-install: true` - an `install` job builds the port and uploads the installed
-#     tree, and a `build` job downloads it, builds the consumer and runs the tests. Used by
-#     the Linux Debug legs, whose dual-triplet install alone is around five hours. The tree
-#     is a few gigabytes, which is why this is not the default.
+# A leg is one job. It used to be able to run as two - an `install` job that built the port and
+# uploaded the tree, and a `build` job that consumed it - because a dual-triplet install can exceed
+# one job's six-hour ceiling while neither half does. The only legs that needed it were the Linux
+# Debug ones, and they were removed instead: even split, the install is 5h36m on a four-core runner
+# with every dependency cached, so it lands on either side of the ceiling depending on runner load.
+# `docs/ci.md` §3 records the gap; `git log -- .github/workflows/build-test.yml` has the shape, if a
+# runner with more cores ever makes it worth restoring.
 #
 # The setup and the configure step live in composite actions (.github/actions/) instead of
 # inline, because both jobs run them and a copy would drift. Their bodies are the same text
@@ -67,21 +65,11 @@ on:
         required: false
         type: boolean
         default: false
-      split-install:
-        description: "Build the port in its own job and hand the installed tree to a second job, for a leg whose install alone is close to the six-hour ceiling."
-        required: false
-        type: boolean
-        default: false
       benchmark:
         description: "Also compare the built node against the official binary of the same version (startup plus a slice of Node.js's benchmark directory). Step 5 of the release checklist; on a quiet machine only, so nothing sets this on a push."
         required: false
         type: boolean
         default: false
-      install-timeout-minutes:
-        description: "Job timeout for the install job of a split leg. 360 is GitHub's ceiling for any job."
-        required: false
-        type: number
-        default: 360
       timeout-minutes:
         description: Job timeout. A dual-configuration (Debug) leg on a slow runner needs more than the default.
         required: false
@@ -92,176 +80,8 @@ permissions:
   contents: read
 
 jobs:
-  install:
-    # The expensive half of a split leg - a dual triplet builds Node.js twice - and the whole reason
-    # the split exists, since the six-hour limit applies per job, not per leg.
-    #
-    # It has exactly one caller: `debug.yml`'s x64 Linux leg, where a single job cannot finish the
-    # dual install. Two lessons are attached to it - the artifact has to be a tar if anything relies
-    # on file modes, and the saving is bounded by the install itself, which is the half that takes
-    # the six hours.
-    #
-    # Deliberately *not* continue-on-error, whatever `experimental` says: a leg whose install
-    # failed has nothing to consume, and letting this job report success would hand an empty
-    # or stale tree to the consumer job and turn a clear failure into a confusing one.
-    if: ${{ inputs.split-install }}
-    runs-on: ${{ inputs.runner }}
-    timeout-minutes: ${{ inputs.install-timeout-minutes }}
-    env:
-      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
-      # The GitHub Actions binary cache provider (x-gha) was removed from vcpkg, and
-      # `clear;x-gha,readwrite` therefore silently disables caching entirely - it prints a
-      # warning and builds every dependency from source on every run. The supported
-      # replacement without new secrets is a plain files provider, persisted by the cache
-      # step inside the prepare action.
-      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-archives,readwrite
-      VCPKG_MAX_CONCURRENCY: 3
-      # English diagnostics from MSVC's tools: gyp decodes their output as UTF-8, and a
-      # localized message turns a real link failure into a UnicodeDecodeError (docs/build.md).
-      VSLANG: 1033
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Prepare the leg
-        uses: ./.github/actions/prepare
-        with:
-          runner: ${{ inputs.runner }}
-          preset: ${{ inputs.preset }}
-          triplet: ${{ inputs.triplet }}
-          consumer-configs: ${{ inputs.consumer-configs }}
-          suite-configs: ${{ inputs.suite-configs }}
-          vcpkg-commit: ${{ inputs.vcpkg-commit }}
-          # Evaluated here, after the checkout, and handed in: hashFiles is not something to
-          # rely on inside a composite action.
-          cache-hash: ${{ hashFiles('test/vcpkg.json') }}
-      - name: Configure the consumer test project
-        uses: ./.github/actions/configure
-        with:
-          preset: ${{ inputs.preset }}
-          triplet: ${{ inputs.triplet }}
-          config: ${{ inputs.consumer-configs }}
-      - name: Summarize the run
-        if: always()
-        shell: bash
-        run: |
-          set -uo pipefail
-          {
-            echo "## ${{ inputs.triplet }} (consumer ${{ inputs.consumer-configs }}, suite on ${{ inputs.suite-configs }})"
-            echo ""
-            echo '```'
-            # The pass/fail counts go first: they are the whole answer to "did this leg work",
-            # and they are easy to miss at the end of a few thousand lines.
-            # One log per configuration, so the counts are read out of all of
-            # them; a leg that builds three configurations and reports one is
-            # not reporting what it did.
-            for f in "$RUNNER_TEMP"/ci-logs/ctest-*.log; do
-              [ -f "$f" ] || continue
-              echo "-- $(basename "$f")"
-              grep -E "tests passed|tests failed|Total Test time" "$f" | head -n 5 || true
-              awk '/The following tests FAILED/{found=1} found' "$f" | head -n 40 || true
-            done
-            echo '```'
-            # The first error, from whichever stream failed first: the port's own diagnostics
-            # live in vcpkg's buildtrees, the consumer's in the tee'd logs.
-            echo ""
-            echo '### First error'
-            echo '```'
-            {
-              grep -m1 -hE "error|Error" "$RUNNER_TEMP/ci-logs"/*.log 2>/dev/null || true
-              for f in $(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 100); do
-                if grep -m1 -hE "error:|CMake Error|BUILD_FAILED" "$f" 2>/dev/null; then break; fi
-              done
-            } | head -n 15
-            echo '```'
-          } >> "$GITHUB_STEP_SUMMARY"
-
-      - name: Collect the logs
-        if: always()
-        shell: bash
-        run: |
-          set -uo pipefail
-          mkdir -p "$RUNNER_TEMP/ci-logs/vcpkg"
-          # The port's own stdout and stderr are separate files in vcpkg's buildtrees
-          # (build-<config>-out.log / -err.log), and the manifest log embeds only one of them.
-          # Without them a diagnostic printed to the other stream is lost.
-          while IFS= read -r f; do
-            cp "$f" "$RUNNER_TEMP/ci-logs/vcpkg/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
-          done < <(find vcpkg/buildtrees -name '*.log' -type f 2>/dev/null | head -n 200)
-          # The consumer build's own CMake logs, which are not under buildtrees.
-          while IFS= read -r f; do
-            cp "$f" "$RUNNER_TEMP/ci-logs/$(echo "$f" | tr '/\\' '__')" 2>/dev/null || true
-          done < <(find test/build -name '*.log' -type f 2>/dev/null | head -n 200)
-          du -sh "$RUNNER_TEMP/ci-logs" || true
-          ls -la "$RUNNER_TEMP/ci-logs" || true
-
-      - name: Make room before packing
-        shell: bash
-        run: |
-          set -euo pipefail
-          # Three copies of the same few gigabytes end up on one disk: vcpkg's build tree, the
-          # installed tree, and the tar of it. The runner has about 14 GB free, so the upload
-          # step is where a job disappears - measured twice: run 39729687647 lost
-          # `linux / install` at "Upload the installed tree" with no artifact and no log
-          # artifact either, which is a dead runner rather than a failed upload.
-          #
-          # Buildtrees and packages are only needed to diagnose a *failed* build, and the log
-          # collection step has already copied the interesting files out of them.
-          df -h . || true
-          du -sh vcpkg/buildtrees vcpkg/packages 2>/dev/null || true
-          rm -rf vcpkg/buildtrees vcpkg/packages
-          df -h . || true
-
-      - name: Pack the installed tree
-        shell: bash
-        run: |
-          set -euo pipefail
-          # A tar inside the artifact, not the artifact's own zip of a directory: zip carries no
-          # POSIX mode bits, and a round trip through it dropped the executable bit on the test
-          # suite's `test/fixtures/run-script/node_modules/.bin/ada` fixture - the consumer job
-          # then refused to configure with "test suite fixture lost its executable bit"
-          # (measured, run 39500147659). tar keeps the modes, and the artifact only ever sees
-          # one file.
-          tar -cf "$RUNNER_TEMP/port-install.tar"             -C "test/build/${{ inputs.preset }}/vcpkg_installed" .
-          ls -lh "$RUNNER_TEMP/port-install.tar"
-
-      - name: Drop the tree the tar already contains
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The tar holds it; keeping both means the upload competes with the source tree for
-          # the same disk.
-          du -sh "test/build/${{ inputs.preset }}/vcpkg_installed" 2>/dev/null || true
-          rm -rf "test/build/${{ inputs.preset }}/vcpkg_installed"
-          df -h . || true
-
-      - name: Upload the installed tree
-        uses: actions/upload-artifact@v4
-        with:
-          # Not `logs-part-*`: that pattern is what logs.yml merges into the run's log
-          # archive, and a few gigabytes of libraries do not belong in a log archive.
-          name: port-install-${{ inputs.triplet }}
-          path: ${{ runner.temp }}/port-install.tar
-          if-no-files-found: error
-          # Compressed, not stored. A dual Debug install runs to several gigabytes - libnode
-          # and the v8 archives are object files with debug information, twice - and the
-          # artifact cap is 10 GB, so "store only" is a guess that this leg happens to be
-          # small enough. It also compresses unusually well for its size.
-          compression-level: 6
-          retention-days: 1
-
-      - name: Upload this leg's logs
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          # Named so that the merge job in every calling workflow picks all legs up with one
-          # pattern: one archive per run, not one per platform.
-          name: logs-part-install-${{ inputs.triplet }}
-          path: ${{ runner.temp }}/ci-logs
-          if-no-files-found: warn
-          retention-days: 7
 
   build:
-    needs: install
     # Runs when the install job was skipped (the leg is not split) and when it succeeded. Not when
     # it failed, and not when it was cancelled - a cancelled install is the six-hour platform limit
     # firing, and letting the build job start then turns "the install never finished" into
@@ -300,42 +120,6 @@ jobs:
           # Evaluated here, after the checkout, and handed in: hashFiles is not something to
           # rely on inside a composite action.
           cache-hash: ${{ hashFiles('test/vcpkg.json') }}
-      - name: Download the installed tree
-        if: ${{ inputs.split-install }}
-        uses: actions/download-artifact@v4
-        with:
-          name: port-install-${{ inputs.triplet }}
-          path: ${{ runner.temp }}/port-install
-
-      - name: Unpack the installed tree
-        if: ${{ inputs.split-install }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          # The same absolute path the install job used. It has to be: vcpkg's status entries
-          # and the exported CMake configs carry absolute paths, and the runner's workspace
-          # path is the same in both jobs for the same repository. `tar -x` restores the modes
-          # the install job had, which is the reason this is a tar at all.
-          target="test/build/${{ inputs.preset }}/vcpkg_installed"
-          mkdir -p "$target"
-          tar -xf "$RUNNER_TEMP/port-install/port-install.tar" -C "$target"
-          # Assert the mode survived, rather than listing a path: the tar exists because a zip
-          # round trip dropped the executable bit (run 39500147659), and the first version of
-          # this step hard-coded a fixture path and failed on a path that had moved (run
-          # 39534901582). `find` asks the tree where the fixtures are.
-          # `-print -quit`, not `| head -n 1`: under `set -o pipefail` the head closing the pipe
-          # sends find a SIGPIPE, the pipeline fails and `set -e` aborts the step - which is
-          # exactly how this failed in run 39535015717 after a successful 4.8 GB extraction.
-          bin=$(find "$target/share/node/test-suite" -path '*/.bin/*' -type f -print -quit 2>/dev/null || true)
-          if [ -z "$bin" ]; then
-            echo "::warning::no .bin fixture in the installed test suite; not asserting modes"
-          else
-            echo "fixture mode: $(stat -c '%A' "$bin") $bin"
-            [ -x "$bin" ] || {
-              echo "::error::the installed test suite lost its executable bit on $bin"
-              exit 1
-            }
-          fi
       - name: Configure the consumer test project
         uses: ./.github/actions/configure
         with:
