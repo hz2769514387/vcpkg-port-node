@@ -79,6 +79,12 @@ Rules:
 | `<node version>_vcpkg-<vcpkg release>` e.g. `26.12.0_vcpkg-2026.07.29` | frozen at that pair | security fixes, build fixes that keep the pair | still builds and passes its tests; **no Node.js or vcpkg line upgrades** |
 | `legacy/…` | whatever it was | nothing — read-only | none. It may not build; it is kept for reference |
 
+- **A pull-request branch is transient.** It exists to be merged, and the repository deletes it when
+  the pull request merges (`delete_branch_on_merge` is on). `main` and `legacy/…` are the only
+  branches that outlive a pull request. The commits are on `main` and the discussion is in the pull
+  request, so keeping the branch "in case" buys nothing and costs a reader a page of names that all
+  say the same thing.
+
 - **A branch's name is its lineage, not a live contract.** It records the (Node.js, vcpkg)
   pair `main` was on when the line was opened. **Backports on a maintained branch may bump a
   dependency version** — a security fix in an overlay port, typically — and the bump is recorded
