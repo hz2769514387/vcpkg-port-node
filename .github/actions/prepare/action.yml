@@ -218,7 +218,14 @@ runs:
           exit 0
         fi
 
-        version=4.4.0
+        # 4.4.3, not 4.4.0: 4.4.0 writes ScanSourceForModuleDependencies=true into the generated
+        # project for the ClangCL toolset, so the build hands clang-cl the MSVC-only
+        # /scanDependencies and dies with "no such file or directory: '/scanDependencies'".
+        # Measured on one machine with all three: 4.4.0 -> property true, build fails;
+        # 4.4.3 -> property false, build passes; 3.31.7 likewise. Nothing here triggers it today
+        # (test/ requires 3.24, so CMP0155 is OLD), which is exactly why it would be a surprise
+        # on the day it does.
+        version=4.4.3
         case "${RUNNER_OS}-${RUNNER_ARCH}" in
           Linux-X64)     asset="cmake-$version-linux-x86_64.tar.gz";    inner="cmake-$version-linux-x86_64" ;;
           Linux-ARM64)   asset="cmake-$version-linux-aarch64.tar.gz";   inner="cmake-$version-linux-aarch64" ;;
