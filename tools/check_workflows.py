@@ -47,10 +47,16 @@ def find_runs(node, path):
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("workflows", nargs="*",
-                        help="workflow files; default: every .yml under .github/workflows/")
+                        help="workflow and action files; default: every .yml under "
+                             ".github/workflows/ and every action.yml under .github/actions/")
     args = parser.parse_args()
 
-    files = args.workflows or sorted(glob.glob(os.path.join(".github", "workflows", "*.yml")))
+    # Composite actions carry `run:` scripts too - more of them than the workflows do - and they were
+    # outside this check from the day it was written: prepare alone is ~200 lines of shell. A gate
+    # that validates half the shell in `.github/` reads as if it validates all of it.
+    files = args.workflows or sorted(
+        glob.glob(os.path.join(".github", "workflows", "*.yml"))
+        + glob.glob(os.path.join(".github", "actions", "*", "action.yml")))
     if not files:
         print("check_workflows: no workflow files found", file=sys.stderr)
         return 1
