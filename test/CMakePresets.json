@@ -39,13 +39,14 @@
       "name": "windows-clang",
       "hidden": true,
       "inherits": "release",
-      "description": "The compiler Node.js itself requires on Windows, and the one this port builds with.",
+      "description": "The compiler Node.js itself requires on Windows, and the one this port builds with. host=x64 is explicit: the ClangCL toolset links with lld-link from VC\\Tools\\Llvm\bin for an x86 host (PE32, 2 GB address space) and from VC\\Tools\\Llvmd\bin for an x64 host (PE32+). The static v8 archive is 1.9 GB, so an x86 host toolset reports its symbols as undefined. CMake's default is Native64Bit today; saying it makes the default not matter.",
       "toolset": {
         "value": "ClangCL",
         "strategy": "set"
       },
       "cacheVariables": {
-        "NODE_TEST_JOBS": "2"
+        "NODE_TEST_JOBS": "2",
+        "CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE": "x64"
       }
     },
     {

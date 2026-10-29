@@ -59,6 +59,27 @@ with no error and no warning. Measured on Visual Studio 2022 / CMake 3.31: askin
 field that works (see ADR 0007). It only works because the Windows presets name no generator,
 so CMake picks the newest Visual Studio; with Ninja on Windows you are on your own.
 
+#### Which `lld-link` does the linking, and why it matters
+
+With the `ClangCL` toolset the linker comes from the same LLVM tree as the compiler, and **which one
+depends on the toolset's host architecture**:
+
+| Host | Linker | PE type |
+|---|---|---|
+| `x86` | `VC` + `Tools/Llvm/bin/lld-link.exe` | PE32 - a 32-bit process, 2 GB of address space |
+| `x64` | `VC` + `Tools/Llvm/x64/bin/lld-link.exe` | PE32+ |
+
+The static library is not small: `v8_base_without_compiler.lib` alone is **1.9 GB** in this
+repository's build. A 32-bit linker reports every symbol that lives in that archive as undefined, and
+the diagnostic reads like a missing library rather than a link that ran out of address space.
+
+CMake's default host is already `Native64Bit`, and these presets now say so explicitly with
+`CMAKE_VS_PLATFORM_TOOLSET_HOST_ARCHITECTURE=x64` rather than relying on it. If you pin the host to
+`x86`, or override `LLVMInstallDir` to the 32-bit LLVM, the static configuration stops linking and
+the error mentions neither choice. Measured from the build's diagnostic log (`-v:diag`):
+`_DefaultLLVMInstallDir` ends in `Llvm/x64`, `VCToolArchitecture` is `Native64Bit`, and the link line
+names the `x64` copy of `lld-link.exe`.
+
 The `-msvc` presets are the **mixed** case: your executable compiled with `cl.exe` against a
 Node.js library compiled with clang-cl. That is a legal MSVC-ABI mix, and it is what this
 repository's CI did before ADR 0007 - but it is not the recommendation, it is not covered by
