@@ -1,3 +1,9 @@
+# Every subprocess in gyp's win_tool.py decodes its output as strict UTF-8, and so do the manifest
+# comparisons. On a Windows whose system locale is not UTF-8 - a Chinese Windows prints the compiler's
+# and mt.exe's messages in GBK - a single byte outside UTF-8 raised UnicodeDecodeError inside gyp, and
+# the real message (a link error, a manifest mismatch) was replaced by a decoding traceback. Reading
+# with errors="replace" keeps the message; the bytes that cannot be decoded are not the part being read.
+#
 --- a/tools/gyp/pylib/gyp/win_tool.py
 +++ b/tools/gyp/pylib/gyp/win_tool.py
 @@ -137,7 +137,7 @@

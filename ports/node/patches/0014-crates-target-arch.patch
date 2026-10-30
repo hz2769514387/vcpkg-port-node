@@ -1,3 +1,10 @@
+# crates.gyp used $(Platform) - a macro only the Visual Studio build defines - in two places the ninja
+# generator reads: the libpath it puts on every link line, and the architecture argument handed to
+# cargo. gyp passes macros it does not know through verbatim, so the generated ninja file contained
+# `$(Platform)/release/...`: in make syntax that is a command substitution, and as a path it is
+# invalid. <(target_arch) is the same value as a gyp expansion - vcpkg builds one architecture per
+# invocation.
+#
 --- a/deps/crates/crates.gyp
 +++ b/deps/crates/crates.gyp
 @@ -20,7 +20,7 @@
