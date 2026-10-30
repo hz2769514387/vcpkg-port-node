@@ -22,6 +22,15 @@ A consumer installing the package needs none of this; it is the price of *buildi
 - **clang-cl on Windows** (Visual Studio 2022's LLVM component, or a standalone install) - an
   upstream requirement for Node.js 24 and later, which `vcbuild.bat` hard-codes. The port finds it,
   assembles the MSVC command-line environment, and needs nothing from the consumer's triplet.
+
+  The port assembles that environment itself, but it can only do so for a process that can *find*
+  Visual Studio: it asks `vswhere.exe`, then `VCPKG_VISUAL_STUDIO_PATH`, then the Windows SDK under
+  `ProgramFiles(x86)`. A launcher that rebuilds the environment from nothing - a service, a container,
+  a wrapper that scrubs the parent's variables - removes the last of those, and then nothing is found.
+  If that happens the port stops with a message naming both ways out (set
+  `VCPKG_VISUAL_STUDIO_PATH`, or run from a developer command prompt) instead of letting gyp fail
+  three hundred lines later. That is the case [msvc-environment-report.cmake](../ports/node/cmake/msvc-environment-report.cmake)
+  decides, and `tools/check_msvc_environment_report.py` keeps it honest.
 - **the Rust standard library for the target architecture, on a cross build.** `cargo --target`
   builds the crates, and a rustup toolchain ships the standard library only for the architecture it
   was installed for - so an arm64 machine building `x64-osx` needs

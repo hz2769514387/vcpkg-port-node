@@ -55,6 +55,13 @@ jobs:
         # every leg exactly that way - after the tests had passed.
         run: python3 tools/check_workflows.py
 
+      - name: The MSVC environment decision behaves in all five of its cases
+        # The function that decides what the port says when it cannot find an MSVC toolchain. Two of
+        # its cases only happen on a machine missing Visual Studio or its SDK, so no runner here ever
+        # executed them - which is how the port came to warn when nothing was wrong and stay silent
+        # when the SDK was missing. `cmake -P` drives all five in under a second, on any platform.
+        run: python3 tools/check_msvc_environment_report.py
+
       - name: The release watcher still parses the upstream feed
         run: python3 tools/node_release_watch.py --dry-run
 
