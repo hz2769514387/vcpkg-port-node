@@ -50,5 +50,5 @@
       "description": "Also install the node executable plus npm / npx / corepack into tools/node (the layout of the official distribution: executable + node_modules/{npm,corepack} + shims). Enable it when you need a standalone node/npm; otherwise only the library and headers are installed. About 25 MB."
     }
   },
-  "port-version": 4
+  "port-version": 5
 }

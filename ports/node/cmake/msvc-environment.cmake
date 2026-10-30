@@ -261,15 +261,10 @@ if(NOT _sdk_version STREQUAL "")
   set(NODE_PORT_WINSDK_MT "${_kits_root}/bin/${_sdk_version}/${_sdk_bin_arch}/mt.exe")
 endif()
 
-if(NOT _msvc_root STREQUAL "" AND NOT _sdk_version STREQUAL "")
-  message(STATUS "node port: MSVC command-line environment ready (MSVC ${_msvc_root}, Windows SDK ${_sdk_version})")
-elseif(_msvc_root STREQUAL "")
-  message(WARNING
-    "node port: MSVC toolset not found (VS missing or vswhere cannot see it).\n"
-    "  gyp/clang-cl needs MSVC headers and libraries. Inside a developer command\n"
-    "  prompt the environment is already complete; otherwise install VS's C++\n"
-    "  workload or set VCPKG_VISUAL_STUDIO_PATH.")
-endif()
+# The three-case decision lives in its own file so `cmake -P` can drive all three; see the
+# comment there for why two of them were previously unreachable.
+include("${CMAKE_CURRENT_LIST_DIR}/msvc-environment-report.cmake")
+node_port_report_msvc_environment("${_msvc_root}" "${_sdk_version}")
 
 unset(_msvc_root)
 unset(_kits_root)
