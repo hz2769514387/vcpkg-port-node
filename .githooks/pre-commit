@@ -9,4 +9,10 @@
 #
 # lint.yml runs the same scanner over the whole history, so a clone that never
 # enables the hook is still caught, just later and more publicly.
-python tools/check_secrets.py --staged
+# python3 first: Debian/Ubuntu and current macOS images have no `python`, and a hook that dies with
+# "python: not found" blocks the commit with a message about the wrong thing. The scanner itself is
+# Python 3 either way.
+if command -v python3 >/dev/null 2>&1; then
+  exec python3 tools/check_secrets.py --staged
+fi
+exec python tools/check_secrets.py --staged
