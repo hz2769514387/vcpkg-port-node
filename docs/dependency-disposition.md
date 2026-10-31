@@ -229,6 +229,33 @@ Consequence for the overlay port (issue #3): the port cannot be "madler tarball 
 patches". It must either pin Chromium's mirror repository at a commit, or vendor Node.js's
 tree, and the choice needs a provenance source for the commit (§7).
 
+## 5a. A dependency that installs a library nobody can link
+
+`mbedtls` (reached through LIEF) installs three libraries on a Windows triplet, and one of them does not
+follow the platform's naming:
+
+| file in `lib/` | what it is |
+|---|---|
+| `mbedtls.lib` | Windows static library |
+| `mbedx509.lib` | Windows static library |
+| `libmbedcrypto.a` | **also a Windows static library** - 79 members, every one an `AMD64` COFF object (first two bytes `64 86`), member names `.obj` |
+
+It looks like a Linux artifact that wandered into a Windows install tree. It is not: it is mbedtls 4's
+`tf-psa-crypto` subproject keeping the Unix prefix and suffix while its two siblings get the MSVC one, so
+the file is named `libmbedcrypto.a` and there is **no `mbedcrypto.lib`**.
+
+What that costs: an MSVC linker given `mbedcrypto` appends `.lib` and finds nothing, so a consumer that
+links mbedcrypto by name - through pkg-config, `find_library`, or a hand-written `-lmbedcrypto` - fails
+on Windows with "cannot open file 'mbedcrypto.lib'". A consumer that names the file gets a working link,
+because the content is a normal COFF archive and the linker does not care about the extension.
+
+Why it is not a problem here: nothing in this repository links mbedcrypto. LIEF is static and carries
+its own copy, and Node.js uses OpenSSL. Verified by searching the installed tree: the only file that
+mentions `mbedcrypto` is mbedtls's own `vcpkg.spdx.json`.
+
+Recorded rather than fixed: it is upstream's packaging, it costs this port nothing, and a future reader
+of an install tree deserves the explanation instead of a suspicion that the tree is polluted.
+
 ## 6. Disposition summary
 
 | Disposition | Dependencies |

@@ -37,7 +37,7 @@ and macOS.
 ### 2. Can the port be Release while the consumer is Debug?
 
 Measured 2026-10-18 against a locally installed tree, by building the repository's own
-embedder (`test/embedder/main.cpp`) through the real consumer project:
+embedder (`test/cases/embed/main.cpp`) through the real consumer project:
 
 | Install (`VCPKG_BUILD_TYPE`) | Consumer configuration | Result |
 |---|---|---|

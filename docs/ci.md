@@ -298,7 +298,7 @@ it in the preset as well would give two answers to the same question.
 ## 4. What the tests assert, and what they do not
 
 - `smoke.*` — Node.js identity and provenance: the version the port claims, and whether every
-  externalized dependency really came from vcpkg. See `test/smoke/externalization.mjs`.
+  externalized dependency really came from vcpkg. See `test/cases/externalization/externalization.mjs`.
 - `node-suite.*` — Node.js's own suite through its own driver, with the **embedding
   executable** as the shell. That is the strongest available statement that libnode is a
   runtime and not just a library that links.
@@ -307,7 +307,7 @@ Neither replaces a symbol audit (two copies of one library in a single process i
 this repository exists to prevent) or a check that the delivered headers match the delivered
 library. Those are tracked as work items, not skipped.
 
-Skips live in `test/official_suite/node-suite-skips*.txt` with a mandatory reason per entry, and the
+Skips live in `test/cases/suite/node-suite-skips*.txt` with a mandatory reason per entry, and the
 symbol-link ones are applied only after probing whether this machine can create symlinks —
 a permission, not a platform property.
 
@@ -315,17 +315,17 @@ a permission, not a platform property.
 
 The driver hands the shell `--test-reporter=./test/common/test-error-reporter.js`, a **relative**
 path, so it resolves against whatever directory the process was started in. `add_test` defaults
-that to the *binary* directory, which is where `official_suite/` is generated and where no `test/`
+that to the *binary* directory, which is where `cases/suite/` is generated and where no `test/`
 exists. Every case that uses the reporter then dies with
 
 ```
-ERR_MODULE_NOT_FOUND ... /official_suite/test/common/test-error-reporter.js
+ERR_MODULE_NOT_FOUND ... /cases/suite/test/common/test-error-reporter.js
 ```
 
 while the cases that do not use it pass, because the suite's own files reach the driver through
 `--test-root` either way. A partially red suite is the misleading version of this failure: it
 looks like two dozen unrelated Node.js defects rather than one wrong directory. The tests set
-`WORKING_DIRECTORY` to the installed suite root (`test/official_suite/CMakeLists.txt`).
+`WORKING_DIRECTORY` to the installed suite root (`test/cases/suite/CMakeLists.txt`).
 
 ### 4.2 Anything that depends on Windows ACLs is suspect before it is ours
 

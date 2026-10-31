@@ -33,8 +33,8 @@ three things in this order: a measurement (a run id), a written reason (in the s
 CMake that adds it), and the narrowest scope that explains the measurement — one cell rather than
 every platform, one case rather than a directory.
 
-Two examples worth copying: `test/smoke` skips only the *date* half of its ICU check on one cell
-(README known limits), and `test/official_suite` adds two skips keyed on `node_LIBRARY_LINKAGE`
+Two examples worth copying: `test/cases/externalization` skips only the *date* half of its ICU check on one cell
+(README known limits), and `test/cases/suite` adds two skips keyed on `node_LIBRARY_LINKAGE`
 rather than on the platform, because the reason is the linkage.
 
 ## Language and comments

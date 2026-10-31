@@ -139,7 +139,7 @@ The benchmark says the fork is fast; it does not say the fork and node's compres
 the same library, and a version string cannot say that either - two zlibs in one process can
 report the same version. `test/zlib/` closes that: 256 KiB of deterministic input goes through
 zlib's C API (`compress2`, level 6) and through node's `zlib.deflateSync` (level 6), and each
-side inflates what the other produced. The runtime is `test/embedder`, the runtime a host
+side inflates what the other produced. The runtime is `test/cases/embed`, the runtime a host
 application links - not the port's own `node.exe`.
 
 Measured, `x64-windows-static`:
