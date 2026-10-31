@@ -1,5 +1,7 @@
 # vcpkg-port-node
 
+**English** | [简体中文](README.zh-CN.md)
+
 Build the **Node.js source tree** (including V8) into a **linkable library**, delivered as  
 **vcpkg overlay ports** — so a C++ project can embed Node.js without vendoring Node.js  
 itself.
@@ -203,7 +205,7 @@ see `docs/memory/2026-10-15.md` on `legacy/node24_vcpkg-2026.07.29`.
 **What to do:** use `RelWithDebInfo` when the reason for Debug is debugging your own code - it is
 the release ABI with full debug information, and it is what this port recommends for that anyway.
 If you need a Debug CRT consumer and you call `Intl.DateTimeFormat`, there is no fix from this
-side today. `test/smoke` asserts number formatting on that cell and skips only the date half.
+side today. `test/cases/externalization` asserts number formatting on that cell and skips only the date half.
 
 ### Node.js is compiled with clang-cl on Windows, gcc on Linux and clang on macOS
 
@@ -258,12 +260,13 @@ every push**, and the one it does not is named rather than implied:
   Windows, Linux and macOS), consumed as Release **and** as RelWithDebInfo, with Node.js's own
   test suite run against the Release consumer of every leg;
 - `debug.yml` — a **Debug** consumer, which needs a Debug library and therefore its own install.
-  Five cells: Windows x64 and arm64, macOS arm64 and x64, and Linux x64 — the last as two jobs
-  (install, then build and test) because a cold dual install of Node.js with gcc is 4.5 hours on
-  a four-core runner. **Linux arm64 has no Debug leg**: its install does not finish inside six
-  hours, and `docs/ci.md` has the numbers;
+  Four cells: Windows x64 and arm64, macOS arm64 and x64. **Neither Linux cell has a Debug leg**:
+  a dual install of Node.js on four cores is 5h36m of vcpkg work with every dependency cached, so
+  the x64 leg landed on either side of GitHub's six-hour job limit from one run to the next, and
+  arm64 never finished at all. `docs/ci.md` has the three measurements;
 - `matrix.yml` — the rest of the matrix: the dynamic CRT on Windows and a **shared libnode** on
-  every platform. These legs are non-blocking until each has completed a build.
+  every platform. All eight cells are green; they are still marked non-blocking, which is tracked
+  in [#35](https://github.com/hz2769514387/vcpkg-port-node/issues/35).
 
 Debug and the wider matrix are separate workflows rather than extra legs of `ci.yml` because a
 job that installed the port for every configuration and ran the suite for each would exceed
@@ -286,7 +289,6 @@ carries the test counts and the first error.
 | `.github/workflows/` | Continuous integration; see `docs/ci.md`                                               |
 | `docs/`              | Design notes, dependency disposition, build and CI reference                           |
 | `docs/decisions/`    | Architecture decision records                                                          |
-| `tools/`             | Repository tooling: version tree, hygiene check, release watchers, benchmark comparison |
 
 ## Documentation
 
