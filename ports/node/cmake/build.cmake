@@ -16,6 +16,16 @@ endif()
 
 set(_node_installed_libs "")
 
+# LIB is *appended* to per configuration, on purpose, and it looks like a bug every time someone reads
+# it. It is not: gyp builds the host tools (`mksnapshot`, `node_mksnapshot`, `torque`) with the release
+# library spelling - `zs.lib`, not `zsd.lib` - while it points their /LIBPATH at `debug/lib`. `zs.lib`
+# exists only in `lib/`, so during the Debug pass the release directory is the only place those names
+# resolve, and setting LIB instead of appending turns `LNK4098` (the warning that made this look wrong)
+# into `fatal error LNK1181: cannot open input file 'zs.lib'`. Measured; see the comment in #56.
+#
+# The warning itself is the price of "host tool compiled for the debug CRT, linking release-built
+# dependency archives". It is a build-time tool that is never shipped, and `libnode` links cleanly in
+# the same run.
 foreach(_node_cfg IN LISTS _node_configs)
     if(_node_cfg STREQUAL "Debug")
         set(_node_cfg_arg "--debug")
