@@ -185,17 +185,21 @@ jobs:
           IFS=',' read -r -a cfgs <<< "$CONFIGS"
           for cfg in "${cfgs[@]}"; do
           exe=""
-          for cand in "build/$PRESET/embedder/$cfg/node_embed.exe" \
-                      "build/$PRESET/embedder/node_embed.exe" \
-                      "build/$PRESET/embedder/node_embed"; do
+          for cand in "build/$PRESET/cases/embed/$cfg/node_embed.exe" \
+                      "build/$PRESET/cases/embed/node_embed.exe" \
+                      "build/$PRESET/cases/embed/node_embed"; do
             if [ -f "$cand" ]; then exe="$cand"; break; fi
           done
           if [ -z "$exe" ]; then
-            exe="$(find "build/$PRESET" -type f -name 'node_embed*' 2>/dev/null | head -1 || true)"
+            # node_embed.exe, not node_embed*: an MSVC build leaves node_embed.lib and .exp beside it,
+            # and asserting the architecture of an import library reports "not a PE file" as if the
+            # build were wrong.
+            exe="$(find "build/$PRESET" -type f \( -name 'node_embed.exe' -o -name 'node_embed' \) \
+                    2>/dev/null | head -1 || true)"
           fi
           if [ -z "$exe" ] || [ ! -f "$exe" ]; then
             echo "::error::no embedder executable under build/$PRESET to check the architecture of. What is there:"
-            find "build/$PRESET" -maxdepth 4 -type f -name 'node_embed*' 2>/dev/null | head -20 || true
+            find "build/$PRESET" -maxdepth 5 -type f -name 'node_embed*' 2>/dev/null | head -20 || true
             exit 1
           fi
 

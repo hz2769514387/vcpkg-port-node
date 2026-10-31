@@ -30,6 +30,11 @@ this checkout.
 
 - **English only** in tracked files — code, comments, docs, commit and issue text. Personal notes in
   Chinese belong in `.user_local/`; the one exception is a literal path into it.
+- **`README.zh-CN.md` is the single translated file**, by decision: the repository's front door is read
+  before anything else, and a Chinese README is ordinary practice for the audience this project serves.
+  The English `README.md` stays authoritative and links to it, the translation says so in its first
+  paragraph, and `tools/check_repo.py` holds the allowlist (`TRANSLATED_FILES`) that keeps this from
+  becoming a general permission. A second entry there is a decision, not a convenience.
 - **LF only** (`.gitattributes`: `text=auto eol=lf`). A CR is a defect: patches are applied with
   `git apply` and `versions/` holds git tree hashes, so a stray CR changes results per machine.
 - UTF-8, no BOM, trailing newline. No empty directories, no build outputs, no downloaded sources.

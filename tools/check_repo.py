@@ -2,7 +2,8 @@
 """Check the tracked files of this repository against its own rules.
 
 The rules are the ones written down in `AGENTS.md` under "Language and file hygiene":
-every tracked file is English, LF-only, UTF-8 without a BOM, and ends with a newline. Two
+every tracked file is English (one listed exception), LF-only, UTF-8 without a BOM, and ends with a
+newline. Two
 more checks come from invariants inferred from history: every patch a portfile applies has
 to exist, and the version in a port's manifest has to be the version the portfile builds.
 
@@ -31,6 +32,13 @@ import unicodedata
 #: working rules have to point an agent at it, `.gitignore` has to ignore it, and the docs
 #: index has to say why nobody can see it, and this tool has to name the rule it checks.
 #: Everywhere else it is a portability bug.
+# The one tracked file allowed to be in another language: the Chinese README, because the audience
+# that asked for this repository reads it before anything else and a translated front door is ordinary
+# practice. The English README stays authoritative and links to it; every other file, including every
+# other document, is English (AGENTS.md section 2). A second entry here is a decision, not a
+# convenience - the rule is easier to keep with one exception than with a directory of them.
+TRANSLATED_FILES = {"README.zh-CN.md"}
+
 USER_LOCAL_REFERENCE_ALLOWED = {
     "AGENTS.md",
     ".gitignore",
@@ -131,8 +139,9 @@ def check_blob(report, path, blob):
         report.error(path, "is not valid UTF-8")
         return
     allow_user_local = path in USER_LOCAL_REFERENCE_ALLOWED
+    allow_cjk = path in TRANSLATED_FILES
     for number, line in enumerate(text.splitlines(), start=1):
-        hits = cjk_characters(line)
+        hits = [] if allow_cjk else cjk_characters(line)
         if hits:
             detail = ", ".join(hits[:5])
             report.error(

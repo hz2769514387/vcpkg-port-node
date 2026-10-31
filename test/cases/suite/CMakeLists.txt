@@ -197,7 +197,7 @@ else()
   list(LENGTH _from_file _count)
   message(STATUS
     "Node.js test suite: symlink creation is unavailable here, skipping ${_count} cases that "
-    "cannot pass without it (see official_suite/node-suite-skips-symlink.txt)")
+    "cannot pass without it (see cases/suite/node-suite-skips-symlink.txt)")
   list(APPEND _skips ${_from_file})
 endif()
 
@@ -314,7 +314,7 @@ foreach(_suite IN LISTS _suites)
       # `--test-reporter=./test/common/test-error-reporter.js`, which is
       # relative, so it is resolved against whatever the process was started
       # in: left alone, every case that uses the reporter dies with
-      # ERR_MODULE_NOT_FOUND pointing at <build dir>/official_suite/test/...,
+      # ERR_MODULE_NOT_FOUND pointing at <build dir>/cases/suite/test/...,
       # a path that exists nowhere. The suite's own files are found through
       # --test-root either way, which is why only some cases failed and the
       # rest passed - the misleading half of the symptom.

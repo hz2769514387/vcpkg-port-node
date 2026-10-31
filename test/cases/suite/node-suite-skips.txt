@@ -1,5 +1,5 @@
 # Skips for Node.js's own test suite - the single source of truth, read by
-# test/official_suite/CMakeLists.txt.
+# test/cases/suite/CMakeLists.txt.
 #
 # Format, one per line:  <test name> | <platform> | <reason>
 #

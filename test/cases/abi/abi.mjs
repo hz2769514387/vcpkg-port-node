@@ -12,9 +12,9 @@ const expectedNapi = process.env.NODE_PORT_NAPI_VERSION;
 const expectedNapiMax = process.env.NODE_PORT_NAPI_VERSION_MAX;
 
 assert.ok(expectedModules, 'ctest did not pass NODE_PORT_MODULE_VERSION - the exported config is '
-  + 'missing node_MODULE_VERSION, or the environment line in test/smoke/CMakeLists.txt broke');
+  + 'missing node_MODULE_VERSION, or the environment line in test/cases/abi/CMakeLists.txt broke');
 assert.ok(expectedNapi, 'ctest did not pass NODE_PORT_NAPI_VERSION - the exported config is '
-  + 'missing node_NAPI_VERSION, or the environment line in test/smoke/CMakeLists.txt broke');
+  + 'missing node_NAPI_VERSION, or the environment line in test/cases/abi/CMakeLists.txt broke');
 
 assert.strictEqual(
   String(process.versions.modules), expectedModules,

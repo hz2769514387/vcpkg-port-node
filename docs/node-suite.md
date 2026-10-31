@@ -22,10 +22,10 @@ python <prefix>/share/node/test-suite/tools/test.py \
 ```
 
 The executable under test is the **embedding executable the consumer test project links**
-(`test/embedder`), not the port's own `node.exe`. That is the stronger claim: a runtime a
+(`test/cases/embed`), not the port's own `node.exe`. That is the stronger claim: a runtime a
 consumer links from `libnode` runs the official suite.
 
-`test/official_suite/CMakeLists.txt` registers one ctest case per suite, and `ci.yml` /
+`test/cases/suite/CMakeLists.txt` registers one ctest case per suite, and `ci.yml` /
 `node-suite.yml` choose which cases run by label: `-R node-suite` for the full run, `-LE
 node-suite` for everything else.
 
@@ -58,7 +58,7 @@ environment and one that hides defects:
 3. **Did it crash in native code?** Then suspect this build. The check that settles it: run
    the same case against the **official** Node.js binary for the same version. Official
    passes and ours fails means the defect is here.
-4. **Only then is it the environment**, and it goes in `test/official_suite/node-suite-skips.txt` with
+4. **Only then is it the environment**, and it goes in `test/cases/suite/node-suite-skips.txt` with
    one sentence saying why — which the CMake code enforces by refusing to configure an entry
    without a reason.
 
@@ -75,8 +75,8 @@ between Node.js versions:
   `SeCreateSymbolicLinkPrivilege`, which a normal unprivileged process does not have. It is a
   property of the account, not of the platform: developers with Developer Mode enabled and
   most CI images can create them, a plain local shell cannot. The skip list therefore does not
-  guess from the platform name — `official_suite/CMakeLists.txt` probes whether this machine can create
-  a symlink and only then applies `test/official_suite/node-suite-skips-symlink.txt`.
+  guess from the platform name — `cases/suite/CMakeLists.txt` probes whether this machine can create
+  a symlink and only then applies `test/cases/suite/node-suite-skips-symlink.txt`.
 - **Line endings in generated output.** A TypeScript compiler run on Windows emits CRLF where
   a fixture expects LF. Nothing the port can fix; it recurs whenever a tool's output is
   compared byte for byte.
@@ -101,4 +101,4 @@ rather than a skip list: `abort/test-abort-backtrace` requires a native stack fr
 the executable, which is true when node's code is linked *into* the executable (a static
 libnode) and cannot be true when it lives in `libnode.<module>.dylib` / `.so` — the trace is
 complete and symbolised, it simply names the library. `node_LIBRARY_LINKAGE`, exported by the
-port's CMake config, is what `test/official_suite` reads to decide.
+port's CMake config, is what `test/cases/suite` reads to decide.

@@ -6,16 +6,30 @@ manifest, a stock vcpkg triplet, `find_package(unofficial-node CONFIG)` - and th
 result is still Node.js.
 
 It is never installed anywhere and it is not an example to copy into another build: the
-`embedder/` directory is the example, everything else is verification.
+`cases/embed/` directory is the example, everything else is verification.
 
 ## What is in here
 
 | Path | What it verifies |
 |---|---|
-| `embedder/` | `unofficial::node::node` links into a consumer executable that behaves like `node.exe`. Doubles as the example everyone asks for, and as the shell the official suite runs against. |
-| `embedding/` | What embedding has to support beyond that: exit-code semantics, `worker_threads`, spawning a child process, linking the port next to the very libraries it externalizes, a library that hides the port behind a PRIVATE link, and driving the runtime on a thread the host owns. |
-| `smoke/` | Seconds. Node.js identity, and whether each externalized dependency really came from vcpkg. Runs on every push. |
-| `official_suite/` | Node.js's own suite, through its own driver, labelled `node-suite`, plus its skip lists. Minutes to an hour. |
+| `cases/embed/` | `unofficial::node::node` links into a consumer executable that behaves like `node.exe`, plus exit-code semantics, `worker_threads` and spawning a child process. Doubles as the example everyone asks for, and as the shell the official suite runs against. |
+| `cases/coexist/` | One process linking the port next to the very libraries it externalizes. |
+| `cases/layered/` | A library that hides the port behind a PRIVATE link, and two applications on top of it. |
+| `cases/thread-loop/` | The runtime on a thread the host owns. |
+| `cases/host-loop/` | The host owns the loop and pumps it itself - the UI-toolkit arrangement. |
+| `cases/abi/` | The two ABI numbers a consumer reads without linking anything. |
+| `cases/externalization/` | Did each externalized dependency really come from vcpkg - on both hosts. |
+| `cases/snapshot/` | The startup snapshot is there and is used - on both hosts. |
+| `cases/crt/` | The executable has the CRT the preset asked for, read out of its import table. |
+| `cases/tools/` | The tools feature: `node.exe`, npm and npx. |
+| `cases/zlib/` | zlib resolves to one copy, through the object graph and at run time. |
+| `cases/symbols/` | No strong symbol is defined by two archives, which "it links" cannot tell you. |
+| `cases/suite/` | Node.js's own suite, through its own driver, labelled `node-suite`, plus its skip lists. Minutes to an hour. |
+
+`cases/` is one directory per claim: a directory holds the sources, the scripts and the `CMakeLists.txt`
+of one thing this project asserts, and a case that needs an executable from another directory is handed
+its path (`NODE_TEST_EMBED_DIR`) rather than reaching for `../`. The `smoke` **label** still selects the
+fast tier across all of them - splitting directories did not split the group.
 
 ## Running it
 
@@ -189,7 +203,7 @@ Useful switches:
 | `-DNODE_TEST_SUITES=parallel` | Run fewer suites than the default set |
 | `-DNODE_TEST_SHARDS=4` | Split every suite into four ctest cases, each with its own temporary directory |
 | `-DNODE_TEST_JOBS=2` | Parallelism handed to the driver. Lower it if cases die with `0xC0000409` on Windows: that is commit charge exhaustion, not a crash in our code |
-| `-DNODE_TEST_SKIP=test-foo` | One-off skips for a single run. Long-lived ones belong in `official_suite/node-suite-skips.txt`, which requires a reason |
+| `-DNODE_TEST_SKIP=test-foo` | One-off skips for a single run. Long-lived ones belong in `cases/suite/node-suite-skips.txt`, which requires a reason |
 
 Fast runs skip the heavy label:
 
@@ -199,7 +213,7 @@ ctest --test-dir build/x64-windows-static -C Release -LE node-suite --output-on-
 
 ## Skip lists
 
-`official_suite/node-suite-skips.txt` and `official_suite/node-suite-skips-symlink.txt` are the single source
+`cases/suite/node-suite-skips.txt` and `cases/suite/node-suite-skips-symlink.txt` are the single source
 of truth, with one required reason per entry - a skip nobody can explain is a bug waiting to
 be forgotten. The second file is applied only when probing shows this machine cannot create
 symlinks, because that is a permission, not a platform property: it fails in a plain local
