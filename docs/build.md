@@ -352,6 +352,31 @@ The one fact worth keeping next to the build notes: the first full run on
 `x64-windows-static` passed all but 30 of 4990 cases, and every one of those 30 was either
 an environment permission (symlinks) or an upstream Windows bug, none of them the port.
 
+### 6.5 What a healthy build's warnings look like
+
+Three classes appear in a complete configuration, and none of them belongs to this port.
+Recording them turns "the log has warnings in it" into a question with an answer, and makes
+a fourth class a signal rather than one more screen to scroll past. Measured on
+`x64-windows-static`, Release and Debug, 2026-11-01.
+
+| warning | count | where it comes from |
+|---|---|---|
+| `'CHECK' macro redefined`, likewise `'DCHECK'`, `'USE'` (`-Wmacro-redefined`) | 39 = 13 translation units × 3 macros | `deps/v8/src/bigint/bigint-internal.h` defines its own `CHECK`/`DCHECK`/`USE` after `deps/v8/src/base/logging.h` has already defined them. V8's own collision: the "previous definition is here" note names `base/logging.h:141`, not a vcpkg header |
+| `'ares_...' is deprecated: Use ares_dns_parse instead` (`-Wdeprecated-declarations`) | 14 | `src/cares_wrap.cc` calls c-ares' pre-`ares_dns_parse` API, deprecated since c-ares 1.34. The `ares.h` this port installs is the one Node.js vendors at the same version; the single difference is vcpkg's static-linkage replace (`#ifdef CARES_STATICLIB` becomes `#if 1`), done in `ports/c-ares/portfile.cmake` for static linkages only, which leaves the deprecation attributes alone |
+| `'static' function ... should be declared 'static inline'` (`-Wunneeded-internal-declaration`) | 2–3 | `deps/v8/src/wasm/function-body-decoder-impl.h` |
+
+Two things the table also says. The Torque source-position noise recorded in §7.3 is gone -
+zero such lines since patch 0016. And the linker warning a Debug build emits at the end
+(`LNK4098`) is expected, belongs to the host tools rather than to `libnode`, and is explained
+in `cmake/build.cmake` (#56).
+
+The per-file attribution is one pass over the log, keeping the last `CXX` line seen before
+each warning:
+
+```sh
+awk '/CXX obj/{cur=$0} /macro-redefined/{print cur}' build-Debug-out.log | sort -u | wc -l
+```
+
 ## 7. What the first CI run found
 
 The first real CI run (2026-10-16) did what a local build could not: it ran the port on
