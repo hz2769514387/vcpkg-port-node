@@ -11,6 +11,17 @@ find_package(unofficial-node CONFIG REQUIRED)
 target_link_libraries(my_app PRIVATE unofficial::node::node)
 ```
 
+## Is this what you are looking for?
+
+- Embedding **Node.js in a C++ application** - you want a library to link, not a `node.exe` to shell out to.
+- A **vcpkg port for `node` / libnode** - overlay ports, with every dependency resolved from one vcpkg version tree.
+- A **shared Node.js library** (`.dll` / `.so` / `.dylib`) that a host process loads, rather than an archive linked into the executable.
+- A **C++ host driving Node.js over N-API**, with Node.js's own dependencies built by vcpkg instead of vendored inside it.
+
+If none of those is you: this is not a Node.js distribution, not a bare JavaScript engine (V8 ships as
+part of Node.js here, not on its own), and not something the curated vcpkg registry could host - *Why an
+overlay port* below says why. Where the support stops is in *Known limits*.
+
 ## Status
 
 Released: **`20261026_26.12.1_vcpkg-2026.10.16`** (the first release was
