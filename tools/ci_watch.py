@@ -272,6 +272,14 @@ def main(argv=None):
     if args.numbers and args.run is not None:
         parser.error("pull requests and --run are different questions; pick one")
 
+    # A watcher is read through `tail` or a redirected log, and a redirected stdout is
+    # block-buffered: the first progress line sat in the pipe for the whole two-hour wait
+    # when this was written. Line buffering is the difference between a log and a memory.
+    try:
+        sys.stdout.reconfigure(line_buffering=True)
+    except AttributeError:
+        pass
+
     if args.repo:
         repo = args.repo
     else:
