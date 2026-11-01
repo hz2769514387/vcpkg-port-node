@@ -22,7 +22,11 @@ foreach(_part MAJOR MINOR PATCH)
     file(STRINGS "${SOURCE_PATH}/src/node_version.h" _node_v_${_part}_line
          REGEX "^#define NODE_${_part}_VERSION [0-9]+$")
     string(REGEX MATCH "[0-9]+" _node_v_${_part} "${_node_v_${_part}_line}")
-    if(NOT _node_v_${_part})
+    # `if(NOT <var>)` is not "is it missing": CMake treats the string "0" as false, so
+    # NODE_PATCH_VERSION 0 - which is what a x.y.0 release has, Node.js 26.13.0 included -
+    # was reported as unreadable and the build stopped after forty minutes of compiling
+    # (run 41274399478). Compare against the empty string instead.
+    if("${_node_v_${_part}}" STREQUAL "")
         message(FATAL_ERROR
             "could not read NODE_${_part}_VERSION from ${SOURCE_PATH}/src/node_version.h; "
             "update the regex in ports/node/cmake/source-facts.cmake to match the new header.")
@@ -53,7 +57,8 @@ string(REGEX MATCH "[0-9]+" node_napi_version "${_node_napi_line}")
 file(STRINGS "${SOURCE_PATH}/src/node_version.h" _node_api_max_line
      REGEX "^#define NODE_API_SUPPORTED_VERSION_MAX [0-9]+$")
 string(REGEX MATCH "[0-9]+" node_napi_version_max "${_node_api_max_line}")
-if(NOT node_module_version OR NOT node_napi_version OR NOT node_napi_version_max)
+if("${node_module_version}" STREQUAL "" OR "${node_napi_version}" STREQUAL ""
+   OR "${node_napi_version_max}" STREQUAL "")
     message(FATAL_ERROR
         "could not read NODE_MODULE_VERSION / NAPI_VERSION / NODE_API_SUPPORTED_VERSION_MAX from "
         "the Node.js source tree (module='${node_module_version}', napi='${node_napi_version}', "
