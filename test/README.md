@@ -148,9 +148,11 @@ Debug one:
 
 ### The rest of the matrix
 
-Every preset names a triplet that ships with vcpkg, so this repository still carries no triplet
-file. Both architectures on each of the three platforms, both library linkages, and on Windows
-both CRTs:
+Every preset is named after the triplet it selects, and that is a rule rather than a habit:
+`tools/check_repo.py` fails when a preset's name and its `VCPKG_TARGET_TRIPLET` disagree. A preset
+that needs to deviate appends one documented suffix - `-msvc` for a `cl.exe` consumer, `-debug`
+for the Debug configuration on a single-config generator - and nothing else. Both architectures
+on each of the three platforms, both library linkages, and on Windows both CRTs:
 
 | | static library | shared library |
 |---|---|---|
@@ -164,6 +166,27 @@ both CRTs:
 Node.js recommends `/MD`; `/MT` is equally supported and equally verified, and the unsuffixed
 `*-windows-static` presets keep it because that is what this repository's Windows legs have
 always built.
+
+### `test/cmake/triplets/` holds CI cells, not consumer recipes
+
+Six of the triplets above are release-only variants that vcpkg does not ship, so this directory
+carries them. Each is a stock triplet plus `set(VCPKG_BUILD_TYPE release)`, added because a dual
+triplet builds Node.js twice and the shared legs do not fit in GitHub's six-hour job:
+
+| file | registry has the same name? |
+|---|---|
+| `arm64-windows-release` | no |
+| `arm64-windows-static-md-release` | no |
+| `x64-linux-dynamic-release` | no |
+| `arm64-linux-dynamic-release` | no |
+| `x64-osx-dynamic-release` | no |
+| `arm64-osx-dynamic-release` | no |
+
+**Do not copy one into a project.** They exist to fit a job limit, the Windows ones use the
+dynamic CRT, and a `/MT` consumer's install rejects that combination at configure time. A consumer
+needs no triplet file for the ordinary cases - the static/`/MT` single-executable build, the shared
+library, Debug, and the `x64-osx` cross build all resolve to stock triplets. `docs/consumer-recipes.md`
+is where those are written up (issue #61).
 
 On Windows the presets name no generator, so CMake uses the newest Visual Studio installed: what
 the port needs is Visual Studio 2022 or newer, and that is written down under *Known limits* in
