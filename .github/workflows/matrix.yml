@@ -8,10 +8,23 @@ name: Matrix
 # them in one job would put that job over the six-hour limit. Split across workflows they run
 # in parallel on push, which is what "verified on push" has to mean here.
 #
-# Every leg is `experimental` today, which is this repository's standing rule for a leg that
-# has not completed a build: the port claims these cells, so they are in the matrix rather
-# than absent, and being red-but-non-blocking is how the claim stays honest instead of
-# aspirational. A leg stops being experimental when it passes.
+# Four legs block a merge and four do not, and the split is a cost decision written down rather
+# than a rule that grades itself:
+#
+#   blocking      windows-shared, windows-shared-arm64, linux-shared, linux-shared-arm64
+#   non-blocking  windows-md, windows-md-arm64, macos-shared, macos-shared-x64
+#
+# The blocking four carry the claim no other leg carries - a *shared* libnode, which changes how the
+# consumer finds the library at run time (rpath, DLL beside the executable) and what the exported
+# config links. A regression there is silent until someone builds a shared install, so it should fail
+# the pull request. They cost the pull request the slowest leg: 155 minutes for linux-shared-arm64 on
+# the last all-green run (40025248617), the rest between 72 and 131.
+#
+# The non-blocking four are not less true, they are less distinct, and the maintainer chose not to
+# spend the wall clock on them yet: `windows-md` differs from `windows-static` only in the CRT, which
+# MSVC refuses to mix at link time anyway (LNK2038), and `macos-shared` repeats the shared claim on a
+# platform whose shared story is the rpath this repository already tests through `ci.yml`'s macOS
+# cells. Either moves to blocking by changing one line here and saying why.
 
 on:
   push:
@@ -96,7 +109,6 @@ jobs:
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: x64
-      experimental: true
       timeout-minutes: 330
 
   windows-shared-arm64:
@@ -109,7 +121,6 @@ jobs:
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
       expect-arch: ARM64
-      experimental: true
       timeout-minutes: 330
 
   linux-shared:
@@ -121,7 +132,6 @@ jobs:
       triplet: x64-linux-dynamic-release
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
-      experimental: true
       timeout-minutes: 330
 
   linux-shared-arm64:
@@ -133,7 +143,6 @@ jobs:
       triplet: arm64-linux-dynamic-release
       consumer-configs: Release,RelWithDebInfo
       suite-configs: Release
-      experimental: true
       timeout-minutes: 330
 
   macos-shared:
