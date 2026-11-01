@@ -83,6 +83,16 @@ between Node.js versions:
 - **Environment variables the runner itself sets.** A test asserting empty stderr can fail
   because the environment carries both `NO_COLOR` and `FORCE_COLOR`, which Node.js warns
   about. Re-check against the official binary before trusting this one.
+- **A shell that is not a console.** Eight `parallel/test-repl-*` cases - `-context`,
+  `-custom-eval`, `-custom-eval-previews`, `-empty`, `-eval-error-after-close`, `-multiline`,
+  `-pretty-stack-custom-writer`, `-underscore` - fail when the driver is started from a shell
+  whose output is a pipe: a local Git Bash session with stdout redirected to a file. The
+  mechanism is not identified; the symptom is a REPL that never receives what the test writes
+  to it (`underscoreAssigned` false, the custom eval never called). Cross-checked 2026-11-01
+  against the official v26.13.0 `node.exe` on the same machine: the same eight fail there, so
+  it is the environment and not this port. No skip entry is added, because the CI cells run
+  these cases from a console and pass them - what this buys is one sentence: a local suite run
+  from a piped shell cannot be compared with a CI run for these eight.
 
 Every entry in the skip lists is re-examined when the pinned Node.js version changes
 (ADR 0002), because a new patch release can turn an environment failure into a fixed one, or
