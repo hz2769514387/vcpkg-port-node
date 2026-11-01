@@ -20,7 +20,7 @@ target_link_libraries(my_app PRIVATE unofficial::node::node)
 
 |             |                                                 |
 | ----------- | ----------------------------------------------- |
-| Node.js     | v26.12.1（v26 线）                              |
+| Node.js     | v26.13.0（v26 线，LTS）                         |
 | vcpkg       | 2026.10.16（已钉死）                            |
 | 构建路线    | `configure.py` → `gyp -f ninja` → `ninja`       |
 | 交付形态    | 静态库或共享库 + CMake 配置，以 overlay port 交付 |

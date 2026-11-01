@@ -1,7 +1,14 @@
-# Dependency disposition — Node.js v26.12.1 against vcpkg 2026.10.16
+# Dependency disposition — Node.js v26.13.0 against vcpkg 2026.10.16
 
 Every dependency Node.js carries, what vcpkg has, what was measured, and what we do about
 it. This is the reference behind `ports/` and its overlay ports; keep it in step with them.
+
+Node.js 26.13.0 is the LTS transition of 26.12.1 and changes no dependency: every version
+in the tables below was re-read from the 26.13.0 tarball and is the value already recorded
+for 26.12.1 (V8 14.6.202.34, OpenSSL 3.5.9, libuv 1.52.1, c-ares 1.34.9, brotli 1.2.x +
+the CVE cherry-pick, zlib 1.3.2.1-motley, nghttp2 1.70.0, ngtcp2 1.25.0, sqlite3 3.54.0,
+llhttp 9.4.3, simdjson 5.0.3, zstd 1.5.7, ICU 78.3, npm 11.20.0). The measurements quoted
+below are the 26.12.0/26.12.1 ones and are carried over unchanged.
 
 ## 1. Decision rule
 

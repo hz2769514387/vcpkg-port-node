@@ -94,7 +94,7 @@ endif()
 # after the bump looked fine.
 vcpkg_download_distfile(NODE_ARCHIVE
     URLS "https://nodejs.org/dist/v${VERSION}/node-v${VERSION}.tar.xz"
-    SHA512 f6f76e258af33f7f877c65a2141d281ea307aae017a90bb8a75a7d4df271ad9d17c7d0edfd5751a977edd6bdb03c704d727628c4c7215c878d421787a35240f2
+    SHA512 b26477a172f99513c03ec9bb32f7f72bf88c05443acc2383a6c4bc28f796061ba81f78358353bc4aeaf77d7e2de818746503ac287a2ff74032ee1d261d0388e6
     FILENAME node-v${VERSION}.tar.xz
 )
 
@@ -166,7 +166,7 @@ include("${NODE_PORT_DIR}/cmake/config.cmake")
 file(INSTALL "${NODE_PORT_DIR}/usage"
     DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
 
-# Node.js's own LICENSE is already the aggregate: 2923 lines in 26.12.1, carrying
+# Node.js's own LICENSE is already the aggregate: 2923 lines in 26.13.0, carrying
 # the licence texts of everything in the source tree - V8, ICU, OpenSSL, npm,
 # brotli, libuv, zlib and the rest of deps/ - which is what Node.js ships as the
 # licence of its binaries. The
