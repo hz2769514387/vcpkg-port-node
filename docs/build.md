@@ -142,7 +142,7 @@ upstream-supported switch, not a coincidence of one target.
 
 Since the failure mode here is invisible downstream - the linker silently picks one of two
 definitions and the process runs - the port does not rely on this measurement staying true:
-after each configuration builds, `scripts/check_no_vendored_build.py` reads the generated build
+after each configuration builds, `ports/node/check-no-vendored-build.py` reads the generated build
 graph and fails the build if any source under a vendored copy is still compiled. It is cheap
 (one pass over the ninja files, well under a second) and it is the check that would have caught
 `simdutf.gyp` arriving through `ada.gyp` before a consumer did. The set it reads covers every

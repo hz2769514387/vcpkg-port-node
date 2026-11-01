@@ -192,7 +192,7 @@ symbol names. `v8_zlib.ninja` confirms the result: one compile step, the wrapper
 archive.
 
 The port does not take that on trust. After each configuration builds,
-`ports/node/scripts/check_no_vendored_build.py` reads gyp's ninja output and fails the build if
+`ports/node/check-no-vendored-build.py` reads gyp's ninja output and fails the build if
 any source under `deps/zlib` or `deps/v8/third_party/zlib` is compiled; the wrapper under the
 latter's `google/` is the one deliberate exception, because it is the adapter, not the library.
 The check knows the three shapes a source takes in gyp's ninja output - including the
