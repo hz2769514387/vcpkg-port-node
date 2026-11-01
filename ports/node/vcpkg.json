@@ -47,7 +47,8 @@
       "description": "Also install the official Node.js test suite (the whole test/ tree plus the tools/test.py driver) into share/node/test-suite. A consumer can then run the official JavaScript tests against its own embedding executable (tools/test.py --shell=<your exe>). Without this feature only the library and headers are installed. About 80 MB."
     },
     "tools": {
-      "description": "Also install the node executable plus npm / npx / corepack into tools/node (the layout of the official distribution: executable + node_modules/{npm,corepack} + shims). Enable it when you need a standalone node/npm; otherwise only the library and headers are installed. About 25 MB."
+      "description": "Also install the node executable plus npm / npx into tools/node (the layout of the official distribution: executable + node_modules/npm + shims). Enable it when you need a standalone node/npm; otherwise only the library and headers are installed. About 25 MB."
     }
-  }
+  },
+  "port-version": 1
 }

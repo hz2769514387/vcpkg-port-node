@@ -102,20 +102,21 @@ if(_node_shared_build)
         set(NODE_PORT_SHLIB_FILE "${_node_shlib_name}")
     endif()
 else()
-    # Every archive gyp produced, as "<target>:<file>", so the template can build one imported
-    # target per archive without repeating a block per name. abseil/highway/simdutf/zlib come from
-    # vcpkg; v8_zlib remains (patched down to compression_utils_portable.cc, so it defines no zlib
-    # core symbols); LIEF and libffi are vcpkg packages wired as their own targets.
-    # Everything gyp produces for a Node.js build. abseil/highway/simdutf/zlib come from vcpkg;
-    # v8_zlib remains (patched down to compression_utils_portable.cc, so it defines no zlib core
-    # symbols). LIEF, libffi, nghttp2 and abseil are imported separately below.
-    set(_node_all_archives
-        libnode node_base
-        v8_base_without_compiler v8_compiler v8_init v8_initializers
-        v8_snapshot v8_libbase v8_libplatform v8_zlib
-        ncrypto ncrypto_engine nbytes merve uvwasi crdtp node_crates)
+    # Every archive a consumer links, as "<target>:<file>", so the template can build one
+    # imported target per archive without repeating a block per name. The list is
+    # `_node_archive_targets`, set by cmake/install.cmake, which runs first and installs exactly
+    # those files - one place, so what the package holds and what this file describes cannot
+    # drift apart. abseil/highway/simdutf/zlib come from vcpkg; v8_zlib remains (patched down to
+    # compression_utils_portable.cc, so it defines no zlib core symbols); LIEF, libffi, nghttp2
+    # and abseil are imported separately below.
+    if(NOT DEFINED _node_archive_targets)
+        message(FATAL_ERROR
+            "node port: _node_archive_targets is not set. cmake/install.cmake defines it and "
+            "the portfile includes that before this file, so this means the include order "
+            "changed, not that a consumer did something wrong.")
+    endif()
     set(NODE_PORT_ARCHIVES "")
-    foreach(_a IN LISTS _node_all_archives)
+    foreach(_a IN LISTS _node_archive_targets)
         _node_archive_filename("${_a}" _file)
         list(APPEND NODE_PORT_ARCHIVES "${_a}:${_file}")
     endforeach()
