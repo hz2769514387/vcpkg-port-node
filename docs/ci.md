@@ -266,12 +266,17 @@ ones. Bringing it back needs a runner with more cores, not a cleverer workflow; 
 Every cell in that table has completed a build end to end, and the eight `matrix.yml` cells are
 green as well: the port's claim to support them is verified rather than aspirational.
 
-They are still marked `experimental`, and the standing rule in `matrix.yml` - "a leg stops being
-experimental when it passes" - no longer describes them: by that rule all eight would block a merge
-by now. Removing the flag is a gate decision rather than a consequence of a green run, because it
-puts the slowest matrix cell (about three hours) in front of every pull request, so it is tracked
-in [#35](https://github.com/hz2769514387/vcpkg-port-node/issues/35) instead of being changed inside
-an upgrade.
+**Four of them block a merge, four do not** (#35). The blocking four are the shared-library cells -
+`windows-shared`, `windows-shared-arm64`, `linux-shared`, `linux-shared-arm64` - because a shared
+libnode changes how the consumer finds the library at run time and what the exported config links,
+and no other leg carries that claim. They put the slowest cell in front of every pull request: 155
+minutes for `linux-shared-arm64` on the last all-green run, the rest 72-131.
+
+The non-blocking four are `windows-md`, `windows-md-arm64`, `macos-shared` and `macos-shared-x64`.
+That is a cost decision, not a claim that they pass more often: `/MD` differs from the static-CRT
+legs only in the CRT, which MSVC refuses to mix at link time anyway (`LNK2038`), and the macOS shared
+cells repeat the shared claim on the platform whose rpath this repository tests through `ci.yml`.
+Either becomes blocking by deleting one line in `matrix.yml` and saying why there.
 
 What is genuinely not verified is Node.js's own suite on a few cells, and the known limits of the
 delivered library; section 4 and the README's *Known limits* are the record for those.
