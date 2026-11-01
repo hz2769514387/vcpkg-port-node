@@ -182,24 +182,73 @@ _node_suite_read_skips("${CMAKE_CURRENT_LIST_DIR}/node-suite-skips.txt" _from_fi
 list(APPEND _skips ${_from_file})
 
 # Symlinks are a machine capability, not a platform property: they work for developers with
-# Developer Mode enabled and in most CI images, and fail with EPERM everywhere else. Probe
-# it instead of guessing, so the 28 fs.$symlink cases are only skipped where they cannot run.
-execute_process(
-  COMMAND "${Python3_EXECUTABLE}" -c
-          "import os, tempfile; d = tempfile.mkdtemp(); os.symlink(d, d + '/probe')"
-  RESULT_VARIABLE _symlink_result
-  OUTPUT_QUIET
-  ERROR_QUIET)
-if(_symlink_result EQUAL 0)
-  message(STATUS "Node.js test suite: symlinks available, not applying deprecation skips")
+# Developer Mode enabled and in most CI images, and fail with EPERM everywhere else. Probe it
+# instead of guessing, so the 28 fs.$symlink cases are only skipped where they cannot run.
+#
+# Three things this probe gets right that the first version did not (issue #32):
+#
+#   * **the program.** It used to ask CPython. The cases ask node, and a capability one program
+#     has is not a capability another one has - on the machine that filed the issue the Python
+#     probe succeeded and three cases then died with EPERM, so no skip was applied and the
+#     failures looked like three unrelated defects.
+#   * **the directory.** It used to probe %TEMP%. The cases create their symlinks inside the
+#     installed test tree, and EPERM can come from a directory's ACL as much as from a missing
+#     privilege, so the probe now runs where they run.
+#   * **the operation.** A Windows *junction* needs no privilege, so a probe that created one
+#     would always succeed and hide the capability it is supposed to detect. It creates a file
+#     symlink, which is what the cases create.
+#
+# The embedder is not used here, and cannot be: this is configure time and
+# $<TARGET_FILE:node_embedder> has not been built yet (the shell is a generator expression for
+# exactly that reason). The port's own node is the same runtime, the same user and the same
+# directory, which is what the capability depends on.
+set(_symlink_probe_dir "${node_TEST_SUITE_DIR}/.symlink-probe")
+set(_symlink_probe_ok FALSE)
+file(REMOVE_RECURSE "${_symlink_probe_dir}")
+if(node_EXECUTABLE AND EXISTS "${node_EXECUTABLE}")
+  file(MAKE_DIRECTORY "${_symlink_probe_dir}")
+  file(WRITE "${_symlink_probe_dir}/target" "probe\n")
+  set(_symlink_probe_program "${node_EXECUTABLE}")
+  set(_symlink_probe_code
+      "const fs = require('fs'); fs.symlinkSync('target', 'link', 'file'); fs.unlinkSync('link');")
+  execute_process(
+    COMMAND "${_symlink_probe_program}" -e "${_symlink_probe_code}"
+    WORKING_DIRECTORY "${_symlink_probe_dir}"
+    RESULT_VARIABLE _symlink_result
+    OUTPUT_QUIET
+    ERROR_VARIABLE _symlink_probe_error)
+  file(REMOVE_RECURSE "${_symlink_probe_dir}")
+  message(STATUS
+    "Node.js test suite: symlink probe: '${_symlink_probe_program} -e \"${_symlink_probe_code}\"' "
+    "in ${_symlink_probe_dir} -> ${_symlink_result}")
+  if(_symlink_result EQUAL 0)
+    set(_symlink_probe_ok TRUE)
+  endif()
+else()
+  message(STATUS
+    "Node.js test suite: symlink probe: no node executable from the port's tools feature, so the "
+    "capability is assumed present. Enable the feature (test/vcpkg.json) if the suite reports "
+    "EPERM on symlinks.")
+  set(_symlink_probe_ok TRUE)
+endif()
+
+if(_symlink_probe_ok)
+  message(STATUS "Node.js test suite: symlinks available, not applying the symlink skip list")
 else()
   _node_suite_read_skips("${CMAKE_CURRENT_LIST_DIR}/node-suite-skips-symlink.txt" _from_file)
   list(LENGTH _from_file _count)
   message(STATUS
-    "Node.js test suite: symlink creation is unavailable here, skipping ${_count} cases that "
-    "cannot pass without it (see cases/suite/node-suite-skips-symlink.txt)")
+    "Node.js test suite: symlink creation is unavailable here (probe exit ${_symlink_result}"
+    "${_symlink_probe_error}), skipping ${_count} cases that cannot pass without it "
+    "(see cases/suite/node-suite-skips-symlink.txt)")
   list(APPEND _skips ${_from_file})
 endif()
+unset(_symlink_probe_dir)
+unset(_symlink_probe_program)
+unset(_symlink_probe_code)
+unset(_symlink_probe_ok)
+unset(_symlink_probe_error)
+unset(_symlink_result)
 
 if(NODE_TEST_SKIP)
   string(REPLACE "," ";" _extra "${NODE_TEST_SKIP}")
