@@ -30,7 +30,7 @@ change goes through a pull request, and the full matrix is green on `main` on ev
 
 |             |                                                 |
 | ----------- | ----------------------------------------------- |
-| Node.js     | v26.12.1 (v26 line)                             |
+| Node.js     | v26.13.0 (v26 line, LTS)                        |
 | vcpkg       | 2026.10.16 (pinned)                             |
 | Build route | `configure.py` → `gyp -f ninja` → `ninja`       |
 | Delivery    | static or shared library + CMake config, as overlay ports |

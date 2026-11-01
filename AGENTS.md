@@ -46,7 +46,7 @@ ports**, so a consumer writes `find_package(unofficial-node CONFIG REQUIRED)` an
 `unofficial::node::node`. It has to be an overlay: V8 is a Node-maintained fork with no externalize
 channel, so no curated-registry port can replace the tree.
 
-Current target: Node.js **v26.12.1** on vcpkg **2026.10.16**. Versions, branches and tags follow
+Current target: Node.js **v26.13.0** on vcpkg **2026.10.16**. Versions, branches and tags follow
 [docs/versioning.md](docs/versioning.md).
 
 ## 4. Workflow

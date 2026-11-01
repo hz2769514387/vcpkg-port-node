@@ -2,17 +2,17 @@
   "port": {
     "version": "20261026",
     "released": true,
-    "manifest_version": "26.12.1",
-    "manifest_port_version": 5
+    "manifest_version": "26.13.0",
+    "manifest_port_version": 0
   },
   "node": {
-    "version": "26.12.1",
-    "released": "2026-10-21",
-    "lts": false,
+    "version": "26.13.0",
+    "released": "2026-10-28",
+    "lts": true,
     "lts_start": "2026-10-28",
     "eol": "2029-04-30",
-    "url": "https://nodejs.org/dist/v26.12.1/node-v26.12.1.tar.xz",
-    "sha512": "f6f76e258af33f7f877c65a2141d281ea307aae017a90bb8a75a7d4df271ad9d17c7d0edfd5751a977edd6bdb03c704d727628c4c7215c878d421787a35240f2",
+    "url": "https://nodejs.org/dist/v26.13.0/node-v26.13.0.tar.xz",
+    "sha512": "b26477a172f99513c03ec9bb32f7f72bf88c05443acc2383a6c4bc28f796061ba81f78358353bc4aeaf77d7e2de818746503ac287a2ff74032ee1d261d0388e6",
     "v8": "14.6.202.34",
     "module_version": 147,
     "napi_version": 8,
