@@ -28,6 +28,7 @@ versioned with the code and reviewed in pull requests.
 | [node-suite.md](node-suite.md) | How Node.js's own test suite is run, how to read a result, and what may be allowed to fail | active |
 | [versioning.md](versioning.md) | Versions (release date, Node.js, vcpkg), `versions.json`, branches, tags, and the support window | active |
 | [overlay-replacements.md](overlay-replacements.md) | Every port under `ports/` that replaces a registry port, and what that changes for a consumer's graph | active |
+| [consumer-recipes.md](consumer-recipes.md) | The four shapes a consumer builds - static single executable, shared library, Debug, cross build - with the triplet, the preset and the CMake that make each one work | active |
 
 ## Where work items live
 
