@@ -246,22 +246,77 @@ foreach(_node_cfg IN LISTS _node_configs)
         continue()
     endif()
 
-    # Windows/macOS: gyp puts static libraries under obj/ (recursively) and, on
-    # macOS, static_library lands in the output root as well.  Rust crates
-    # (node_crates) land under gen/ on Windows.
-    file(GLOB_RECURSE _node_archives "${_node_out_dir}/obj/*${_node_lib_suffix}")
-    file(GLOB _node_archives_root "${_node_out_dir}/*${_node_lib_suffix}")
-    list(APPEND _node_archives ${_node_archives_root})
-    file(GLOB_RECURSE _node_gen_archives "${_node_out_dir}/gen/*${_node_lib_suffix}")
-    foreach(_g IN LISTS _node_gen_archives)
-        get_filename_component(_gname "${_g}" NAME)
-        if(_gname MATCHES "^[a-zA-Z_]+${_node_lib_suffix}$")
-            list(APPEND _node_archives "${_g}")
+    # What a consumer links, and nothing else.
+    #
+    # gyp writes every archive it built - including the host tools' own objects - into obj/, and
+    # gen/ for the Rust crates, so the install used to be a glob over both. The package therefore
+    # carried seven archives that no consumer can reach: torque_base.lib (48 MB), torque,
+    # mksnapshot, node_mksnapshot, bytecode_builtins_list_generator, gen-regexp-special-case and
+    # node.lib, the executable's own objects. It also made the Release package hold one archive
+    # more than the Debug one, because the tools feature builds the node executable in Release
+    # only - vcpkg's post-build check reported both (issue #63).
+    #
+    # The list below is the set cmake/config.cmake describes to a consumer; it lives here because
+    # this file runs first, and config.cmake reads it. One list, so the two cannot disagree.
+    set(_node_archive_targets
+        libnode node_base
+        v8_base_without_compiler v8_compiler v8_init v8_initializers
+        v8_snapshot v8_libbase v8_libplatform v8_zlib
+        ncrypto ncrypto_engine nbytes merve uvwasi crdtp node_crates)
+
+    # Where they can be: gyp puts static libraries under obj/ (recursively) and, for a
+    # static_library, in the output root as well on macOS; the Rust crates land under gen/.
+    file(GLOB_RECURSE _node_candidates "${_node_out_dir}/obj/*${_node_lib_suffix}")
+    file(GLOB _node_candidates_root "${_node_out_dir}/*${_node_lib_suffix}")
+    file(GLOB_RECURSE _node_candidates_gen "${_node_out_dir}/gen/*${_node_lib_suffix}")
+    list(APPEND _node_candidates ${_node_candidates_root} ${_node_candidates_gen})
+    unset(_node_candidates_root)
+    unset(_node_candidates_gen)
+
+    # gyp's file name is not always the target name: on Unix it prepends lib and strips a leading
+    # "lib" from the target, so target `libnode` is libnode.a and `node_base` is libnode_base.a.
+    set(_node_archives "")
+    set(_node_archives_missing "")
+    foreach(_target IN LISTS _node_archive_targets)
+        if(VCPKG_TARGET_IS_WINDOWS)
+            set(_wanted "${_target}${_node_lib_suffix}")
+        else()
+            string(REGEX REPLACE "^lib" "" _stripped "${_target}")
+            set(_wanted "lib${_stripped}${_node_lib_suffix}")
         endif()
+        set(_found "")
+        foreach(_candidate IN LISTS _node_candidates)
+            get_filename_component(_candidate_name "${_candidate}" NAME)
+            if(_candidate_name STREQUAL _wanted)
+                set(_found "${_candidate}")
+                break()
+            endif()
+        endforeach()
+        if(_found STREQUAL "")
+            list(APPEND _node_archives_missing "${_wanted}")
+        else()
+            list(APPEND _node_archives "${_found}")
+        endif()
+        unset(_wanted)
+        unset(_stripped)
+        unset(_candidate_name)
+        unset(_candidate)
+        unset(_found)
     endforeach()
-    unset(_g)
-    unset(_gname)
-    unset(_node_gen_archives)
+    unset(_target)
+    # A target that stopped being produced is a rename upstream or a defect here; either way it
+    # must not end up as a package that quietly ships one archive fewer than the config names.
+    if(_node_archives_missing)
+        list(JOIN _node_archives_missing ", " _node_archives_missing_text)
+        message(FATAL_ERROR
+            "node port: the ${_node_cfg} build produced no ${_node_archives_missing_text}. "
+            "The archive list in cmake/install.cmake and the one cmake/config.cmake describes "
+            "have to match what gyp produces; an upstream target rename belongs in both.")
+    endif()
+    unset(_node_archives_missing)
+    unset(_node_archives_missing_text)
+    unset(_node_candidates)
+
     file(INSTALL ${_node_archives} DESTINATION "${_node_pkg_lib_dir}")
 
     if(_node_rt_builtins_lib)

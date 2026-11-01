@@ -174,3 +174,41 @@ file(INSTALL "${NODE_PORT_DIR}/usage"
 # installs its own share/<port>/copyright into the consumer's tree, so nothing
 # is missing here - listing them again would duplicate other packages' notices.
 vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
+
+# ---------------------------------------------------------------------------
+# Empty directories, swept rather than named.
+#
+# vcpkg reports an installed empty directory as a post-build problem, and which directories are
+# empty is a property of the Node.js tree, not of this port: 26.13.0 brought
+# include/node/ffi/platforms and two test-suite fixture directories, and cmake/install.cmake's
+# hand-written removal of include/node/api and include/node/res is what the list looked like one
+# release earlier (issue #63). Nothing in a binary package needs an empty directory, so the walk
+# is unconditional.
+#
+# A directory whose only entries are dotfiles reads as empty to file(GLOB), which does not match
+# them by default; no part of this package ships one, and the alternative (LIST_DIRECTORIES) does
+# not change that.
+# ---------------------------------------------------------------------------
+function(_node_remove_empty_directories _dir)
+    file(GLOB _node_children LIST_DIRECTORIES true "${_dir}/*")
+    foreach(_node_child IN LISTS _node_children)
+        if(IS_DIRECTORY "${_node_child}")
+            _node_remove_empty_directories("${_node_child}")
+        endif()
+    endforeach()
+    file(GLOB _node_children LIST_DIRECTORIES true "${_dir}/*")
+    if(NOT _node_children)
+        file(REMOVE_RECURSE "${_dir}")
+    endif()
+    unset(_node_children)
+    unset(_node_child)
+endfunction()
+
+file(GLOB _node_package_entries LIST_DIRECTORIES true "${CURRENT_PACKAGES_DIR}/*")
+foreach(_node_entry IN LISTS _node_package_entries)
+    if(IS_DIRECTORY "${_node_entry}")
+        _node_remove_empty_directories("${_node_entry}")
+    endif()
+endforeach()
+unset(_node_package_entries)
+unset(_node_entry)
