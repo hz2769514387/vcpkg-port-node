@@ -1,3 +1,4 @@
+# CI cell, not a consumer recipe - see test/README.md and issue #61.
 # The stock `arm64-windows-static-md` triplet (static libnode, dynamic CRT), Release only.
 #
 # The matrix legs (issue #11) build this cell Release-only: with the stock dual triplet
