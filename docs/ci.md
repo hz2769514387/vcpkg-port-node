@@ -128,8 +128,12 @@ Release **and** Debug - two Node.js builds per leg. That is what pushed the Linu
 five-hour job limit. `ci.yml` therefore names vcpkg's own **community** `*-release` triplets -
 `x64-windows-static-release`, `arm64-windows-static-release`, `x64-linux-release`,
 `arm64-linux-release`, `arm64-osx-release`, `x64-osx-release` - which are the standard settings
-plus `VCPKG_BUILD_TYPE release`. vcpkg ships them, so this repository carries no triplet file,
-and a consumer can name them too without copying anything.
+plus `VCPKG_BUILD_TYPE release`. Four of those ship with vcpkg and are named as they are; the
+Windows shared triplet and the two dynamic ones have no release-only twin in the registry, so
+`test/cmake/triplets/` carries `x64-windows-release`, `arm64-windows-release`,
+`arm64-windows-static-md-release`, `x64-linux-dynamic-release`, `arm64-linux-dynamic-release`,
+`x64-osx-dynamic-release` and `arm64-osx-dynamic-release`. They are CI cells, not consumer
+recipes - issue #61 is where the two roles get separated for readers.
 
 `debug.yml` installs the *stock* (dual) triplet instead, because Debug is a property of the
 install rather than of the consumer: on Windows a Debug consumer is the debug CRT and cannot
@@ -217,9 +221,9 @@ builds Node.js twice and that is what used to put single legs past the six-hour 
 dual triplet once, which builds Release *and* Debug, and then builds a Debug consumer against it.
 
 A consumer configuration follows from that: Release and RelWithDebInfo work against any install,
-Debug needs one that also holds debug libraries. No `matrix.yml` leg builds a Debug consumer,
-and this repository carries no triplets of its own, so a Debug consumer on a shared or `/MD`
-libnode is not verified yet - see issue #11 rather than assuming it from a passing leg.
+Debug needs one that also holds debug libraries. No `matrix.yml` leg builds a Debug consumer, so
+a Debug consumer on a shared or `/MD` libnode is not verified yet - see issue #11 rather than
+assuming it from a passing leg.
 
 Every cell below is a promise a consumer can hold this repository to, and each one is a leg.
 
