@@ -21,6 +21,7 @@ It is never installed anywhere and it is not an example to copy into another bui
 | `cases/externalization/` | Did each externalized dependency really come from vcpkg - on both hosts. |
 | `cases/snapshot/` | The startup snapshot is there and is used - on both hosts. |
 | `cases/crt/` | The executable has the CRT the preset asked for, read out of its import table. |
+| `cases/install/` | The package holds what its config tells a consumer to link - and a shared install holds no archives. |
 | `cases/tools/` | The tools feature: `node.exe`, npm and npx. |
 | `cases/zlib/` | zlib resolves to one copy, through the object graph and at run time. |
 | `cases/symbols/` | No strong symbol is defined by two archives, which "it links" cannot tell you. |
