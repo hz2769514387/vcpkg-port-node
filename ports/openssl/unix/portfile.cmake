@@ -42,6 +42,11 @@ elseif(NOT compiler_in_path STREQUAL VCPKG_DETECTED_CMAKE_C_COMPILER)
 endif()
 
 vcpkg_list(SET MAKEFILE_OPTIONS)
+# Universal builds don't support ASM
+list(LENGTH VCPKG_OSX_ARCHITECTURES openssl_osx_arch_count)
+if(openssl_osx_arch_count GREATER 1)
+    list(APPEND CONFIGURE_OPTIONS no-asm)
+endif()
 if(VCPKG_TARGET_IS_ANDROID)
     set(ENV{ANDROID_NDK_ROOT} "${VCPKG_DETECTED_CMAKE_ANDROID_NDK}")
     set(OPENSSL_ARCH "android-${VCPKG_DETECTED_CMAKE_ANDROID_ARCH}")
@@ -71,16 +76,12 @@ elseif(VCPKG_TARGET_IS_IOS)
         message(FATAL_ERROR "Unknown iOS target architecture: ${VCPKG_TARGET_ARCHITECTURE}")
     endif()
     # disable that makes linkage error (e.g. require stderr usage)
-    list(APPEND CONFIGURE_OPTIONS no-ui no-asm)
+    list(APPEND CONFIGURE_OPTIONS no-ui)
 elseif(VCPKG_TARGET_IS_TVOS OR VCPKG_TARGET_IS_WATCHOS)
     set(OPENSSL_ARCH iphoneos-cross)
     # disable that makes linkage error (e.g. require stderr usage)
     list(APPEND CONFIGURE_OPTIONS no-ui no-asm)
 elseif(VCPKG_TARGET_IS_OSX)
-    # Universal builds don't support ASM
-    if(VCPKG_OSX_ARCHITECTURES MATCHES "arm64" AND VCPKG_OSX_ARCHITECTURES MATCHES "x86_64")
-        list(APPEND CONFIGURE_OPTIONS no-asm)
-    endif()
     if(VCPKG_TARGET_ARCHITECTURE MATCHES "arm64")
         set(OPENSSL_ARCH darwin64-arm64)
     else()
@@ -124,6 +125,8 @@ endif()
 
 file(MAKE_DIRECTORY "${SOURCE_PATH}/vcpkg")
 file(COPY "${CMAKE_CURRENT_LIST_DIR}/configure" DESTINATION "${SOURCE_PATH}/vcpkg")
+file(MAKE_DIRECTORY "${SOURCE_PATH}/vcpkg")
+file(COPY "${CMAKE_CURRENT_LIST_DIR}/configure" DESTINATION "${SOURCE_PATH}/vcpkg")
 # vcpkg_configure_make invokes the configure step as `./vcpkg/configure`, directly, so the
 # script has to carry the executable bit. This repository's git cannot record one
 # (core.fileMode is false and no tracked file has the bit), and a bit that exists only in
@@ -133,6 +136,7 @@ file(CHMOD "${SOURCE_PATH}/vcpkg/configure" PERMISSIONS
     OWNER_READ OWNER_WRITE OWNER_EXECUTE
     GROUP_READ GROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE)
+vcpkg_configure_make(
 vcpkg_configure_make(
     SOURCE_PATH "${SOURCE_PATH}"
     PROJECT_SUBPATH "vcpkg"

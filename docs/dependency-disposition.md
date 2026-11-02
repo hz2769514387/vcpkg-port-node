@@ -81,7 +81,7 @@ required by this upgrade.
 | Dependency | Node.js 26.12.1 | vcpkg | Channel | Version verdict |
 |---|---|---|---|---|
 | V8 | 14.6.202.34 | — | none | vendored (node fork, no `--shared-v8`) |
-| openssl | 3.5.9 | 3.6.3 (registry has 3.6.5) | `--shared-openssl` | vcpkg ahead of Node.js, behind the registry → use vcpkg, refresh tracked in #29 |
+| openssl | 3.5.9 | 3.6.5 (overlay, same version as the registry) | `--shared-openssl` | vcpkg ahead of Node.js → use the overlay, which differs from the registry only in building the C code with clang-cl (ADR 0009) |
 | libuv | 1.52.1 | 1.52.1 | `--shared-libuv` | equal, node patches → overlay |
 | c-ares | 1.34.9 | 1.34.8 | `--shared-cares` | **overlay at 1.34.9**: the registry is a patch release behind the tree, and 1.34.9 is part of 26.12.1's security content |
 | brotli | 1.2.0 + CVE cherry-pick | 1.2.0 | `--shared-brotli` | **overlay at 1.2.1**: the registry's 1.2.0 does not carry CVE-2026-111497, which Node.js has and 1.2.1 fixes upstream; plus Node.js's `c/common/platform.h` |
@@ -267,7 +267,7 @@ of an install tree deserves the explanation instead of a suspicion that the tree
 
 | Disposition | Dependencies |
 |---|---|
-| Use the vcpkg port as-is | openssl (3.6.3 > 3.5.9), icu (78.3), c-ares, zstd, nghttp3 (link sfparse alongside), ngtcp2 |
+| Use the vcpkg port as-is | icu (78.3), c-ares, zstd, nghttp3 (link sfparse alongside), ngtcp2 |
 | Overlay: pin the version Node.js ships, add its patches | libuv, brotli, nghttp2, llhttp, simdjson, ada-url (+ simdutf feature), hdr-histogram, libffi, LIEF, perfetto, sqlite3 |
 | Overlay: replace the upstream source entirely | zlib → Chromium fork (issue #3) |
 | Externalize from V8's tree (the must-unify four) | abseil, highway (issue #1), simdutf (issue #2), zlib (issue #3) |

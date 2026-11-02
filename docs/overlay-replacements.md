@@ -30,16 +30,15 @@ receives.
 | `lief` | 0.17.6 | 1.0.0 | major version jump (0.x to 1.0); the C++ and C APIs both moved. All of LIEF's own dependencies are separate vcpkg packages, so those still resolve to the versions listed here Its `utf8cpp` now comes from an overlay as well: the baseline moved that library to 4.2.1, which removed the three-argument `validate_next` LIEF 1.0.0 calls, so `ports/utfcpp` pins 4.1.1 - the last release with that overload and the version the 2026.07.29 baseline shipped. |
 | `utfcpp` | 4.2.1 | **4.1.1** | one minor back, on purpose: 4.2 removed `internal::validate_next(it, end, cp)` and LIEF 1.0.0 - the version Node.js v26.12.1 ships - calls it. Same major, so the `utf8cpp::utf8cpp` target and the `share/utf8cpp/cmake` layout are exactly what the registry version gives, and LIEF is the only consumer in this graph |
 | `perfetto` | 53.0 | 58.2 | build-only for now: the node port does not wire `--shared-perfetto` (issue #12), so nothing links it unless you ask for it |
-| `openssl` | 3.6.5 | **3.6.3**, with its **C code built by clang-cl** instead of cl.exe | same version everywhere; the Windows binary is a different build of the same source. Issue #22: with cl.exe-built OpenSSL, arm64 Windows crashed in 250 silent TLS cases while the official Node.js binary was clean on the same runner; with clang-cl-built OpenSSL the same suite passes (100%, 0 crashes). The port, the consumer and now OpenSSL are all clang-cl, which is what vcbuild.bat requires of Node.js >= 24. ICU is the one dependency left on cl.exe - see ADR 0008 |
+| `openssl` | 3.6.5 | 3.6.5, with its **C code built by clang-cl** instead of cl.exe | same version and same source; the Windows binary is a different build of it, by the compiler Node.js itself requires. Issue #22: with cl.exe-built OpenSSL, arm64 Windows crashed in 250 silent TLS cases while the official Node.js binary was clean on the same runner; with clang-cl-built OpenSSL the same suite passes (100%, 0 crashes). The port, the consumer and now OpenSSL are all clang-cl, which is what vcbuild.bat requires of Node.js >= 24. ICU is the one dependency left on cl.exe - see ADR 0008 |
 | `node` | - (not in the registry) | Node.js v26.13.0 built as a static or shared library | not a replacement: the curated registry cannot host this port (V8 is a Node.js-maintained fork, so the tree is always built here). Listed because the check requires a row for every port |
 
 
-Two rows now read as "older than the registry", and that is the point of those two overlays rather
-than a drift: `simdutf` is the version V8 vendors and is compiled the way V8 needs it (`SIMDUTF_ATOMIC_REF`,
-C++20), and `openssl` is the version this repository pinned deliberately - it is *ahead* of the
-OpenSSL Node.js itself bundles (3.5.9), and refreshing that overlay to the registry's 3.6.5 is the
-separate change tracked in issue #29, because the overlay is a whole portfile derived from a
-baseline rather than a version line.
+One row now reads as "older than the registry", and that is the point of that overlay rather than a
+drift: `simdutf` is the version V8 vendors and is compiled the way V8 needs it (`SIMDUTF_ATOMIC_REF`,
+C++20). `openssl` is at the registry's 3.6.5 again - the overlay exists for the compiler, not for the
+version - and it is a whole portfile derived from a baseline, so refreshing it (#29) means re-deriving
+the two deliberate edits rather than editing a version line.
 
 ## Why keep these overlays instead of waiting for the registry
 

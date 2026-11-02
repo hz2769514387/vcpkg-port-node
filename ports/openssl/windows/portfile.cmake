@@ -73,6 +73,14 @@ if(NOT _openssl_clang_cl)
 endif()
 message(STATUS "openssl overlay: building the C code with ${_openssl_clang_cl}")
 set(VCPKG_DETECTED_CMAKE_C_COMPILER "${_openssl_clang_cl}")
+#
+# Only the path is changed, not VCPKG_DETECTED_CMAKE_C_COMPILER_ID, and that is deliberate.
+# The baseline keys three decisions off the id - the arm64 OpenSSL target, PDB generation,
+# and a --target flag - and every one of them was in the MSVC position when ADR 0009
+# measured this configuration (250 arm64 crashes with cl.exe-built OpenSSL, none with
+# clang-cl-built). Setting the id to Clang would switch arm64 to VC-CLANG-WIN64-CLANGASM-ARM,
+# i.e. change how the assembly is assembled as well, which is a new configuration nobody has
+# measured. A refresh of this overlay keeps the measured one; changing it is its own issue.
 
 if(VCPKG_TARGET_ARCHITECTURE STREQUAL "x86")
     set(OPENSSL_ARCH VC-WIN32)
@@ -88,6 +96,12 @@ elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64")
     else()
         set(OPENSSL_ARCH VC-WIN64-CLANGASM-ARM)
     endif()
+elseif(VCPKG_TARGET_ARCHITECTURE STREQUAL "arm64ec")
+    # OpenSSL has no ARM64EC target (https://github.com/openssl/openssl/issues/16482).
+    # The toolchain flags (/arm64EC, /machine:ARM64EC) make this ARM64 target build ARM64EC code.
+    # OpenSSL's ARM64 assembly uses registers that the ARM64EC ABI reserves, so it must stay disabled.
+    set(OPENSSL_ARCH VC-WIN64-ARM)
+    vcpkg_list(APPEND CONFIGURE_OPTIONS no-asm)
 else()
     message(FATAL_ERROR "Unsupported target architecture: ${VCPKG_TARGET_ARCHITECTURE}")
 endif()
@@ -146,7 +160,7 @@ vcpkg_build_nmake(
     PREFER_JOM
     CL_LANGUAGE NONE
     PRERUN_SHELL_RELEASE "${PERL}" Configure
-        ${CONFIGURE_OPTIONS} 
+        ${CONFIGURE_OPTIONS}
         ${OPENSSL_ARCH}
         "AS=${as}"
         "CC=${cc}"

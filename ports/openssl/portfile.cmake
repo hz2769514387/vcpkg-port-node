@@ -18,13 +18,14 @@
 # what made the result above about the C compiler rather than about both.
 #
 # Everything below this point is derived from the openssl port of the pinned
-# vcpkg baseline (2026.07.29), so the conventions vcpkg expects - the install
+# vcpkg baseline (2026.10.16), so the conventions vcpkg expects - the install
 # layout, the debug suffixes, the pkg-config files, the exported CMake config -
 # stay exactly what consumers already get. There is exactly one other edit:
 # unix/portfile.cmake sets the executable bit on the configure wrapper at build
 # time, because this repository's git cannot record one (core.fileMode is false)
 # and the wrapper is invoked as `./vcpkg/configure`, directly. Re-diff against
-# the baseline when the pin moves.
+# the baseline when the pin moves - this file was last re-derived at 2026.10.16.
+if(EXISTS "${CURRENT_INSTALLED_DIR}/share/libressl/copyright"
 if(EXISTS "${CURRENT_INSTALLED_DIR}/share/libressl/copyright"
     OR EXISTS "${CURRENT_INSTALLED_DIR}/share/boringssl/copyright")
     message(FATAL_ERROR "Can't build openssl if libressl/boringssl is installed. Please remove libressl/boringssl, and try install openssl again if you need it.")
@@ -38,7 +39,7 @@ vcpkg_from_github(
     OUT_SOURCE_PATH SOURCE_PATH
     REPO openssl/openssl
     REF "openssl-${VERSION}"
-    SHA512 a89c08101fa1d7e3c09b14f4a90d450bcf336a4f6a3e6e4ea990e4deddcd9ce250472f9114438fd134ff4b47fe93dd47232308567088b2b1c0b2eb50e3b56bdf
+    SHA512 40f0b346a9a5cf4cb37f1ecebdc74750c39a95783710061bfac58964883b0831543ecee0aee9f747ea093781b13c58a543b0b935d222519e3cb19648d77a0276
     PATCHES
         cmake-config.patch
         command-line-length.patch
