@@ -137,7 +137,6 @@ file(CHMOD "${SOURCE_PATH}/vcpkg/configure" PERMISSIONS
     GROUP_READ GROUP_EXECUTE
     WORLD_READ WORLD_EXECUTE)
 vcpkg_configure_make(
-vcpkg_configure_make(
     SOURCE_PATH "${SOURCE_PATH}"
     PROJECT_SUBPATH "vcpkg"
     NO_ADDITIONAL_PATHS
