@@ -313,13 +313,22 @@ during the full build:
 
 ### 6.2 Installed artifacts
 
-| Artifact | Path |
-|---|---|
-| `libnode.lib` (Release) | `lib/libnode.lib` (9.7 MB) |
-| `libnode.lib` (Debug) | `debug/lib/libnode.lib` (12 MB) |
-| Headers | `include/node/` (246 `.h` files) |
-| CMake config | `share/unofficial-node/unofficial-node-config.cmake` |
-| CMake version | `share/unofficial-node/unofficial-node-config-version.cmake` |
+What the package holds depends on the linkage, and the difference is total rather than a matter of
+degree - a static install is a set of archives, a shared one is a library and no archives at all.
+That is worth stating because a consumer read a shared install's empty `lib/` as "the Rust crate
+was not built on Linux" (issue #31), and nothing in the package said otherwise.
+
+| | static libnode | shared libnode |
+|---|---|---|
+| `lib/` | 17 archives: `libnode`, `node_base`, the eight `v8_*`, `ncrypto`, `ncrypto_engine`, `nbytes`, `merve`, `uvwasi`, `crdtp`, `node_crates`, plus `clang_rt.builtins-<arch>.lib` on Windows | the library itself - `libnode.dll` in `bin/` with its import library `libnode.dll.lib` in `lib/`; `libnode.so.<module>` or `libnode.<module>.dylib` in `lib/` |
+| `debug/lib/` | the same names, from the Debug configuration (dual triplets only) | the Debug library, when the triplet is dual |
+| `include/node/`, `include/node-v8/` | headers | headers |
+| `share/unofficial-node/` | the exported config | the exported config |
+| what a consumer links | every archive, as the config says | `unofficial::node::node` and nothing else |
+
+`test/cases/install` asserts exactly this: it reads the archive list out of the installed config and
+checks that those files exist, and for a shared install that **no** archive of node's is present.
+It repeats no list of its own, so it cannot agree with a wrong config by accident.
 
 The CMake config declares `unofficial::node::node` and pulls in all shared dependencies
 (zlib, OpenSSL, libuv, llhttp, c-ares, brotli, ada, simdjson, simdutf, ngtcp2, zstd, ICU,
