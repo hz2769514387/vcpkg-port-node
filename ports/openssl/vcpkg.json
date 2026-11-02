@@ -1,6 +1,7 @@
 {
   "name": "openssl",
-  "version": "3.6.3",
+  "version": "3.6.5",
+  "port-version": 2,
   "description": "OpenSSL is an open source project that provides a robust, commercial-grade, and full-featured toolkit for the Transport Layer Security (TLS) and Secure Sockets Layer (SSL) protocols. It is also a general-purpose cryptography library. Why an overlay exists: the library's C code has to be compiled by the same compiler as Node.js. On Windows that is clang-cl (vcbuild.bat forces it for Node.js >= 24), while vcpkg builds ports with cl.exe, and the two differ in what they emit for arm64: with cl.exe-built OpenSSL the arm64 Windows suite crashed in 250 silent TLS cases, and with clang-cl-built OpenSSL - everything else unchanged - it passes completely (issue #22). The overlay therefore points the OpenSSL build at clang-cl. Nothing else about the port changes: same version, same options, same install layout. port-version 2 records that this is the baseline's build with its compiler changed, not a newer upstream release.",
   "homepage": "https://www.openssl.org",
   "license": "Apache-2.0",
@@ -33,6 +34,5 @@
     "weak-ssl-ciphers": {
       "description": "Enable weak-ssl-ciphers"
     }
-  },
-  "port-version": 2
+  }
 }
