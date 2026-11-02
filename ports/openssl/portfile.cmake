@@ -26,7 +26,6 @@
 # and the wrapper is invoked as `./vcpkg/configure`, directly. Re-diff against
 # the baseline when the pin moves - this file was last re-derived at 2026.10.16.
 if(EXISTS "${CURRENT_INSTALLED_DIR}/share/libressl/copyright"
-if(EXISTS "${CURRENT_INSTALLED_DIR}/share/libressl/copyright"
     OR EXISTS "${CURRENT_INSTALLED_DIR}/share/boringssl/copyright")
     message(FATAL_ERROR "Can't build openssl if libressl/boringssl is installed. Please remove libressl/boringssl, and try install openssl again if you need it.")
 endif()
