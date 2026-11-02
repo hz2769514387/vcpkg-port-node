@@ -415,6 +415,75 @@ def check_versions_json(report, root):
             )
 
 
+def check_preset_names(report, root):
+    """A preset is named after the triplet it selects, with one documented suffix at most.
+
+    The name is how a reader knows which install a preset consumes, and the test project grew two
+    spelling schemes before this rule existed. Only two deviations are legitimate: `-msvc`, a
+    `cl.exe` consumer against the same install, and `-debug`, the Debug configuration on a
+    generator that fixes it at configure time.
+    """
+    path = os.path.join(root, "test", "CMakePresets.json")
+    if not os.path.isfile(path):
+        return
+    with open(path, "r", encoding="utf-8") as fh:
+        try:
+            data = json.load(fh)
+        except ValueError as exc:
+            report.error("test/CMakePresets.json", "is not valid JSON: %s" % exc)
+            return
+    suffixes = ("-msvc", "-debug")
+    for preset in data.get("configurePresets") or []:
+        if preset.get("hidden"):
+            continue
+        name = preset.get("name", "")
+        triplet = (preset.get("cacheVariables") or {}).get("VCPKG_TARGET_TRIPLET")
+        if not triplet:
+            report.error(
+                "test/CMakePresets.json",
+                "preset '%s' sets no VCPKG_TARGET_TRIPLET; a preset is named after the triplet "
+                "it installs with, so it has to state one" % name,
+            )
+            continue
+        base = name
+        for suffix in suffixes:
+            if base.endswith(suffix):
+                base = base[: -len(suffix)]
+                break
+        if base != triplet:
+            report.error(
+                "test/CMakePresets.json",
+                "preset '%s' installs '%s'. Name the preset after the triplet, and add at most "
+                "one documented suffix ('-msvc', '-debug') for a deliberate deviation."
+                % (name, triplet),
+            )
+
+
+def check_triplet_role_markers(report, root):
+    """Every triplet this repository carries says, in its first line, that it is a CI cell.
+
+    The files are named exactly like the triplets a consumer may use, and one of them was copied
+    into a product build that then failed at configure time on the CRT (issue #61). A marker is
+    cheap; a directory name that cannot say it is not.
+    """
+    directory = os.path.join(root, "test", "cmake", "triplets")
+    if not os.path.isdir(directory):
+        return
+    for name in sorted(os.listdir(directory)):
+        if not name.endswith(".cmake"):
+            continue
+        path = os.path.join(directory, name)
+        with open(path, "r", encoding="utf-8") as fh:
+            first = fh.readline()
+        if "CI cell" not in first:
+            report.error(
+                "test/cmake/triplets/%s" % name,
+                "the first line has to say what this file is - a CI cell, not a consumer "
+                "recipe. Copying one of these into a product build is the mistake issue #61 "
+                "is about.",
+            )
+
+
 def main(argv=None):
     cwd = os.getcwd()
     root = repo_root(cwd)
@@ -430,6 +499,8 @@ def main(argv=None):
     check_port_usage(report, root, ports)
     check_node_patch_version_in_descriptions(report, root, ports)
     check_versions_json(report, root)
+    check_preset_names(report, root)
+    check_triplet_role_markers(report, root)
 
     for line in report.warnings:
         print(line)
