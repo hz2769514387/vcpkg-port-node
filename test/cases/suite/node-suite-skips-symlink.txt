@@ -7,9 +7,14 @@
 # (developers with Developer Mode enabled, most CI images: fine; a plain local shell: EPERM),
 # so the port cannot fix it and the platform name cannot predict it. Hence the probe.
 #
-# All 28 entries below were measured as EPERM failures on such a machine with the port-built
-# executable (2026-10-16). They are expected to pass wherever symlinks are permitted, and
-# they are re-examined on every Node.js version bump.
+# All 28 original entries were measured as EPERM failures on such a machine with the
+# port-built executable (2026-10-16). They are expected to pass wherever symlinks are
+# permitted, and they are re-examined on every Node.js version bump.
+#
+# The last three were added from issue #32, where they failed with EPERM on a machine whose
+# probe said symlinks were available - the probe was asking Python in %TEMP% rather than node
+# in this tree. They are not re-measured here: the machine that runs this repository has
+# Developer Mode on, so the branch they guard cannot be reproduced on it.
 #
 # Same format as node-suite-skips.txt:  <test name> | <platform> | <reason>
 
@@ -41,3 +46,6 @@ test-fs-symlink-longpath | all | creates symlinks with long target paths
 test-fs-utimes | all | utimes follows symlinks in its fixtures
 test-fs-watch-recursive-symlink | all | watches directories reached through symlinks
 test-vfs-real-provider-symlinks | all | exercises the real filesystem provider with symlinks
+test-esm-symlink-type | all | resolves a symlink to learn the module type
+test-fs-opendir-recursive | all | descends into a directory reached through a symlink
+test-fs-readdir-recursive | all | recursive readdir over a fixture built with symlinks
