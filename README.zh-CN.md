@@ -15,8 +15,9 @@ target_link_libraries(my_app PRIVATE unofficial::node::node)
 ## 这是你要找的吗？
 
 - 把 **Node.js 嵌进 C++ 应用** —— 你要的是一份可链接的库，不是去调 `node.exe`。
+- **两种链路都支持**：静态 libnode 直接链接进你的可执行文件（Windows 上这也是拿到静态 CRT 的方式），
+  或者共享库 `.dll` / `.so` / `.dylib`，由一个宿主进程加载、多个进程共用。
 - 找一个 **vcpkg 的 `node` / libnode port** —— 以 overlay port 形式提供，所有依赖来自同一棵 vcpkg 版本树。
-- 要一份 **共享库形态的 Node.js**（`.dll` / `.so` / `.dylib`），由宿主进程加载，而不是把归档链接进可执行文件。
 - 用 **C++ 宿主通过 N-API 驱动 Node.js**，并且让 Node.js 自己的依赖由 vcpkg 构建，而不是内嵌一份。
 
 以上都不是的话：本仓库不是 Node.js 发行版，也不是可以单独使用的 JavaScript 引擎（V8 在这里随
