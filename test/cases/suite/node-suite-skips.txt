@@ -28,33 +28,36 @@
 # (2026-10-18: 5003 passed, 5 failed) have been cross-checked the way this file's header
 # asks for: upstream's own binary, upstream's own suite, the same GitHub-hosted runners.
 #
-# Run 39201696549 (2026-10-19, official-binary-baseline.yml, the parallel suite on
-# windows-2022 and windows-11-arm, zero crashes on both) fails these on the runner:
-# test-fs-rm, test-fs-mkdir-recursive-eaccess, test-child-process-exec-any-shells-windows
-# and test-snapshot-typescript - and passes everything else.
+# Run 41552041717 (2026-11-03, official-binary-baseline.yml, sequential + parallel, on
+# windows-2022 and windows-11-arm, node-v26.13.0) fails exactly these five on both runners,
+# zero crashes on either: test-child-process-exec-any-shells-windows, test-fs-mkdir-
+# recursive-eaccess, test-fs-rm, test-fs-rmSync-special-char-additional-error and
+# test-snapshot-typescript. That is the same verdict as run 39201696549 gave at the previous
+# pin, and it is what each entry above stands on.
 #
-# Two of the five are gone since, and neither because the runner changed:
+# One of the five is gone, and not because the runner changed:
 #
-#   * test-snapshot-warning was ours by design: Node.js builds the `--trace-warnings`
-#     hint from the executable's own name, so the assertion passed for node.exe and
-#     failed for node_embed.exe. Fixed rather than skipped - the suite now runs through
-#     a copy of the embedder named `node` (cases/embed, the POST_BUILD copy), which is
-#     what upstream's tests assume throughout. Measured 2026-11-03: node_embed prints
-#     "Use `node_embed --trace-warnings ...`" and the copy prints "Use `node ...`", and
-#     the case passes with both.
-#   * test-fs-rmSync-special-char-additional-error failed once (2026-10-18) and was never
-#     reproduced. Re-tested with the port's own binary on 2026-11-03: 3/3 passes. Removed;
-#     if it returns it comes back with that record rather than as a mystery.
+#   * test-snapshot-warning was ours by design - Node.js builds the `--trace-warnings` hint
+#     from the executable's own name, so it passed for node.exe and failed for node_embed.exe.
+#     Fixed rather than skipped: the suite now runs through a POST_BUILD copy of the embedder
+#     named `node` (cases/embed), which is what upstream's tests assume throughout. Measured
+#     2026-11-03: node_embed prints "Use `node_embed --trace-warnings ...`", the copy prints
+#     "Use `node ...`", and the case passes through the copy.
+#   * test-fs-rmSync-special-char-additional-error was removed and put back the same day. It
+#     passes 3/3 with this port's binary on an ordinary machine, which is not the question:
+#     the official binary fails it on both hosted runners, so it belongs in this list. The
+#     local pass is the note that keeps the entry from looking unexplained.
 #
 # Everything here is re-examined when the pinned Node.js version changes, and the
 # cross-check is re-runnable from the Actions tab.
 
-# Both below drive icacls to deny themselves access and then assert EPERM. The official binary fails them on both
-# GitHub-hosted Windows runners (run 39201696549) and they pass on an ordinary
-# machine, which is the runner running the job as an account in the Administrators
-# group - a deny ACE is not the same obstacle for an elevated process.
+# The three below drive icacls to deny themselves access and then assert EPERM. The official
+# binary fails them on both GitHub-hosted Windows runners (runs 39201696549 and 41552041717)
+# and they pass on an ordinary machine, which is the runner running the job as an account in
+# the Administrators group - a deny ACE is not the same obstacle for an elevated process.
 test-fs-rm | windows | icacls /deny does not stop an elevated process, so the expected EPERM never comes
 test-fs-mkdir-recursive-eaccess | windows | same icacls mechanism; the official binary fails it on the runner and passes it locally
+test-fs-rmSync-special-char-additional-error | windows | the official binary fails it on both GitHub-hosted runners (run 41552041717, 2026-11-03) and passes 3/3 on an ordinary machine - the same elevated-account mechanism as the two above
 
 # Exercises whatever shells the machine has - cmd, PowerShell, and any bash on
 # PATH - by symlinking each into a directory whose name contains spaces. The
