@@ -57,3 +57,20 @@ set_tests_properties(embed.workers PROPERTIES TIMEOUT 180 LABELS "smoke")
 # process.execPath, which only resolves if the embedding sets it.
 add_test(NAME embed.spawn_child COMMAND node_embedder "${CMAKE_CURRENT_SOURCE_DIR}/spawn_child.js")
 set_tests_properties(embed.spawn_child PROPERTIES TIMEOUT 180 LABELS "smoke")
+
+# --- the name the official suite expects ---------------------------------------
+# Node.js builds several diagnostics from the executable's own name - the
+# `--trace-warnings` hint says "Use `node --trace-warnings ...`", and it says
+# "Use `node_embed --trace-warnings ...`" when the binary is called node_embed.
+# Upstream's suite asserts that literal text (parallel/test-snapshot-warning), so a
+# correctly built embedder fails it for no other reason than its file name.
+#
+# The suite runs against a copy called `node`, which is what upstream's own tests
+# assume throughout. The copy sits next to the embedder, so a shared build finds
+# libnode exactly as the embedder does, and cases/embed keeps testing the artifact
+# under the name a consumer would actually ship.
+add_custom_command(TARGET node_embedder POST_BUILD
+  COMMAND "${CMAKE_COMMAND}" -E copy_if_different
+          "$<TARGET_FILE:node_embedder>"
+          "$<TARGET_FILE_DIR:node_embedder>/node${CMAKE_EXECUTABLE_SUFFIX}"
+  COMMENT "Suite shell: copying the embedder to node${CMAKE_EXECUTABLE_SUFFIX}")

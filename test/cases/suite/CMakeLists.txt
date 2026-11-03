@@ -78,8 +78,12 @@ if(UNIX)
 endif()
 
 if(TARGET node_embedder)
-  set(_suite_shell "$<TARGET_FILE:node_embedder>")
-  set(_suite_shell_kind "consumer embedding executable")
+  # The copy made by cases/embed: upstream's suite is written against a binary called `node`, and
+  # Node.js builds part of its diagnostics from the executable's name (the --trace-warnings hint,
+  # which parallel/test-snapshot-warning asserts literally). Running the suite through the copy is
+  # what makes "the same behaviour as upstream" a meaningful claim.
+  set(_suite_shell "$<TARGET_FILE_DIR:node_embedder>/node${CMAKE_EXECUTABLE_SUFFIX}")
+  set(_suite_shell_kind "consumer embedding executable, copied to node")
 elseif(DEFINED node_EXECUTABLE AND EXISTS "${node_EXECUTABLE}")
   set(_suite_shell "${node_EXECUTABLE}")
   set(_suite_shell_kind "port tools feature")
