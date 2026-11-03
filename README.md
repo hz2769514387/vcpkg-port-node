@@ -14,8 +14,9 @@ target_link_libraries(my_app PRIVATE unofficial::node::node)
 ## Is this what you are looking for?
 
 - Embedding **Node.js in a C++ application** - you want a library to link, not a `node.exe` to shell out to.
+- **Either linkage**: a static libnode linked into your executable - which is also how you get the static
+  CRT on Windows - or a shared `.dll` / `.so` / `.dylib` that one host process loads and others share.
 - A **vcpkg port for `node` / libnode** - overlay ports, with every dependency resolved from one vcpkg version tree.
-- A **shared Node.js library** (`.dll` / `.so` / `.dylib`) that a host process loads, rather than an archive linked into the executable.
 - A **C++ host driving Node.js over N-API**, with Node.js's own dependencies built by vcpkg instead of vendored inside it.
 
 If none of those is you: this is not a Node.js distribution, not a bare JavaScript engine (V8 ships as
