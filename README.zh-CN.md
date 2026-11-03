@@ -89,7 +89,6 @@ CMake 消费者无论哪种方式都会继承到。
 | macOS 的部署目标是依赖图的，不是 Node.js 的 13.5 | Node.js 把 13.5 写死且没有开关；其余依赖跟随 triplet | 需要 13.5 下限时在 triplet 里设 `VCPKG_OSX_DEPLOYMENT_TARGET 13.5` |
 | Windows 需要 Visual Studio 2022 或更新 | Node.js 24 起要求 clang-cl | 更旧的版本未构建、未测量 |
 | Debug 消费者需要 dual triplet | MSVC ABI：Debug 消费者链接 Debug 库，而 release-only triplet 不安装任何 Debug 库 | 调试自己代码用 `RelWithDebInfo` —— 它就是 release ABI |
-| Windows x64、Debug：`Intl.DateTimeFormat` 在 ICU 内部中止 | UCRT 调试堆拒绝了 cl 编 ICU / clang-cl 编 Node 组合中的一个缓冲区 | 日期格式化用 `RelWithDebInfo`；`test/cases/externalization` 只跳过这一条断言 |
 | Windows 上指定编译器要用工具集，不要用 `CMAKE_CXX_COMPILER` | Visual Studio 生成器从工具集推导编译器，静默忽略该变量 | 在 preset 里写 `toolset: {value: ClangCL, strategy: set}`；Linux 与 macOS 的编译器走 `CMAKE_{C,CXX}_COMPILER` |
 | 共享 libnode 必须在运行时可被找到，且不要再链其它东西 | DLL/`.so`/`.dylib` 已包含全部外接依赖 | 把它拷到可执行文件旁，或设 `BUILD_RPATH`；不要二次链接那些依赖 |
 | 只支持 CMake 集成 | 交付物是 gyp 构建出的一组静态归档，不是单一可描述的库 | 非 CMake 消费者按导出配置描述的链接行手工链接 |
