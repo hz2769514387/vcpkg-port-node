@@ -40,6 +40,14 @@ jobs:
         # the sentences beside them are not - a tool cannot write "why this fork matters".
         run: python3 tools/overlay_table.py --check
 
+      - name: No overlay is behind both the pin and the Node.js tree
+        # The three numbers per overlay - its own, the registry's at the pin, and the one in the
+        # Node.js source tree - live in docs/overlay-versions.json, because lint has no vcpkg
+        # checkout and downloading a Node.js tarball here is what issue #77 rules out.
+        # Being behind the registry alone is deliberate (simdutf is V8's version); behind both is
+        # the defect this step exists for.
+        run: python3 tools/overlay_report.py --check
+
       - name: No credentials in the history
         # The same scanner the pre-commit hook runs on staged lines, here over
         # every blob reachable from any ref. A hook is opt-in per clone, so
