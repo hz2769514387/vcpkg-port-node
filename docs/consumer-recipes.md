@@ -85,9 +85,6 @@ consumer cannot link a Release library at all - the exported config says so at c
 release ABI - `/MT` or `/MD`, `NDEBUG`, `_ITERATOR_DEBUG_LEVEL=0` - with full debug information,
 it works against any install, and it does not pay for a second build of Node.js.
 
-One known limit applies only to a Debug consumer: on Windows x64, `Intl.DateTimeFormat` aborts
-inside ICU's destructor (#27, README *Known limits*). Windows arm64 and Release are fine.
-
 ## 4. Cross build: `x64-osx` from an arm64 Mac
 
 ```sh
@@ -115,6 +112,5 @@ no Windows or Linux cross leg: neither has a supported story in this repository'
 
 The README's *Known limits* is the authoritative list, and it is short: the macOS deployment target
 comes from the dependency graph rather than from Node.js, Visual Studio 2022 or newer is required,
-the Windows x64 Debug ICU date crash above, and the fact that consuming this repository substitutes
-its build for nineteen registry ports across the whole graph. Consuming it is also building it: the
-first configure costs tens of minutes.
+and consuming this repository substitutes its build for twenty registry ports across the whole
+graph. Consuming it is also building it: the first configure costs tens of minutes.

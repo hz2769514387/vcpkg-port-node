@@ -267,7 +267,8 @@ of an install tree deserves the explanation instead of a suspicion that the tree
 
 | Disposition | Dependencies |
 |---|---|
-| Use the vcpkg port as-is | icu (78.3), c-ares, zstd, nghttp3 (link sfparse alongside), ngtcp2 |
+| Use the vcpkg port as-is | c-ares, zstd, nghttp3 (link sfparse alongside), ngtcp2 |
+| Overlay: same version and source, different build | icu (78.3, compiled by clang-cl - ADR 0011), openssl (3.6.5, C code compiled by clang-cl - ADR 0009) |
 | Overlay: pin the version Node.js ships, add its patches | libuv, brotli, nghttp2, llhttp, simdjson, ada-url (+ simdutf feature), hdr-histogram, libffi, LIEF, perfetto, sqlite3 |
 | Overlay: replace the upstream source entirely | zlib → Chromium fork (issue #3) |
 | Externalize from V8's tree (the must-unify four) | abseil, highway (issue #1), simdutf (issue #2), zlib (issue #3) |

@@ -1,0 +1,23 @@
+--- a/source/common/locid.cpp
++++ b/source/common/locid.cpp
+@@ -33,4 +33,5 @@
+ 
+ #include <cstddef>
++#include <cassert>  // clang: offsetof on a non-standard-layout type is not a constant expression
+ #include <optional>
+ #include <string_view>
+@@ -270,6 +271,14 @@
+     // need to be copied to their new locations, which is safe to do because the
+     // new locations come before the old locations in memory and don't overlap.
++#ifdef __clang__
++    assert(offsetof(Nest, region) <= offsetof(Heap, script));
++#else
+     static_assert(offsetof(Nest, region) <= offsetof(Heap, script));
++#endif
++#ifdef __clang__
++    assert(offsetof(Nest, variantBegin) <= offsetof(Heap, region));
++#else
+     static_assert(offsetof(Nest, variantBegin) <= offsetof(Heap, region));
++#endif
+     U_ASSERT(this == reinterpret_cast<Nest*>(&heap));
+     copyToArray<&Nest::script>(heap.script, this);
