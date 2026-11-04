@@ -254,6 +254,16 @@ a byte-identical set of 254 failing tests. The assembler was already clang in th
 holding it constant is also what makes the result above about the C compiler alone. See
 [ADR 0009](decisions/0009-openssl-is-built-with-clang-cl.md).
 
+### 4.8 ICU follows the same rule
+
+The same argument applies to ICU, with a different symptom: a `cl.exe`-built ICU linked into a
+clang-cl **Debug** process aborts the first time a date is formatted (`_CrtIsValidHeapPointer`,
+inside `DateFormatSymbols`), and the reproducer links ICU alone. `ports/icu` therefore builds
+ICU with clang-cl on every Windows triplet — the compiler is chosen in the portfile, so a
+consumer keeps a stock triplet. The mechanism (CC/CXX and INCLUDE/LIB through the environment,
+`--disable-extras`, and why flags were not the way) is in
+[ADR 0011](decisions/0011-icu-is-built-with-clang-cl.md).
+
 ## 5. Reproducing these measurements
 
 ```sh
