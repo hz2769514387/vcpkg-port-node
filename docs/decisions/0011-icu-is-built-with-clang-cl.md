@@ -77,16 +77,16 @@ The measurement and the work item live in issue #34, which stays open for that d
 
 - A Windows Debug consumer can format a date on every triplet, including the stock ones, which
   is what lets `test/cases/externalization` assert it again instead of skipping it (#27).
-- ICU is built by the same compiler as Node.js and the consumer. On Windows the only library
-  still compiled by cl.exe in the default graph is nothing in the subgraph this port
-  externalizes except what a consumer adds itself.
+- The two libraries whose `cl.exe` build was *measured* to change behaviour - ICU and OpenSSL -
+  are both compiled by clang-cl now. The rest of the externalized graph is still built by cl.exe
+  under a stock triplet; that is the subject of issue #34 and is not claimed here.
 - The ICU build now depends on the LLVM that Visual Studio ships (or a standalone LLVM):
   a Windows machine without the clang-cl component cannot build this port, where it could
   before. Visual Studio 2022 with the C++ Clang tools is already a documented requirement for
   Node.js itself, so this removes no working configuration.
-- On a stock triplet ICU is built twice in a way that differs from the registry port's build
-  (different compiler), so its binary cache entry is distinct from the registry's. That is the
-  point of the overlay and is disclosed in `docs/overlay-replacements.md`.
+- On a stock triplet ICU is built in a way that differs from the registry port's build (different
+  compiler), so its binary cache entry is distinct from the registry's. That is the point of the
+  overlay and is disclosed in `docs/overlay-replacements.md`.
 - `--disable-extras` also drops ICU's `uconv`-style utilities from the installed package, as
   the registry port's Emscripten and UWP branches already do.
 
