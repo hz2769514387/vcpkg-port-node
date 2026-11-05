@@ -10,6 +10,13 @@ The versions on the right are what the registry ships at the pinned baseline
 (`vcpkg 2026.10.16`, ADR 0003). "Graph gets" is what every consumer in the same manifest
 receives.
 
+Both version columns are checked, by two tools that own one column each: `tools/overlay_table.py`
+compares "graph gets" with the port's own manifest, and `tools/overlay_report.py` compares
+"registry" with `docs/overlay-versions.json` - the recorded reading of a vcpkg checkout at the
+pin - and reports whether each overlay is ahead of, level with, or behind the version Node.js
+itself vendors. The prose beside them is written by a person; a tool cannot say why a fork
+matters.
+
 | port | registry | graph gets | what changes for you |
 |---|---|---|---|
 | `libuv` | 1.52.1 | 1.52.1 plus Node.js's four backports (`unix/fs.c`, `uv-common.c`, `win/fs-event.c`, `win/tcp.c`) | same version, different source: the registry build does not carry Node.js's fixes. A consumer that links libuv gets Node.js's variant, not upstream 1.52.1 |

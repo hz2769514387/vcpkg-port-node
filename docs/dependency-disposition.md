@@ -68,7 +68,13 @@ registry's `expected-lite`). LIEF's own dependency set is dispositioned in §3.1
 
 ## 3. Version baseline
 
-Versions measured from the Node.js v26.12.1 source tree. "vcpkg" is release 2026.10.16.
+Versions read from the Node.js v26.13.0 source tree. "vcpkg" is release 2026.10.16.
+
+The machine-readable copy of these two columns - Node.js's version and vcpkg's, per overlay -
+is [`overlay-versions.json`](overlay-versions.json), and `tools/overlay_report.py --check`
+holds it to this tree and to the pin: it fails when an overlay is behind **both** (issue #77).
+Re-read the vendored column at every Node.js bump, with the header named in each row's
+`vendored_source`.
 
 The *byte-level* comparisons quoted further down were measured against the 2026.07.29 / 26.12.0
 pair. For the 2026.10.16 / 26.12.1 pair the versions were re-read and the three dependencies whose

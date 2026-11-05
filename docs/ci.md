@@ -24,7 +24,7 @@ The three build workflows trigger only when a path that can change what is built
 `ports/**`, `test/**`, `tools/**`, `.github/**`, `versions.json`, `versions/**`. A change to
 documentation alone - `docs/**`, the repository's own markdown - runs **Lint only**, which is the tier
 that can fail on it (`check_repo.py`, `version_tree.py --check`, `check_secrets.py`,
-`check_workflows.py`, `overlay_table.py --check`).
+`check_workflows.py`, `overlay_table.py --check`, `overlay_report.py --check`).
 
 That is [ADR 0010](decisions/0010-build-cells-run-when-a-change-can-affect-the-build.md), and it
 changes what "green" means for such a commit: Lint green, and no matrix result *because there was no

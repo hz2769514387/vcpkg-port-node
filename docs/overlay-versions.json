@@ -1,0 +1,117 @@
+{
+  "vcpkg": {
+    "release": "2026.10.16",
+    "commit": "9eec002df1cd109f8f104cd966a763daf9751489"
+  },
+  "node": {
+    "version": "26.13.0",
+    "vendored_read_at": "the deps/ tree of node-v26.13.0.tar.xz (sha512 in versions.json)"
+  },
+  "ports": {
+    "ada-url": {
+      "registry": "4.0.0",
+      "vendored": "4.0.0",
+      "vendored_source": "deps/ada/ada.h (ADA_VERSION)"
+    },
+    "brotli": {
+      "registry": "1.2.0",
+      "vendored": "1.2.0",
+      "vendored_source": "deps/brotli/c/common/version.h"
+    },
+    "c-ares": {
+      "registry": "1.34.8",
+      "vendored": "1.34.9",
+      "vendored_source": "deps/cares/include/ares_version.h"
+    },
+    "frozen": {
+      "registry": "1.2.0",
+      "vendored": "1.1.1",
+      "vendored_source": "deps/LIEF/third-party/frozen/include/frozen/bits/version.h"
+    },
+    "hdr-histogram": {
+      "registry": "0.11.10",
+      "vendored": null,
+      "vendored_note": "deps/histogram carries no version macro; the number came from the repository's own reading and is not re-checked here"
+    },
+    "icu": {
+      "registry": "78.3",
+      "vendored": "78.3",
+      "vendored_source": "deps/icu-small/source/common/unicode/uvernum.h"
+    },
+    "libffi": {
+      "registry": "3.8.0",
+      "vendored": "3.8.0",
+      "vendored_source": "deps/libffi/configure.ac (AC_INIT)"
+    },
+    "libuv": {
+      "registry": "1.52.1",
+      "vendored": "1.52.1",
+      "vendored_source": "deps/uv/include/uv/version.h"
+    },
+    "lief": {
+      "registry": "0.17.6",
+      "vendored": "1.0.0",
+      "vendored_source": "deps/LIEF/include/LIEF/version.h (LIEF_VERSION)"
+    },
+    "llhttp": {
+      "registry": "9.3.1",
+      "vendored": "9.4.3",
+      "vendored_source": "deps/llhttp/include/llhttp.h"
+    },
+    "mbedtls": {
+      "registry": "3.6.5",
+      "vendored": "4.0.0",
+      "vendored_source": "deps/LIEF/third-party/mbedtls/include/mbedtls/build_info.h"
+    },
+    "nghttp2": {
+      "registry": "1.70.0",
+      "vendored": "1.70.0",
+      "vendored_source": "deps/nghttp2/lib/includes/nghttp2/nghttp2ver.h"
+    },
+    "node": {
+      "registry": null,
+      "vendored": "26.13.0",
+      "vendored_source": "src/node_version.h"
+    },
+    "openssl": {
+      "registry": "3.6.5",
+      "vendored": "3.5.9",
+      "vendored_source": "deps/openssl/openssl/include/openssl/opensslv.h"
+    },
+    "perfetto": {
+      "registry": "53.0",
+      "vendored": "58.2",
+      "vendored_source": "deps/perfetto/VERSION"
+    },
+    "simdjson": {
+      "registry": "5.0.2",
+      "vendored": "5.0.3",
+      "vendored_source": "deps/simdjson/simdjson.h (SIMDJSON_VERSION)"
+    },
+    "simdutf": {
+      "registry": "9.1.1",
+      "vendored": "7.7.0",
+      "vendored_source": "deps/v8/third_party/simdutf/simdutf.h (SIMDUTF_VERSION)"
+    },
+    "sqlite3": {
+      "registry": "3.53.4",
+      "vendored": "3.54.0",
+      "vendored_source": "deps/sqlite/sqlite3.h (SQLITE_VERSION)"
+    },
+    "tcb-span": {
+      "registry": "2022-06-15",
+      "vendored": null,
+      "vendored_note": "header-only and pinned by commit, with no version string to read"
+    },
+    "utfcpp": {
+      "registry": "4.2.1",
+      "vendored": null,
+      "vendored_note": "header-only; the copy Node.js ships is LIEF's third-party one and carries no version macro"
+    },
+    "zlib": {
+      "registry": "1.3.2",
+      "vendored": "1.3.2.1-motley",
+      "vendored_source": "deps/zlib/zlib.h (ZLIB_VERSION)"
+    }
+  }
+}
