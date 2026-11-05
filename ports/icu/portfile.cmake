@@ -100,6 +100,13 @@ if(VCPKG_TARGET_IS_WINDOWS AND NOT VCPKG_TARGET_IS_MINGW AND NOT VCPKG_TARGET_IS
 
     if(TARGET_TRIPLET MATCHES "clang")
         list(APPEND CONFIGURE_OPTIONS --disable-extras)
+        # ICU's own Windows platform file (mh-msys-msvc) writes lib.exe's spelling into every
+        # Makefile: AR_OUTOPT = -OUT:, and Makefile.inc starts ARFLAGS with "cr". ar-lib
+        # translates both for lib.exe, but a clang-cl triplet archives with llvm-ar, which takes
+        # GNU ar's options: "-OUT:icudt.lib" makes it print its help and exit 0 without writing
+        # the archive (measured, issue #34). These are ICU's variables, not vcpkg-make's, so the
+        # override belongs here and only in this branch.
+        list(APPEND BUILD_OPTIONS "AR_OUTOPT=" "ARFLAGS=cr")
         message(STATUS "icu overlay: clang-cl triplet, INCLUDE/LIB carried over from the toolchain")
     elseif(NOT "tools" IN_LIST FEATURES)
         list(APPEND CONFIGURE_OPTIONS --disable-extras)

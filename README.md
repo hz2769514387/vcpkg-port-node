@@ -87,7 +87,7 @@ is not a limit: it lives in the [issues](https://github.com/hz2769514387/vcpkg-p
 | Limit | Why | What to do |
 |---|---|---|
 | Consuming it builds Node.js from source - the first configure costs tens of minutes, and nothing is shipped prebuilt | V8 is a Node.js-maintained fork with no prebuilt channel, and the curated registry cannot host an overlay | Plan for the build: `cargo`, a Python 3, and (Windows) the clang-cl component of Visual Studio 2022. A cross build also needs the Rust std for the target architecture (`rustup target add ...`) |
-| Overlaying replaces **20 registry ports** for the whole graph | `overlay-ports` shadows them everywhere; the zlib fork alone has 248 dependent ports | Read [docs/overlay-replacements.md](docs/overlay-replacements.md) first - the `mbedtls` row is a breaking API change (4.0 vs 3.6) |
+| Overlaying replaces **21 registry ports** for the whole graph | `overlay-ports` shadows them everywhere; the zlib fork alone has 248 dependent ports | Read [docs/overlay-replacements.md](docs/overlay-replacements.md) first - the `mbedtls` row is a breaking API change (4.0 vs 3.6) |
 | On macOS the deployment target is the graph's, not Node.js's 13.5 | Node.js pins 13.5 with no knob; every dependency follows the triplet | Set `VCPKG_OSX_DEPLOYMENT_TARGET 13.5` in the triplet if you need that floor |
 | Windows needs Visual Studio 2022 or newer | Node.js 24 and later require clang-cl | Nothing older has been built or measured |
 | A Debug consumer needs a dual triplet | MSVC ABI: a Debug consumer links a Debug library, and a release-only triplet installs none | Use `RelWithDebInfo` when the reason for Debug is debugging your own code - it is the release ABI |
