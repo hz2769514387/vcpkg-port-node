@@ -168,11 +168,17 @@ Node.js recommends `/MD`; `/MT` is equally supported and equally verified, and t
 `*-windows-static` presets keep it because that is what this repository's Windows legs have
 always built.
 
+Each of the four Windows static cells also has a clang-cl variant whose preset and triplet share
+one name (`x64-windows-static-clang-release`, `arm64-windows-static-clang-release`,
+`x64-windows-static-md-clang-release`, `arm64-windows-static-md-clang-release`). There the
+dependency graph is built by clang-cl as well; they are CI cells rather than recommendations
+(ADR 0013).
+
 ### `test/cmake/triplets/` holds CI cells, not consumer recipes
 
-Six of the triplets above are release-only variants that vcpkg does not ship, so this directory
+Ten of the triplets above are release-only variants that vcpkg does not ship, so this directory
 carries them. Each is a stock triplet plus `set(VCPKG_BUILD_TYPE release)`, added because a dual
-triplet builds Node.js twice and the shared legs do not fit in GitHub's six-hour job:
+triplet builds Node.js twice and the slow legs do not fit in GitHub's six-hour job:
 
 | file | registry has the same name? |
 |---|---|
@@ -182,12 +188,20 @@ triplet builds Node.js twice and the shared legs do not fit in GitHub's six-hour
 | `arm64-linux-dynamic-release` | no |
 | `x64-osx-dynamic-release` | no |
 | `arm64-osx-dynamic-release` | no |
+| `x64-windows-static-clang-release` | no |
+| `arm64-windows-static-clang-release` | no |
+| `x64-windows-static-md-clang-release` | no |
+| `arm64-windows-static-md-clang-release` | no |
 
-**Do not copy one into a project.** They exist to fit a job limit, the Windows ones use the
-dynamic CRT, and a `/MT` consumer's install rejects that combination at configure time. A consumer
-needs no triplet file for the ordinary cases - the static/`/MT` single-executable build, the shared
-library, Debug, and the `x64-osx` cross build all resolve to stock triplets. `docs/consumer-recipes.md`
-is where those are written up (issue #61).
+The four `*-clang-*` files are the other dimension (ADR 0013): the same static and `/MD` cells, with
+every dependency built by clang-cl as well. They chainload
+`test/cmake/toolchains/clang-cl.cmake`, which is the part a consumer copies and is not a CI cell.
+
+**Do not copy a triplet into a project.** They exist to fit a job limit, the shared and `/MD` ones
+use the dynamic CRT, and a `/MT` consumer's install rejects that combination at configure time. A
+consumer needs no triplet file for the ordinary cases - the static/`/MT` single-executable build,
+the shared library, Debug, and the `x64-osx` cross build all resolve to stock triplets.
+`docs/consumer-recipes.md` is where those are written up (issue #61).
 
 On Windows the presets name no generator, so CMake uses the newest Visual Studio installed: what
 the port needs is Visual Studio 2022 or newer, and that is written down under *Known limits* in
