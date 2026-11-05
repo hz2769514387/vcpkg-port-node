@@ -108,6 +108,11 @@
       "vendored": null,
       "vendored_note": "header-only; the copy Node.js ships is LIEF's third-party one and carries no version macro"
     },
+    "vcpkg-make": {
+      "registry": "2026-07-09",
+      "vendored": null,
+      "vendored_note": "vcpkg's helper port for autotools builds; Node.js vendors no comparable toolchain script, so there is no vendored copy to compare"
+    },
     "zlib": {
       "registry": "1.3.2",
       "vendored": "1.3.2.1-motley",

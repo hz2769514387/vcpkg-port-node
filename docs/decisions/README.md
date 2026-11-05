@@ -17,3 +17,4 @@ a change of mind gets a new ADR that supersedes the old one, so the history stay
 | [0009](0009-openssl-is-built-with-clang-cl.md) | OpenSSL is compiled with clang-cl, the compiler Node.js requires | Accepted | 2026-10-19 |
 | [0010](0010-build-cells-run-when-a-change-can-affect-the-build.md) | The build cells run only when a change can affect what is built | Accepted | 2026-10-28 |
 | [0011](0011-icu-is-built-with-clang-cl.md) | ICU is compiled with clang-cl, so a clang-cl Debug process can format a date | Accepted | 2026-11-04 |
+| [0012](0012-vcpkg-make-supports-clang-cl.md) | The make flow drives a clang-cl triplet, through an overlay of `vcpkg-make` | Accepted | 2026-11-04 |
