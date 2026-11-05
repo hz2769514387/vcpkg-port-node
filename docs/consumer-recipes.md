@@ -126,7 +126,19 @@ set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "<a toolchain that selects clang-cl>")
 set(VCPKG_LOAD_VCVARS_ENV ON)
 ```
 
-`VCPKG_LOAD_VCVARS_ENV ON` is the line that matters. vcpkg loads vcvars for its own MSVC
+That toolchain has to do two things, and the second one is easy to miss:
+
+1. select the compiler - `set(CMAKE_C_COMPILER/CMAKE_CXX_COMPILER .../clang-cl.exe)` plus the
+   target flag (`-m64`, `--target=arm64-pc-windows-msvc`, ...);
+2. include vcpkg's own platform file, `${VCPKG_ROOT}/scripts/toolchains/windows.cmake`, which
+   writes `/MT` or `/MD` into `CMAKE_C_FLAGS_*` and sets `CMAKE_SYSTEM_NAME` and the processor.
+   Without it every CMake-based dependency falls back to clang-cl's default (`/MD`), and a static
+   triplet then cannot link: `simdutf.lib` and `libuv.lib` came back `MD_DynamicRelease` against
+   node's `/MT` host tools (`LNK2038`, `LNK2019`) - measured. Inside the chainloaded file,
+   `CMAKE_PARENT_LIST_FILE` is the vcpkg checkout's `scripts/buildsystems/vcpkg.cmake`, which is
+   how the path is found in a try-compile too (`CMAKE_TOOLCHAIN_FILE` is empty there).
+
+`VCPKG_LOAD_VCVARS_ENV ON` is the other line that matters. vcpkg loads vcvars for its own MSVC
 triplets and skips it for anything else, so without it the make-based ports in the graph start
 with no `INCLUDE` and no `LIB` and the first try-compile dies on `kernel32.lib` (measured; the
 README's known limits records it). With it, the environment, the linker and the SDK's `rc.exe`
