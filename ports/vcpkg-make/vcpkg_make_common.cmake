@@ -119,7 +119,8 @@ function(z_vcpkg_make_prepare_compile_flags)
 
     z_vcpkg_unparsed_args(FATAL_ERROR)
 
-    z_vcpkg_make_get_cmake_vars()
+    # The get-vars file is already included in the caller's scope
+    # (z_vcpkg_make_prepare_flags), which is where the compiler id comes from.
     z_vcpkg_make_is_clang_cl(is_clang_cl)
 
     if(NOT DEFINED arg_LANGUAGES)

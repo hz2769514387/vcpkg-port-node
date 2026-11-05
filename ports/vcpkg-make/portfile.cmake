@@ -1,9 +1,9 @@
 # The registry's vcpkg-make 2026-07-09#1, copied from the vcpkg 2026.10.16 baseline, with the
 # clang-cl fixes recorded in docs/decisions/0012-vcpkg-make-supports-clang-cl.md. This port's
 # whole content is the CMake helpers in this directory, so a copy of them *is* the port; only
-# vcpkg_make_common.cmake and vcpkg_make.cmake carry edits. The two wrapper files are named one
-# by one instead of copying their directory, because tools/check_repo.py requires every path a
-# portfile references to be a file - the effect is the same.
+# vcpkg_make_common.cmake carries an edit. The two wrapper files are named one by one instead of
+# copying their directory, because tools/check_repo.py requires every path a portfile references
+# to be a file - the effect is the same.
 set(VCPKG_POLICY_CMAKE_HELPER_PORT enabled)
 
 set(automake_version 1.17)

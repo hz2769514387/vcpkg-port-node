@@ -249,31 +249,6 @@ function(z_vcpkg_make_prepare_env config)
         ""
     )
     z_vcpkg_unparsed_args(FATAL_ERROR)
-
-    # clang-cl: vcpkg loads vcvars for its own MSVC triplets and skips it for a chainloaded
-    # clang-cl one, so INCLUDE, LIB and the MSVC/SDK bin directories are missing in the process
-    # that starts the shell - libffi's and ICU's configure died on their first try-compile
-    # (LNK1104), and libtool found neither link.exe nor a .lib. The triplet's toolchain assembles
-    # that environment for the get-vars probe, the probe records it, and this puts it back for
-    # the shell. An environment variable arrives whole, spaces included; a flag carrying the same
-    # paths is re-tokenized by the msys shell. Nothing changes for a cl.exe triplet (vcvars
-    # already set all three) or for a Unix one.
-    z_vcpkg_make_get_cmake_vars()
-    z_vcpkg_make_is_clang_cl(is_clang_cl)
-    if(is_clang_cl)
-        if(VCPKG_DETECTED_ENV_INCLUDE)
-            set(ENV{INCLUDE} "${VCPKG_DETECTED_ENV_INCLUDE}")
-        endif()
-        if(VCPKG_DETECTED_ENV_LIB)
-            set(ENV{LIB} "${VCPKG_DETECTED_ENV_LIB}")
-        endif()
-        if(VCPKG_DETECTED_ENV_PATH)
-            # Appended, not substituted: the msys shell and the tool directories the make flow
-            # put on PATH have to stay in front of it.
-            set(ENV{PATH} "$ENV{PATH};${VCPKG_DETECTED_ENV_PATH}")
-        endif()
-    endif()
-
     # Used by CL
     vcpkg_host_path_list(PREPEND ENV{INCLUDE} "${CURRENT_INSTALLED_DIR}/include")
     # Used by GCC

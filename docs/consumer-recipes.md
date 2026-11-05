@@ -1,12 +1,13 @@
 # Consumer recipes
 
-Four shapes a consumer actually builds, each with the triplet, the preset and the two or three
-lines of CMake that make it work. Every one of them resolves to a triplet that ships with vcpkg:
-this repository's own `test/cmake/triplets/` are CI cells, not recipes, and copying one is how a
-downstream consumer met a CRT mismatch at configure time (issue #61).
+Five shapes a consumer actually builds, each with the triplet, the preset and the two or three
+lines of CMake that make it work. Four of them resolve to a triplet that ships with vcpkg; the
+clang-cl one needs a triplet you supply, because vcpkg has none for clang-cl. This repository's
+own `test/cmake/triplets/` are CI cells, not recipes, and copying one is how a downstream consumer
+met a CRT mismatch at configure time (issue #61).
 
-Everything here is exercised by `test/` on every push, on both architectures of all three
-platforms.
+Everything here except §6 is exercised by `test/` on every push, on both architectures of all
+three platforms; §6 becomes a CI cell in the change that closes issue #34.
 
 ## 0. The three rules a preset cannot state
 
@@ -98,8 +99,9 @@ no Windows or Linux cross leg: neither has a supported story in this repository'
 
 ## 5. What you do not need
 
-- **A triplet file.** Every recipe above is a stock triplet. This repository carries six of its own
-  and they are CI cells with `set(VCPKG_BUILD_TYPE release)`, several of them on the dynamic CRT.
+- **A triplet file.** Every recipe above except the clang-cl one in §6 is a stock triplet. This
+  repository carries six of its own and they are CI cells with `set(VCPKG_BUILD_TYPE release)`,
+  several of them on the dynamic CRT.
 - **`-DCMAKE_POLICY_DEFAULT_CMP0091=NEW`, or any CRT workaround for a dependency.** A dependency's
   own `cmake_minimum_required` cannot flip the CRT out from under you: vcpkg puts `/MT` or `/MD`
   into `CMAKE_C_FLAGS_RELEASE` and `CMAKE_C_FLAGS_DEBUG` itself (`scripts/toolchains/windows.cmake`),
@@ -108,7 +110,38 @@ no Windows or Linux cross leg: neither has a supported story in this repository'
 - **A list of libraries to link.** The exported config describes the link line; that is what it is
   for, and on a static build it is the only readable description of it.
 
-## 6. Where this stops
+## 6. Windows, compiled by clang-cl
+
+Node.js builds itself with clang-cl on Windows, and a consumer whose own code uses the `ClangCL`
+toolset should build the dependency graph with the same compiler. vcpkg ships no clang-cl
+triplet, so this is the one shape that needs a triplet file you supply. The community collection
+is maintained by a vcpkg contributor (`walbourn/vcpkg`, branch `clangcltriplets`,
+`triplets/community/x64-clangcl-*.cmake`); its shape is the requirement, not the file:
+
+```cmake
+set(VCPKG_TARGET_ARCHITECTURE x64)
+set(VCPKG_CRT_LINKAGE static)          # or dynamic, matching your application
+set(VCPKG_LIBRARY_LINKAGE static)      # or dynamic
+set(VCPKG_CHAINLOAD_TOOLCHAIN_FILE "<a toolchain that selects clang-cl>")
+set(VCPKG_LOAD_VCVARS_ENV ON)
+```
+
+`VCPKG_LOAD_VCVARS_ENV ON` is the line that matters. vcpkg loads vcvars for its own MSVC
+triplets and skips it for anything else, so without it the make-based ports in the graph start
+with no `INCLUDE` and no `LIB` and the first try-compile dies on `kernel32.lib` (measured; the
+README's known limits records it). With it, the environment, the linker and the SDK's `rc.exe`
+come from vcvars exactly as they do for a stock triplet.
+
+Then install with `--overlay-triplets=<the directory holding your triplet>` and this repository's
+`overlay-ports`, and set `toolset: {value: ClangCL, strategy: set}` in your preset so your own
+code is compiled by clang-cl too. ADR 0012 records what the graph needs on top of that - an
+overlay of `vcpkg-make` - and it is already in `ports/`.
+
+The stock triplets stay supported. ICU and OpenSSL force clang-cl inside their own portfiles, so
+a consumer who never asks for a clang-cl triplet still gets a libnode whose Windows libraries
+match the compiler Node.js uses.
+
+## 7. Where this stops
 
 The README's *Known limits* is the authoritative list, and it is short: the macOS deployment target
 comes from the dependency graph rather than from Node.js, Visual Studio 2022 or newer is required,
