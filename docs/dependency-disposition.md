@@ -45,12 +45,15 @@ registry's `expected-lite`). LIEF's own dependency set is dispositioned in §3.1
 
 ## 2. How these numbers were produced
 
-- **Node.js side**: the official `node-v26.12.0.tar.xz` release tarball (the same archive
-  the port downloads and hash-pins). Versions were read from the source itself —
+- **Node.js side**: the official release tarball the port downloads and hash-pins — the
+  version column of §3 was read from `node-v26.13.0.tar.xz`, the byte-level pass quoted in
+  §5 from `node-v26.12.0.tar.xz`. Versions were read from the source itself —
   `include/uv/version.h`, `VERSION.dat`, `zlib.h`, `include/LIEF/version.h`,
   `README.chromium`, `package.json` and so on — not from upstream documentation.
-- **vcpkg side**: release 2026.07.29, commit `9e593bb18ea69cc5095e012465dcd675a822ed0d`,
-  port versions read out of the release archive. Upstream sources come from the vcpkg
+- **vcpkg side**: the version columns were read out of the pinned checkout
+  (`versions.json` → `vcpkg.commit`, release 2026.10.16), one `vcpkg.json` per port; the
+  byte-level pass in §5 was made against release 2026.07.29, commit
+  `9e593bb18ea69cc5095e012465dcd675a822ed0d`. Upstream sources come from the vcpkg
   download cache (the exact tarballs the pinned ports fetch).
 - **Byte-level comparison**: `tools/compare_vendored.py` — file sets plus sha256 of
   contents. Example:
@@ -84,7 +87,7 @@ practice. That is a weaker claim than the original pass and it is written down r
 re-running `tools/compare_vendored.py` against the new tarballs is worth an afternoon and not
 required by this upgrade.
 
-| Dependency | Node.js 26.12.1 | vcpkg | Channel | Version verdict |
+| Dependency | Node.js 26.13.0 | vcpkg | Channel | Version verdict |
 |---|---|---|---|---|
 | V8 | 14.6.202.34 | — | none | vendored (node fork, no `--shared-v8`) |
 | openssl | 3.5.9 | 3.6.5 (overlay, same version as the registry) | `--shared-openssl` | vcpkg ahead of Node.js → use the overlay, which differs from the registry only in building the C code with clang-cl (ADR 0009) |
@@ -92,24 +95,24 @@ required by this upgrade.
 | c-ares | 1.34.9 | 1.34.8 | `--shared-cares` | **overlay at 1.34.9**: the registry is a patch release behind the tree, and 1.34.9 is part of 26.12.1's security content |
 | brotli | 1.2.0 + CVE cherry-pick | 1.2.0 | `--shared-brotli` | **overlay at 1.2.1**: the registry's 1.2.0 does not carry CVE-2026-111497, which Node.js has and 1.2.1 fixes upstream; plus Node.js's `c/common/platform.h` |
 | zstd | 1.5.7 | 1.5.7 | `--shared-zstd` | equal, sources match → use vcpkg |
-| nghttp2 | 1.70.0 | 1.69.0 | `--shared-nghttp2` | vcpkg behind → `ports/nghttp2` pins 1.70.0 (overlay) |
+| nghttp2 | 1.70.0 | 1.70.0 | `--shared-nghttp2` | equal → `ports/nghttp2` carries Node.js's patches on top of the same version (overlay) |
 | ngtcp2 | 1.25.0 | 1.25.0 | `--shared-ngtcp2` | equal; vcpkg port's TLS backends are opt-in features (none default-on) → use vcpkg port |
 | nghttp3 | 1.18.0 | 1.18.0 | `--shared-nghttp3` | equal → use vcpkg port; its static lib devendors sfparse, so the link line carries `-lsfparse` too |
 | sqlite3 | 3.54.0 | 3.53.4 | `--shared-sqlite` | vcpkg behind → overlay pin 3.54.0 |
 | icu | 78.3 (icu-small) | 78.3 | `--with-intl=system-icu` | equal → use vcpkg (decision: full ICU) |
 | llhttp | 9.4.3 | 9.3.1 | `--shared-http-parser` | vcpkg behind → `ports/llhttp` pins 9.4.3 (overlay) |
-| simdjson | 5.0.3 | 4.6.4 | `--shared-simdjson` | vcpkg behind → overlay pin 5.0.3 |
-| ada-url | 4.0.0 (amalgamation: `ADA_VERSION`) | 3.4.4 | `--shared-ada` | major version ahead → `ports/ada-url` pins 4.0.0 (overlay) |
+| simdjson | 5.0.3 | 5.0.2 | `--shared-simdjson` | vcpkg behind → overlay pin 5.0.3 |
+| ada-url | 4.0.0 (amalgamation: `ADA_VERSION`) | 4.0.0 | `--shared-ada` | equal → `ports/ada-url` pins the same 4.0.0 the registry now ships |
 | hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → `ports/hdr-histogram` pins 0.12.0 (overlay) |
 | LIEF | 1.0.0 | 0.17.6 | `--shared-lief` | vcpkg behind a major → overlay pin 1.0.0 |
-| libffi | 3.8.0 | 3.7.1 | `--shared-ffi` | vcpkg behind → overlay pin 3.8.0 |
+| libffi | 3.8.0 | 3.8.0 | `--shared-ffi` | equal → overlay pin 3.8.0 |
 | perfetto | 58.2 | 53.0 | `--shared-perfetto` | overlay pin 58.2 (node-only, not V8) — **ready but not wired**, see below |
 | zlib | 1.3.2.1-motley (Chromium fork) | 1.3.2 (madler) | `--shared-zlib` | different source → overlay port, built and measured: [zlib-fork.md](zlib-fork.md) |
-| googletest | Chromium fork 1.8.0.git-9518a57 | 1.17.0 | `--shared-gtest` | test only → see §4 |
-| V8: abseil | Chromium fork, rev `6d8e1a5c…` | 20260107.1 | `--shared-abseil` | different fork → issue #1 |
-| V8: highway | Chromium fork, rev `8295336d…` | 1.4.0 | `--shared-highway` | different fork → issue #1 |
-| V8: simdutf | 7.7.0 (single header) | 8.2.0 | `--shared-simdutf` | vcpkg ahead → issue #2 |
-| V8: zlib | 1.3.2 | 1.3.2 | via `node_shared_zlib` | V8's own copy; must be gone ([zlib-fork.md](zlib-fork.md)) |
+| googletest | Chromium fork 1.8.0.git-9518a57 | 1.18.0 | `--shared-gtest` | test only → see §4 |
+| V8: abseil | Chromium fork, rev `6d8e1a5c…` | 20260107.1 | `--shared-abseil` | different fork → the registry port is what V8 compiles against; verified and closed (issue #1) |
+| V8: highway | Chromium fork, rev `8295336d…` | 1.4.0 | `--shared-highway` | different fork → the registry port is what V8 compiles against; verified and closed (issue #1) |
+| V8: simdutf | 7.7.0 (single header) | 9.1.1 (overlay at 8.2.0) | `--shared-simdutf` | vcpkg ahead; `ports/simdutf` pins the 8.2.0 the port was verified against and differs from the registry in forcing C++20, which is what compiles the atomic base64 entry points V8 calls (issue #2, closed) |
+| V8: zlib | 1.3.2 | 1.3.2 | via `node_shared_zlib` | V8's own copy is gone; both V8 and Node.js compile against `ports/zlib` ([zlib-fork.md](zlib-fork.md)) |
 | uvwasi | 0.0.23 | — | `--shared-uvwasi` | no port → vendor |
 | nbytes | 0.1.4 | — | `--shared-nbytes` | no port → vendor |
 | merve | no version recorded | — | `--shared-merve` | no port → vendor |
@@ -123,7 +126,7 @@ required by this upgrade.
 | amaro | 1.1.11 | — | none | WASM/npm → vendor |
 | crates | Cargo manifest (V8 14.6.202) | — | none | cargo → vendor |
 
-Two entries deserve a correction note:
+Three entries deserve a correction note:
 
 - **abseil**: the previous cycle's research recorded V8's abseil revision as `6d5ac0f7`.
   The v26.12.0 tree says `6d8e1a5cf00d6a6b26069b0baf0dd9b855a17459`. Use the value measured
@@ -150,15 +153,15 @@ source tree, and the vcpkg baseline's lief port (0.17.6) externalizes all of the
 neither route is acceptable unchanged: the baseline's port is the wrong version, and
 FetchContent would embed copies that collide with the vcpkg ports. So every dependency is
 externalized through LIEF's own `*_EXTERNAL` switches, each decided by the same version
-comparison. "LIEF tree" is the version vendored inside Node.js v26.12.0's
-`deps/LIEF/third-party/`; "vcpkg" is release 2026.07.29.
+comparison. "LIEF tree" is the version vendored inside Node.js v26.13.0's
+`deps/LIEF/third-party/`; "vcpkg" is release 2026.10.16.
 
 | Dependency | LIEF tree | vcpkg | Channel | Verdict |
 |---|---|---|---|---|
 | nlohmann json | 3.12.0 | 3.12.0 | `LIEF_OPT_NLOHMANN_JSON_EXTERNAL` | equal → registry port |
 | spdlog | 1.17.0 | 1.17.0 | `LIEF_EXTERNAL_SPDLOG` | equal → registry port (LIEF requires exactly 1.17.0) |
 | tl::expected | 1.3.1 | 1.3.1 | `LIEF_EXTERNAL_EXPECTED` | equal → registry port (**not** `expected-lite`, a different library) |
-| utfcpp | 4.0.9 | 4.1.1 | `LIEF_OPT_UTFCPP_EXTERNAL` | vcpkg ahead → registry port, no downgrade |
+| utfcpp | 4.0.9 | 4.2.1 (overlay at 4.1.1) | `LIEF_OPT_UTFCPP_EXTERNAL` | vcpkg ahead, but 4.2 removed `internal::validate_next(it, end, cp)`, which LIEF 1.0.0 calls → overlay pinned to 4.1.1 |
 | frozen | commit `61dce5a` (2025-07-29) | 1.2.0 (2024-06-02) | `LIEF_OPT_FROZEN_EXTERNAL` | vcpkg behind → overlay pin `61dce5a` (six headers differ) |
 | tcb-span | commit `b70b0ff` | 2022-06-15 snapshot | `LIEF_EXTERNAL_SPAN_DIR` | vcpkg behind → overlay: same upstream commit as the baseline **plus** the no-exceptions include fix LIEF's tree carries (see below) |
 | mbedtls | 4.0.0 snapshot `ec4044008d` (2025-10-13) | 3.6.5 | `LIEF_OPT_MBEDTLS_EXTERNAL` | vcpkg behind → overlay pin the snapshot. Required, not just policy: LIEF's external branch runs `find_package(MbedTLS 4.0.0)` and links `MbedTLS::tfpsacrypto` / `MbedTLS::mbedx509`, which only exist in the 4.0 line |
@@ -223,7 +226,7 @@ is mostly gyp/GN build files, and sometimes generated headers Node.js checks in.
 | nghttp2 1.70.0 vs 1.69.0 | 31 | 31 | 553 | 7 | The version gap is real: the public header and the session/HPACK internals all move. |
 | llhttp 9.4.3 vs 9.3.1 | 3 | 3 | 1 | 3 | `include/llhttp.h`, `src/api.c`, `src/llhttp.c` (llhttp ships a generated parser). |
 | simdjson 5.0.3 vs 4.6.4 | 0 common files | 0 | 740 | 5 | Node.js ships only the amalgamation (`simdjson.h`/`simdjson.cpp`) — but unlike ada's it **does** date itself: the generated header comment and `SIMDJSON_VERSION` both say 5.0.3, so the overlay pin is measured, not guessed. |
-| ada-url (node amalgamation) vs 3.4.4 | 1 (README) | 0 | 192 | 6 | Same shape; the major-version gap needs an upstream 4.0.0 comparison. |
+| ada-url (node amalgamation) vs 3.4.4 | 1 (README) | 0 | 192 | 6 | Same shape; this was the 2026.07.29 registry, a major behind. The registry now ships 4.0.0, so what remains is the amalgamation-versus-tarball difference, not a version gap. |
 
 Not measured yet (no matching upstream tarball on hand): nghttp3, icu, hdr-histogram,
 libffi, LIEF, perfetto, openssl, googletest, and the V8 third-party forks. Those rows are
@@ -238,9 +241,9 @@ order onto the madler zlib 1.3.2 tarball **does not reproduce Node.js's tree**: 
 classify some of the files as malformed (they are Chromium's bookkeeping against Chromium's
 own mirror branch, not a cumulative series against the upstream release).
 
-Consequence for the overlay port (issue #3): the port cannot be "madler tarball + these 20
-patches". It must either pin Chromium's mirror repository at a commit, or vendor Node.js's
-tree, and the choice needs a provenance source for the commit (§7).
+Consequence for the overlay port (issue #4): the port cannot be "madler tarball + these 20
+patches". `ports/zlib` pins Chromium's mirror at the commit Node.js ships, established by
+comparing the two trees; [zlib-fork.md](zlib-fork.md) records the commit and the comparison.
 
 ## 5a. A dependency that installs a library nobody can link
 
@@ -273,31 +276,32 @@ of an install tree deserves the explanation instead of a suspicion that the tree
 
 | Disposition | Dependencies |
 |---|---|
-| Use the vcpkg port as-is | c-ares, zstd, nghttp3 (link sfparse alongside), ngtcp2 |
-| Overlay: same version and source, different build | icu (78.3, compiled by clang-cl - ADR 0011), openssl (3.6.5, C code compiled by clang-cl - ADR 0009) |
-| Overlay: pin the version Node.js ships, add its patches | libuv, brotli, nghttp2, llhttp, simdjson, ada-url (+ simdutf feature), hdr-histogram, libffi, LIEF, perfetto, sqlite3 |
-| Overlay: replace the upstream source entirely | zlib → Chromium fork (issue #3) |
-| Externalize from V8's tree (the must-unify four) | abseil, highway (issue #1), simdutf (issue #2), zlib (issue #3) |
-| LIEF's own third-party set — all externalized, none embedded (§3.1) | registry: nlohmann-json, spdlog, tl-expected, utfcpp; overlays: frozen, mbedtls, tcb-span |
+| Use the vcpkg port as-is | zstd, nghttp3 (link sfparse alongside), ngtcp2 |
+| Overlay: same upstream source, different build | icu (78.3, compiled by clang-cl - ADR 0011), openssl (3.6.5, C code compiled by clang-cl - ADR 0009), simdutf (8.2.0, forced C++20 - issue #2) |
+| Overlay: pin the version Node.js ships, add its patches | libuv, brotli, c-ares, nghttp2, llhttp, simdjson, ada-url, hdr-histogram, libffi, LIEF, perfetto, sqlite3 |
+| Overlay: replace the upstream source entirely | zlib → Chromium fork (issue #4) |
+| Externalize from V8's tree (the must-unify four) | abseil, highway — registry ports (issue #1); simdutf — `ports/simdutf` (issue #2); zlib — `ports/zlib` (issue #4) |
+| LIEF's own third-party set — all externalized, none embedded (§3.1) | registry: nlohmann-json, spdlog, tl-expected; overlays: utfcpp, frozen, mbedtls, tcb-span |
 | Vendor | V8; jsoncpp, fast_float, fp16, rapidhash, dragonbox, wasm-api, utf8-decoder, re2 (produce no symbols); googletest (test only); uvwasi, merve, nbytes, ncrypto, postject, inspector_protocol, temporal_capi (no vcpkg port); npm, undici, acorn, minimatch, amaro, crates (other ecosystems) |
 
-## 7. Open verifications
+## 7. Verifications and where they ended
 
-The disposition above is only as good as the four measurements that remain. Each has an
-issue with its acceptance criteria:
+The four measurements that once stood between this table and `ports/` are closed; each
+issue carries the evidence:
 
-- **#1** `--shared-abseil` / `--shared-highway` against vcpkg's copies of the two forks.
-- **#2** `--shared-simdutf` with vcpkg 8.2.0 against V8's 7.7.0 — and the version question
-  between them, which the `ada-url` simdutf feature also depends on.
-- **#3** The Chromium zlib fork as an overlay port (also: a provenance source for the fork
-  commit).
-- **#4** LIEF 1.0.0 C API compatibility.
+- **#1** `--shared-abseil` / `--shared-highway`: V8 compiles against the registry ports.
+  V8's bundled abseil and highway targets leave the build graph, and `absl_*` / `hwy`
+  reach the link lines of every host tool and of `libnode`.
+- **#2** `--shared-simdutf`: `ports/simdutf` 8.2.0 works with V8 14.6 once the port forces
+  C++20, which activates the `SIMDUTF_ATOMIC_REF` base64 entry points V8 calls. The
+  wiring is asserted by `test/cases/externalization/externalization.mjs` on every CI run.
+- **#3** LIEF 1.0.0 C API compatibility: `ports/lief` builds, and LIEF's third-party set
+  is externalized per §3.1.
+- **#4** the Chromium zlib fork as an overlay port: `ports/zlib` builds, and V8 and Node.js
+  both compile against it ([zlib-fork.md](zlib-fork.md)).
 
 Still to measure before any of this is called done:
 
 - Byte-level deltas for nghttp3, icu, hdr-histogram, libffi, LIEF, perfetto, openssl.
-- The real version of `ada-url` as Node.js ships it — its amalgamation carries no version
-  string (simdjson's does: 5.0.3), so the planned overlay pin would otherwise be a guess.
 - The `c-ares` generated headers: `config/*/ares_config.h` and `ares_build.h` as Node.js
   checks them in, against what vcpkg's CMake generates on each platform.
-- `sqlite3` compile-time macro set versus the overlay's feature list.
