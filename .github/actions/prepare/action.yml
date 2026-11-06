@@ -4,9 +4,9 @@ description: >
   checkout, a toolchain inventory, the Rust standard library for the target architecture,
   CMake 4 when the image ships 3.x, and Rosetta 2 for an x64 macOS build on an arm64 image.
 
-  This is an action rather than job steps because build-test.yml can run a leg as two jobs -
-  an install job and a consumer job - and the two must start from the same environment. The
-  step bodies are the ones that used to sit inline there; nothing was rewritten on the way.
+  This is an action rather than job steps because every leg of three workflows has to start
+  from the same environment, and build-test.yml is the only place the steps exist. The step
+  bodies are what used to sit inline there; nothing was rewritten on the way.
 
   `cache-hash` is an input because `hashFiles` is not something to rely on inside a composite
   action: the caller evaluates it, after its own checkout, which is also the point where it means
@@ -70,10 +70,10 @@ runs:
       uses: actions/cache@v4
       with:
         path: ${{ github.workspace }}/vcpkg-archives
-        # The key covers the vcpkg commit and the contents of ports/ plus the test
-        # manifest: any of those changing changes the ABI of what gets built, so a stale
-        # entry would restore the wrong binaries. The triplet is part of the ABI too, so
-        # legs that install different triplets must not share an entry.
+        # The key covers the vcpkg commit, the triplet and the test manifest, not ports/:
+        # vcpkg looks every package up by its own ABI hash, so an archive holding entries for
+        # other ABIs is harmless - it misses and rebuilds only what changed. Hashing ports/
+        # meant every portfile edit discarded the cache; see the input description above.
         key: vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-${{ inputs.cache-hash }}
         restore-keys: |
           vcpkg-${{ inputs.runner }}-${{ inputs.vcpkg-commit }}-${{ inputs.triplet }}-

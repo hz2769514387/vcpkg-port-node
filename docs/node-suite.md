@@ -3,9 +3,9 @@
 Reference for the one test that decides whether what this repository builds is still
 Node.js. It is deliberately free of result numbers: a pass rate in a document goes stale the
 next time anything is rebuilt, and a stale number in `docs/` is worse than no number because
-it looks authoritative. Current results live where they are produced — the
-[`node-suite` CI workflow](../.github/workflows/node-suite.yml) and its run history — and the
-discussion of a specific run belongs in the issue that run was filed against.
+it looks authoritative. Current results live where they are produced — `ci.yml` runs the suite
+on every push, on the Release consumer of each cell — and the discussion of a specific run
+belongs in the issue that run was filed against.
 
 What belongs here is what does not change: how to run the suite, how to read what it says,
 and the discipline for deciding that something is allowed to fail.
@@ -25,9 +25,9 @@ The executable under test is the **embedding executable the consumer test projec
 (`test/cases/embed`), not the port's own `node.exe`. That is the stronger claim: a runtime a
 consumer links from `libnode` runs the official suite.
 
-`test/cases/suite/CMakeLists.txt` registers one ctest case per suite, and `ci.yml` /
-`node-suite.yml` choose which cases run by label: `-R node-suite` for the full run, `-LE
-node-suite` for everything else.
+`test/cases/suite/CMakeLists.txt` registers one ctest case per suite, and the *Run the tests*
+step of `build-test.yml` selects them by label: `-R node-suite` for the full run, `-LE
+node-suite` for everything else, per the `suite-configs` each leg passes.
 
 Why the official driver and not `node --test`: every test directory carries a `*.status` file
 in which upstream records its own SKIP and FLAKY verdicts, and only `tools/test.py` reads

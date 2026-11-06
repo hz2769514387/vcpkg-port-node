@@ -42,28 +42,27 @@ dimension is verified inside one job: `debug.yml` and `matrix.yml` exist because
 three configurations and ran the suite three times would exceed GitHub's six-hour job limit,
 while three workflows run in parallel and each stays inside it (ADR 0007).
 
-The limit applies **per job**, which is the other half of that argument. A leg that fits one job
-is one job; the one leg that does not fit - Linux x64 Debug - runs as two, with
-`split-install: true`:
-
-| | `split-install: false` (default) | `split-install: true` |
-|---|---|---|
-| jobs | one | `install`, then `build` (`needs: install`) |
-| what crosses between them | - | the installed tree, as a **tar** (`port-install-<triplet>`, 1-day retention) |
-| used by | every leg except Linux x64 Debug | Linux x64 Debug |
+The limit applies **per job**, and every leg is one job today. A leg that does not fit was
+once two - an install job that built the port and uploaded the tree, then a build job that
+consumed it - and the only legs that ever needed that were the two Linux Debug ones. Both are
+gone (`debug.yml`): even split, the install is 5h36m on a four-core runner with every
+dependency cached, so it lands on either side of the ceiling depending on runner load.
+`build-test.yml` keeps the shape in its comments if a faster runner ever makes it worth
+restoring.
 
 Four things were measured on 2026-10-21/22 and each changed the shape of this:
 
 - **A cold dual install is 4.5 hours** on a four-core runner (4.1 of them node). That fits the
-  ceiling with about an hour to spare, which is why this leg is split and the others are not.
+  ceiling with about an hour to spare, which is why the install was split from the build and
+  why no other leg was.
 - **A zip artifact loses file modes.** Run 39500147659's consumer job refused to configure with
-  "test suite fixture lost its executable bit" on `.bin/ada`. The tree is a **tar** inside the
-  artifact now (`tar -cf` / `tar -xf`), which carries the modes.
+  "test suite fixture lost its executable bit" on `.bin/ada`. The install job handed the tree
+  over as a **tar** inside the artifact (`tar -cf` / `tar -xf`), which carries the modes.
 - **Three copies of one tree do not fit on one disk.** Run 39729687647 lost the install job at
   "Upload the installed tree" with no artifact *and* no log artifact - a dead runner. vcpkg's
-  build tree, the installed tree and its tar were on one 14 GB volume. The job now drops
+  build tree, the installed tree and its tar were on one 14 GB volume. The job dropped
   `vcpkg/buildtrees` and `vcpkg/packages` before packing and the installed tree once the tar
-  holds it, and prints `df -h` either side.
+  held it, and printed `df -h` either side.
 - **The Actions cache cannot be a dependency.** The cache is 10 GB per repository; ten legs'
   archives evict each other, so a prepare job that fills it works on some rounds (an install in
   12 minutes instead of 4.5 hours) and not on others (run 39758350009 spent its full six hours
@@ -91,9 +90,9 @@ place the build steps exist. They differ in which `preset` and `triplet` they pa
 calls `.github/workflows/logs.yml`, which merges every leg's logs into **one** archive per run
 (section 6) - reading a run is one download, not one per platform.
 
-`node-suite.yml` is gone: it ran Node.js's suite once a week on the same six cells that
-`ci.yml` now builds on every push, with the suite included. Keeping both would have meant
-maintaining two descriptions of the same thing.
+The weekly suite-only workflow that preceded this is gone: it ran Node.js's suite on the same
+six cells that `ci.yml` now builds on every push, with the suite included. Keeping both would
+have meant maintaining two descriptions of the same thing.
 
 ## 2. How a build is done
 
@@ -378,9 +377,10 @@ as not found. Two consequences for reading a run:
 
 `VCPKG_BINARY_SOURCES` is `clear;files,<workspace>/vcpkg-archives,readwrite`, and an
 `actions/cache` step persists that directory between runs. The key covers the runner, the
-pinned vcpkg commit, the triplet and the contents of `ports/` plus the test manifest, because
-any of those changing changes the ABI of what gets built. The triplet is part of the key
-deliberately: different legs install different binaries and must not share an entry.
+pinned vcpkg commit, the triplet and the test manifest - deliberately not `ports/`: vcpkg looks
+every package up by its own ABI hash, so archives for other ABIs are inert and only what
+changed is rebuilt. The triplet is part of the key deliberately: different legs install
+different binaries and must not share an entry.
 
 **A warm cache is why a leg can finish in minutes, and it is not a leg skipping its work.** The
 restore keys deliberately fall back to an older entry of the same runner and triplet, so a run

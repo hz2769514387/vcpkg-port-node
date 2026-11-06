@@ -20,10 +20,9 @@ name: Debug configuration
 # Runs on push as well as weekly: every dimension is verified on push, and keeping Debug in
 # its own workflow is what keeps it inside the six-hour job limit.
 #
-# Five cells. Windows and macOS are one job each; Linux x64 is two (install, then build and
-# test), because a cold dual install of Node.js under gcc is 4.5 hours on a four-core runner and
-# has gone past 350 minutes. Linux arm64 is not there at all: its dual install does not finish in
-# six hours. See docs/ci.md.
+# Four cells: Windows x64, Windows arm64, macOS arm64 and macOS x64, one job each. Neither
+# Linux cell has a Debug leg - its dual install does not fit six hours on a four-core runner
+# (docs/ci.md §3) - and that gap is written down rather than implied by a leg that passes.
 
 on:
   push:
@@ -57,8 +56,8 @@ permissions:
   contents: read
 
 jobs:
-  # One job per platform rather than a matrix - see the note in ci.yml. The same six cells as
-  # ci.yml, with the Debug consumer instead of the Release one.
+  # One job per platform rather than a matrix - see the note in ci.yml. The four cells above,
+  # with the Debug consumer instead of the Release one.
   windows:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit

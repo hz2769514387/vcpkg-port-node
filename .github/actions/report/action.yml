@@ -1,12 +1,11 @@
 name: Report a leg
 description: >
-  The two steps every leg ends with, whichever half of a split leg it is: the job summary that
-  answers "did this leg work" without scrolling, and the collection of the logs into one directory
-  so the uploaded artifact is the same shape whether the install half or the build half failed.
+  The two steps every leg ends with: the job summary that answers "did this leg work" without
+  scrolling, and the collection of the logs into one directory so the uploaded artifact has the
+  same shape on every leg.
 
-  Both bodies were identical in the `install` and `build` jobs of build-test.yml - 44 lines, twice -
-  because a leg can run as one job or two and both halves have to report the same way. Identical
-  copies drift; this one cannot.
+  Both bodies were identical in the install and build jobs of build-test.yml when a leg could
+  run as two jobs - 44 lines, twice - and identical copies drift; this one cannot.
 
 inputs:
   triplet:

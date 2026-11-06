@@ -219,7 +219,7 @@ its own targets, and what a consumer has to do is written in the [README](../REA
 **Which vcpkg you point at is the pin.** The project states no `builtin-baseline` (and no
 `overrides`), because on the built-in registry either one has to be a commit and resolving it
 requires a git checkout of vcpkg - which would rule out the release tarball a user may
-legitimately have downloaded. CI checks out release 2026.07.29 instead (ADR 0005). Running
+legitimately have downloaded. CI checks out release 2026.10.16 instead (ADR 0005). Running
 locally against a different release is therefore allowed and is not a configuration error, but
 it changes every dependency version, so results are only comparable against the pinned release.
 

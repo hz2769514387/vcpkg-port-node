@@ -2,28 +2,29 @@ name: Build and test the node port
 
 # The shared body of every build in this repository: check out the pinned vcpkg, let the
 # consumer test project build the port through it, then run ctest. Called by ci.yml,
-# debug.yml and node-suite.yml, so they never drift apart.
+# debug.yml and matrix.yml, so they never drift apart.
 #
 # Everything here uses the public consumption path on purpose - overlay ports, a manifest,
-# a triplet that ships with vcpkg, `find_package(unofficial-node CONFIG)`. If the port only
-# builds when driven in some special way, this is where that would show up.
+# a triplet, `find_package(unofficial-node CONFIG)`. If the port only builds when driven in
+# some special way, this is where that would show up.
 #
-# The triplets named by the callers are vcpkg's own, its `*-release` *community* triplets
-# included - those are the stock settings plus `VCPKG_BUILD_TYPE release`, and that one line
-# is what keeps a leg from building Release *and* Debug, which would double its wall-clock
-# time. This repository carries no triplet file of its own.
+# The triplets named by the callers come from two places. Eight are vcpkg's own, its
+# `*-release` *community* triplets plus the core `x64-windows-release`: stock settings plus
+# `VCPKG_BUILD_TYPE release`, and that one line is what keeps a leg from building Release
+# *and* Debug, which would double its wall-clock time. The other ten have no release-only
+# twin upstream and live in `test/cmake/triplets/` (docs/ci.md §2.1, ADR 0013).
 #
-# A leg is one job. It used to be able to run as two - an `install` job that built the port and
-# uploaded the tree, and a `build` job that consumed it - because a dual-triplet install can exceed
-# one job's six-hour ceiling while neither half does. The only legs that needed it were the Linux
-# Debug ones, and they were removed instead: even split, the install is 5h36m on a four-core runner
-# with every dependency cached, so it lands on either side of the ceiling depending on runner load.
-# `docs/ci.md` §3 records the gap; `git log -- .github/workflows/build-test.yml` has the shape, if a
-# runner with more cores ever makes it worth restoring.
+# A leg is one job. It could once run as two - an install job that built the port and
+# uploaded the tree, and a build job that consumed it - because a dual-triplet install can
+# exceed one job's six-hour ceiling while neither half does. The only legs that needed it were
+# the Linux Debug ones, and they were removed instead: even split, the install is 5h36m on a
+# four-core runner with every dependency cached, so it lands on either side of the ceiling
+# depending on runner load. `docs/ci.md` §3 records the gap; `git log -- .github/workflows`
+# has the shape, if a runner with more cores ever makes it worth restoring.
 #
 # The setup and the configure step live in composite actions (.github/actions/) instead of
-# inline, because both jobs run them and a copy would drift. Their bodies are the same text
-# that used to be here.
+# inline, so that every leg runs the same text without a copy to drift. Their bodies are what
+# used to be here.
 
 on:
   workflow_call:
@@ -82,11 +83,6 @@ permissions:
 jobs:
 
   build:
-    # Runs when the install job was skipped (the leg is not split) and when it succeeded. Not when
-    # it failed, and not when it was cancelled - a cancelled install is the six-hour platform limit
-    # firing, and letting the build job start then turns "the install never finished" into
-    # "artifact not found", which reads like a compile error and is not.
-    if: ${{ !cancelled() && needs.install.result != 'failure' && needs.install.result != 'cancelled' }}
     runs-on: ${{ inputs.runner }}
     timeout-minutes: ${{ inputs.timeout-minutes }}
     # continue-on-error has to live here rather than on the caller: a job that calls a

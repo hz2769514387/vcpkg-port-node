@@ -5,8 +5,9 @@ description: >
   failed attempt only when the failure is a download problem - see the comment in the body for
   why the retry gate has to be a positive list of compiler symptoms.
 
-  An action because two jobs run it: the install job of a split leg, and the consumer job,
-  where it is a no-op that costs a couple of seconds because the install is already there.
+  An action because build-test.yml is the only place a leg's steps exist: the install happens
+  during this configure (vcpkg runs in manifest mode), and the retry gate below is the same
+  text on every leg and every workflow.
 
 inputs:
   preset:
