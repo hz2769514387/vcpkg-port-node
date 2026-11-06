@@ -197,6 +197,11 @@ The four `*-clang-*` files are the other dimension (ADR 0013): the same static a
 every dependency built by clang-cl as well. They chainload
 `test/cmake/toolchains/clang-cl.cmake`, which is the part a consumer copies and is not a CI cell.
 
+The six stock-shaped files above are hand copies, so `tools/check_triplets.py` compares them with
+the stock definitions in the pinned vcpkg checkout and reports any field that differs other than
+`VCPKG_BUILD_TYPE`. It needs a checkout and therefore runs at a vcpkg bump (docs/versioning.md
+§4), not in lint.
+
 **Do not copy a triplet into a project.** They exist to fit a job limit, the shared and `/MD` ones
 use the dynamic CRT, and a `/MT` consumer's install rejects that combination at configure time. A
 consumer needs no triplet file for the ordinary cases - the static/`/MT` single-executable build,

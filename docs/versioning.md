@@ -136,7 +136,10 @@ Preparing a release is a checklist, and the lint covers half of it:
    `port.released` = `true`;
 3. the README's Status table (the human mirror of the pins) still matches `versions.json`;
 4. `tools/version_tree.py` and `tools/check_repo.py` pass — the second one is what catches a
-   half-finished Node.js or vcpkg bump;
+   half-finished Node.js or vcpkg bump. For a vcpkg bump, `tools/check_triplets.py --vcpkg-root
+   <the new pin>` also reports no field difference between `test/cmake/triplets/` and the stock
+   triplets at that checkout except `VCPKG_BUILD_TYPE`; it needs a checkout, so it is not in
+   lint;
 5. a benchmark comparison against the official Node.js binary of the same version has been run
    on one leg and recorded with its CI link (issue #19): startup, and a slice of Node.js's own
    `benchmark/` directory. Numbers live in the run, not in `docs/`, as everywhere else here;
@@ -151,8 +154,11 @@ Preparing a release is a checklist, and the lint covers half of it:
   version tree, the matrix. A *new line* is the branch transition in §3.
 - **vcpkg releases.** The newest vcpkg release tag is the target. The upgrade is an explicit
   pull request that moves the CI default, the ADR 0003 baseline and `versions.json` together,
-  because it changes every dependency version and every ABI hash (ADR 0003). "Tracking" means
-  the bump happens promptly; it does not mean a bot rewrites `main`.
+  because it changes every dependency version and every ABI hash (ADR 0003). `tools/check_triplets.py`
+  compares the release-only cells in `test/cmake/triplets/` with the stock triplets at the new
+  checkout, because those files are hand copies and a changed stock shape would otherwise leave
+  them behind. "Tracking" means the bump happens promptly; it does not mean a bot rewrites
+  `main`.
 - **Holding back is allowed and must be written down.** If a vcpkg release breaks a leg, or
   ships a dependency the Node.js line cannot use, `main` stays on the previous release and the
   reason goes in the pin's ADR or an issue — never a silent lag.
