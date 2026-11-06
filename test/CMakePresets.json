@@ -175,6 +175,42 @@
       }
     },
     {
+      "name": "x64-windows-static-clang-release",
+      "inherits": "windows-clang",
+      "description": "The whole dependency graph, the port and the consumer built with clang-cl; static CRT, Release only. A CI cell (issue #61), not a consumer recipe.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-clang-release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "arm64-windows-static-clang-release",
+      "inherits": "windows-clang",
+      "description": "The whole dependency graph, the port and the consumer built with clang-cl; static CRT, Release only. A CI cell (issue #61), not a consumer recipe.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-clang-release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>"
+      }
+    },
+    {
+      "name": "x64-windows-static-md-clang-release",
+      "inherits": "windows-clang",
+      "description": "The whole dependency graph, the port and the consumer built with clang-cl; dynamic CRT, Release only. A CI cell (issue #61), not a consumer recipe.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "x64-windows-static-md-clang-release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+      }
+    },
+    {
+      "name": "arm64-windows-static-md-clang-release",
+      "inherits": "windows-clang",
+      "description": "The whole dependency graph, the port and the consumer built with clang-cl; dynamic CRT, Release only. A CI cell (issue #61), not a consumer recipe.",
+      "cacheVariables": {
+        "VCPKG_TARGET_TRIPLET": "arm64-windows-static-md-clang-release",
+        "CMAKE_MSVC_RUNTIME_LIBRARY": "MultiThreaded$<$<CONFIG:Debug>:Debug>DLL"
+      }
+    },
+    {
       "name": "x64-linux",
       "inherits": "linux",
       "cacheVariables": {
@@ -299,6 +335,22 @@
     {
       "name": "arm64-windows-msvc",
       "configurePreset": "arm64-windows-msvc"
+    },
+    {
+      "name": "x64-windows-static-clang-release",
+      "configurePreset": "x64-windows-static-clang-release"
+    },
+    {
+      "name": "arm64-windows-static-clang-release",
+      "configurePreset": "arm64-windows-static-clang-release"
+    },
+    {
+      "name": "x64-windows-static-md-clang-release",
+      "configurePreset": "x64-windows-static-md-clang-release"
+    },
+    {
+      "name": "arm64-windows-static-md-clang-release",
+      "configurePreset": "arm64-windows-static-md-clang-release"
     },
     {
       "name": "x64-linux",

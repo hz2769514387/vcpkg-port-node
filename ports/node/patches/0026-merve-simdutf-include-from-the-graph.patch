@@ -1,0 +1,26 @@
+--- a/deps/merve/merve.gyp
++++ b/deps/merve/merve.gyp
+@@ -5,15 +5,21 @@
+     {
+       'target_name': 'merve',
+       'type': 'static_library',
+       'include_dirs': [
+         '.',
+-        '../v8/third_party/simdutf',
+       ],
+       'direct_dependent_settings': {
+         'include_dirs': ['.'],
+       },
+       'defines': [ 'MERVE_USE_SIMDUTF=1' ],
+       'sources': [ '<@(merve_sources)' ],
+       'conditions': [
++        # When the port externalizes simdutf (--shared-simdutf), the header has to come
++        # from vcpkg too. V8's vendored copy (7.7.0) declares simdutf::find out of line,
++        # while the vcpkg library (8.2.0) only carries the inline wrapper clang-cl emits,
++        # so merve.lib would otherwise reference a symbol nothing defines.
++        ['node_shared_simdutf!="true"', {
++          'include_dirs': ['../v8/third_party/simdutf'],
++        }],
+         ['OS=="win"', {
+           'msvs_settings': {
+             'VCCLCompilerTool': {

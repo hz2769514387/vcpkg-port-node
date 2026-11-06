@@ -7,7 +7,7 @@ own `test/cmake/triplets/` are CI cells, not recipes, and copying one is how a d
 met a CRT mismatch at configure time (issue #61).
 
 Everything here except §6 is exercised by `test/` on every push, on both architectures of all
-three platforms; §6 becomes a CI cell in the change that closes issue #34.
+three platforms; §6 is exercised by the four clang-cl cells in `matrix.yml` (ADR 0013).
 
 ## 0. The three rules a preset cannot state
 
@@ -100,8 +100,8 @@ no Windows or Linux cross leg: neither has a supported story in this repository'
 ## 5. What you do not need
 
 - **A triplet file.** Every recipe above except the clang-cl one in §6 is a stock triplet. This
-  repository carries six of its own and they are CI cells with `set(VCPKG_BUILD_TYPE release)`,
-  several of them on the dynamic CRT.
+  repository carries ten of its own and they are CI cells with `set(VCPKG_BUILD_TYPE release)`:
+  six release-only variants of the shared and `/MD` cells, and the four clang-cl cells (ADR 0013).
 - **`-DCMAKE_POLICY_DEFAULT_CMP0091=NEW`, or any CRT workaround for a dependency.** A dependency's
   own `cmake_minimum_required` cannot flip the CRT out from under you: vcpkg puts `/MT` or `/MD`
   into `CMAKE_C_FLAGS_RELEASE` and `CMAKE_C_FLAGS_DEBUG` itself (`scripts/toolchains/windows.cmake`),
@@ -144,10 +144,19 @@ with no `INCLUDE` and no `LIB` and the first try-compile dies on `kernel32.lib` 
 README's known limits records it). With it, the environment, the linker and the SDK's `rc.exe`
 come from vcvars exactly as they do for a stock triplet.
 
+The chainloaded toolchain is in this repository too, at
+[`test/cmake/toolchains/clang-cl.cmake`](../test/cmake/toolchains/clang-cl.cmake), and it is the
+part to copy: it selects the compiler, adds the target-machine flag, and includes vcpkg's own
+`scripts/toolchains/windows.cmake`. It is written for a native build on a machine of the triplet's
+architecture, which is what the four CI cells are. An explicit `NODE_PORT_LLVM_BIN` (used by the
+port to choose its own compiler) is not needed here; vcvars puts the Visual Studio LLVM tree on
+`PATH` and `LLVMInstallDir` covers a standalone one.
+
 Then install with `--overlay-triplets=<the directory holding your triplet>` and this repository's
 `overlay-ports`, and set `toolset: {value: ClangCL, strategy: set}` in your preset so your own
 code is compiled by clang-cl too. ADR 0012 records what the graph needs on top of that - an
-overlay of `vcpkg-make` - and it is already in `ports/`.
+overlay of `vcpkg-make` - and it is already in `ports/`; ADR 0013 makes the four all-clang-cl
+cells part of the CI matrix.
 
 The stock triplets stay supported. ICU and OpenSSL force clang-cl inside their own portfiles, so
 a consumer who never asks for a clang-cl triplet still gets a libnode whose Windows libraries

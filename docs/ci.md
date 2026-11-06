@@ -14,7 +14,7 @@ here ([0002](decisions/0002-node-version-policy.md), [0003](decisions/0003-vcpkg
 | `lint.yml` | push to `main`, pull request, manual | seconds | the repository still obeys its own rules: version files match the ports, tracked files are English/LF/UTF-8, referenced patches exist |
 | `ci.yml` | a build-affecting push or pull request, manual | tens of minutes to a few hours per leg | the port **builds and can be consumed**, as a Release and as a RelWithDebInfo consumer, and **what was built is still Node.js** - Node.js's own suite runs on the Release consumer of every leg |
 | `debug.yml` | a build-affecting push or pull request, weekly, manual | about twice `ci.yml` per leg | the same for the **Debug** configuration, which needs a Debug library and therefore its own install |
-| `matrix.yml` | a build-affecting push or pull request, weekly, manual | about twice `ci.yml` per leg | the rest of the matrix: the **dynamic CRT** on Windows and a **shared libnode** on every platform |
+| `matrix.yml` | a build-affecting push or pull request, weekly, manual | about twice `ci.yml` per leg | the rest of the matrix: the **dynamic CRT** on Windows, a **shared libnode** on every platform, and the **clang-cl dependency graph** on Windows |
 | `node-release-watch.yml` | daily (06:23 UTC), manual | seconds | whether upstream has published a newer Node.js release (ADR 0002) |
 | `vcpkg-release-watch.yml` | daily (06:53 UTC), manual | seconds | whether upstream has published a newer vcpkg release (docs/versioning.md) |
 
@@ -125,15 +125,16 @@ reconfigures before it builds, and vcpkg - already satisfied - costs nothing the
 
 `VCPKG_BUILD_TYPE` can only be set in a triplet, and leaving it unset makes the port build
 Release **and** Debug - two Node.js builds per leg. That is what pushed the Linux leg past the
-five-hour job limit. `ci.yml` therefore names vcpkg's own **community** `*-release` triplets -
-`x64-windows-static-release`, `arm64-windows-static-release`, `x64-linux-release`,
-`arm64-linux-release`, `arm64-osx-release`, `x64-osx-release` - which are the standard settings
-plus `VCPKG_BUILD_TYPE release`. Four of those ship with vcpkg and are named as they are; the
-Windows shared triplet and the two dynamic ones have no release-only twin in the registry, so
-`test/cmake/triplets/` carries `x64-windows-release`, `arm64-windows-release`,
-`arm64-windows-static-md-release`, `x64-linux-dynamic-release`, `arm64-linux-dynamic-release`,
-`x64-osx-dynamic-release` and `arm64-osx-dynamic-release`. They are CI cells, not consumer
-recipes - issue #61 is where the two roles get separated for readers.
+five-hour job limit. Eight of the triplets the workflows name ship with vcpkg: the six
+**community** `*-release` triplets `ci.yml` uses (`x64-windows-static-release`,
+`arm64-windows-static-release`, `x64-linux-release`, `arm64-linux-release`,
+`arm64-osx-release`, `x64-osx-release`), plus `x64-windows-release` (a core triplet) and
+`x64-windows-static-md-release`. The other ten have no release-only twin in the registry and
+are carried in `test/cmake/triplets/`: `arm64-windows-release`,
+`arm64-windows-static-md-release`, the four dynamic triplets (`x64-linux-dynamic-release`,
+`arm64-linux-dynamic-release`, `x64-osx-dynamic-release`, `arm64-osx-dynamic-release`), and
+the four clang-cl cells described below. They are CI cells, not consumer recipes - issue #61
+is where the two roles get separated for readers.
 
 `debug.yml` installs the *stock* (dual) triplet instead, because Debug is a property of the
 install rather than of the consumer: on Windows a Debug consumer is the debug CRT and cannot
@@ -244,6 +245,10 @@ Every cell below is a promise a consumer can hold this repository to, and each o
 | `matrix.yml` | arm64 Linux, shared | `ubuntu-24.04-arm` | `arm64-linux-dynamic` | `arm64-linux-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
 | `matrix.yml` | arm64 macOS, shared | `macos-latest` | `arm64-osx-dynamic` | `arm64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
 | `matrix.yml` | x64 macOS, shared | `macos-15` | `x64-osx-dynamic` | `x64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | x64 Windows, clang-cl | `windows-2022` | `x64-windows-static-clang-release` | `x64-windows-static-clang-release` | Release, RelWithDebInfo | Release | yes |
+| `matrix.yml` | arm64 Windows, clang-cl | `windows-11-arm` | `arm64-windows-static-clang-release` | `arm64-windows-static-clang-release` | Release, RelWithDebInfo | Release | yes |
+| `matrix.yml` | x64 Windows, clang-cl `/MD` | `windows-2022` | `x64-windows-static-md-clang-release` | `x64-windows-static-md-clang-release` | Release, RelWithDebInfo | Release | yes |
+| `matrix.yml` | arm64 Windows, clang-cl `/MD` | `windows-11-arm` | `arm64-windows-static-md-clang-release` | `arm64-windows-static-md-clang-release` | Release, RelWithDebInfo | Release | yes |
 
 ### Why no Linux Debug cell
 
@@ -267,14 +272,33 @@ legs are gone, and **Debug is verified on four cells** - both Windows architectu
 ones. Bringing it back needs a runner with more cores, not a cleverer workflow; the split shape is in
 `git log -- .github/workflows/build-test.yml` if that day comes.
 
-Every cell in that table has completed a build end to end, and the eight `matrix.yml` cells are
-green as well: the port's claim to support them is verified rather than aspirational.
+### The clang-cl cells
 
-**Four of them block a merge, four do not** (#35). The blocking four are the shared-library cells -
-`windows-shared`, `windows-shared-arm64`, `linux-shared`, `linux-shared-arm64` - because a shared
-libnode changes how the consumer finds the library at run time and what the exported config links,
-and no other leg carries that claim. They put the slowest cell in front of every pull request: 155
-minutes for `linux-shared-arm64` on the last all-green run, the rest 72-131.
+Four `matrix.yml` legs build the dependency graph with clang-cl as well: static and `static-md`,
+on x64 and arm64. They exist because the port always builds Node.js with clang-cl while a stock
+triplet builds its dependencies with `cl.exe`; ADR 0012 showed that difference is not harmless
+(an `cl.exe`-built OpenSSL crashed 250 arm64 TLS cases), and ADR 0013 makes the all-clang-cl
+graph a CI cell. Each one runs Node.js's own suite on the Release consumer like every other leg.
+
+The triplets are CI cells in `test/cmake/triplets/`; the chainloaded toolchain
+(`test/cmake/toolchains/clang-cl.cmake`) is the copyable part, and
+[consumer-recipes.md](consumer-recipes.md) section 6 describes it for a consumer. No Debug leg
+and no shared-libnode leg exist in this dimension: each would need another four installs, and
+neither is claimed.
+
+Every cell in that table has completed a build end to end, and the eight `matrix.yml` cells that
+predate the clang-cl dimension are green as well: the port's claim to support them is verified
+rather than aspirational. The four clang-cl cells are new in the change that adds them, and their
+first run is that pull request's.
+
+**Eight of the twelve cells block a merge, four do not** (#35). The blocking eight are the
+shared-library cells - `windows-shared`, `windows-shared-arm64`, `linux-shared`,
+`linux-shared-arm64` - and the four clang-cl cells. A shared libnode changes how the consumer
+finds the library at run time and what the exported config links; the clang-cl cells are the only
+legs whose dependency graph is built by the compiler Node.js requires (ADR 0013). Neither claim
+has a second opinion anywhere else in the matrix. They put the slowest cell in front of every
+pull request: 155 minutes for `linux-shared-arm64` on the last all-green run, the rest 72-131
+before the clang-cl cells were added.
 
 The non-blocking four are `windows-md`, `windows-md-arm64`, `macos-shared` and `macos-shared-x64`.
 That is a cost decision, not a claim that they pass more often: `/MD` differs from the static-CRT

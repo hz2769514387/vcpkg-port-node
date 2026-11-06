@@ -1,24 +1,28 @@
 name: Matrix
 
-# The remaining dimensions of the build matrix (issue #11): the dynamic CRT on Windows, and a
-# shared libnode on every platform. Both are ordinary vcpkg triplets - `*-windows-static-md`
-# and the `*-dynamic` ones - so a consumer reaches them the same way they reach anything else.
+# The remaining dimensions of the build matrix (issue #11): the dynamic CRT on Windows, a shared
+# libnode on every platform, and the clang-cl dependency graph on Windows (ADR 0013).
 #
 # Why these are not legs of ci.yml: each one is a full extra install of the port, and putting
 # them in one job would put that job over the six-hour limit. Split across workflows they run
 # in parallel on push, which is what "verified on push" has to mean here.
 #
-# Four legs block a merge and four do not, and the split is a cost decision written down rather
+# Eight legs block a merge and four do not, and the split is a cost decision written down rather
 # than a rule that grades itself:
 #
-#   blocking      windows-shared, windows-shared-arm64, linux-shared, linux-shared-arm64
+#   blocking      windows-shared, windows-shared-arm64, linux-shared, linux-shared-arm64,
+#                 windows-static-clang, windows-static-clang-arm64,
+#                 windows-md-clang, windows-md-clang-arm64
 #   non-blocking  windows-md, windows-md-arm64, macos-shared, macos-shared-x64
 #
-# The blocking four carry the claim no other leg carries - a *shared* libnode, which changes how the
-# consumer finds the library at run time (rpath, DLL beside the executable) and what the exported
-# config links. A regression there is silent until someone builds a shared install, so it should fail
-# the pull request. They cost the pull request the slowest leg: 155 minutes for linux-shared-arm64 on
-# the last all-green run (40025248617), the rest between 72 and 131.
+# The four shared legs carry the claim no other leg carries - a *shared* libnode, which changes how
+# the consumer finds the library at run time (rpath, DLL beside the executable) and what the exported
+# config links. The four clang-cl legs carry the other one: a graph whose every dependency, and the
+# port itself, is built by the compiler Node.js requires, which is what issue #34 was about and what
+# ADR 0013 makes a CI cell. A regression in either dimension is silent until someone builds that
+# configuration, so both should fail the pull request. The four shared cells cost the pull request
+# the slowest leg: 155 minutes for linux-shared-arm64 on the last all-green run (40025248617), the
+# rest between 72 and 131. The four clang-cl cells are new; their cost is what this change measures.
 #
 # The non-blocking four are not less true, they are less distinct, and the maintainer chose not to
 # spend the wall clock on them yet: `windows-md` differs from `windows-static` only in the CRT, which
@@ -123,6 +127,57 @@ jobs:
       expect-arch: ARM64
       timeout-minutes: 330
 
+  # The clang-cl dimension (ADR 0013): the same static and /MD cells as ci.yml, with the
+  # dependency graph built by clang-cl as well. Blocking, like the shared cells: no other leg
+  # builds this graph, so a regression here has no second opinion.
+  windows-static-clang:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-2022
+      preset: x64-windows-static-clang-release
+      triplet: x64-windows-static-clang-release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
+      expect-arch: x64
+      timeout-minutes: 330
+
+  windows-static-clang-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-11-arm
+      preset: arm64-windows-static-clang-release
+      triplet: arm64-windows-static-clang-release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
+      expect-arch: ARM64
+      timeout-minutes: 330
+
+  windows-md-clang:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-2022
+      preset: x64-windows-static-md-clang-release
+      triplet: x64-windows-static-md-clang-release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
+      expect-arch: x64
+      timeout-minutes: 330
+
+  windows-md-clang-arm64:
+    uses: ./.github/workflows/build-test.yml
+    secrets: inherit
+    with:
+      runner: windows-11-arm
+      preset: arm64-windows-static-md-clang-release
+      triplet: arm64-windows-static-md-clang-release
+      consumer-configs: Release,RelWithDebInfo
+      suite-configs: Release
+      expect-arch: ARM64
+      timeout-minutes: 330
+
   linux-shared:
     uses: ./.github/workflows/build-test.yml
     secrets: inherit
@@ -173,6 +228,8 @@ jobs:
 
   logs:
     needs: [windows-md, windows-md-arm64, windows-shared, windows-shared-arm64,
+            windows-static-clang, windows-static-clang-arm64,
+            windows-md-clang, windows-md-clang-arm64,
             linux-shared, linux-shared-arm64, macos-shared, macos-shared-x64]
     if: always()
     uses: ./.github/workflows/logs.yml

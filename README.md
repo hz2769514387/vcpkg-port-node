@@ -90,7 +90,7 @@ is not a limit: it lives in the [issues](https://github.com/hz2769514387/vcpkg-p
 | Overlaying replaces **21 registry ports** for the whole graph | `overlay-ports` shadows them everywhere; the zlib fork alone has 248 dependent ports | Read [docs/overlay-replacements.md](docs/overlay-replacements.md) first - the `mbedtls` row is a breaking API change (4.0 vs 3.6) |
 | On macOS the deployment target is the graph's, not Node.js's 13.5 | Node.js pins 13.5 with no knob; every dependency follows the triplet | Set `VCPKG_OSX_DEPLOYMENT_TARGET 13.5` in the triplet if you need that floor |
 | Windows needs Visual Studio 2022 or newer | Node.js 24 and later require clang-cl | Nothing older has been built or measured |
-| A clang-cl triplet has to load vcvars itself | vcpkg loads it for its own MSVC triplets only, so a custom clang-cl triplet starts without the MSVC/UCRT headers and libraries; the graph's first try-compile then fails on `kernel32.lib` | Set `VCPKG_LOAD_VCVARS_ENV ON` in the triplet - [consumer-recipes.md](docs/consumer-recipes.md) §6 has the shape, and ADR 0012 has the measurement |
+| A clang-cl triplet has to load vcvars and include vcpkg's Windows platform file | vcpkg loads vcvars for its own MSVC triplets only, so a custom clang-cl triplet starts without the MSVC/UCRT headers and libraries; and without vcpkg's `windows.cmake` every CMake dependency keeps clang-cl's default `/MD` | Set `VCPKG_LOAD_VCVARS_ENV ON` and chainload [test/cmake/toolchains/clang-cl.cmake](test/cmake/toolchains/clang-cl.cmake) - [consumer-recipes.md](docs/consumer-recipes.md) §6 has the shape, ADR 0012 the measurement |
 | A Debug consumer needs a dual triplet | MSVC ABI: a Debug consumer links a Debug library, and a release-only triplet installs none | Use `RelWithDebInfo` when the reason for Debug is debugging your own code - it is the release ABI |
 | On Windows, name the compiler with the toolset, not `CMAKE_CXX_COMPILER` | A Visual Studio generator derives its compiler from the toolset and ignores that variable silently | `toolset: {value: ClangCL, strategy: set}` in the preset; on Linux and macOS the compilers go through `CMAKE_{C,CXX}_COMPILER` |
 | A shared libnode must be findable at run time, and links nothing else | The DLL/`.so`/`.dylib` already contains the externalized dependencies | Copy it next to the executable or set `BUILD_RPATH`; do not link the dependencies a second time |
@@ -110,9 +110,10 @@ every push**, and the one it does not is named rather than implied:
   a dual install of Node.js on four cores is 5h36m of vcpkg work with every dependency cached, so
   the x64 leg landed on either side of GitHub's six-hour job limit from one run to the next, and
   arm64 never finished at all. `docs/ci.md` has the three measurements;
-- `matrix.yml` — the rest of the matrix: the dynamic CRT on Windows and a **shared libnode** on
-  every platform. All eight cells are green; they are still marked non-blocking, which is tracked
-  in [#35](https://github.com/hz2769514387/vcpkg-port-node/issues/35).
+- `matrix.yml` — the rest of the matrix: the dynamic CRT on Windows, a **shared libnode** on
+  every platform, and the **clang-cl dependency graph** on Windows. Twelve cells; eight block a
+  merge, and the four that do not are tracked in
+  [#35](https://github.com/hz2769514387/vcpkg-port-node/issues/35).
 
 Debug and the wider matrix are separate workflows rather than extra legs of `ci.yml` because a
 job that installed the port for every configuration and ran the suite for each would exceed
