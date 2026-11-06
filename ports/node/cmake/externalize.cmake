@@ -70,9 +70,9 @@ function(_node_shared_args _out _libdir _is_debug)
         set(_zlib_lib    "z")
         set(_openssl_lib "crypto,ssl")
         set(_libuv_lib   "uv")
-        # The CI triplets on Unix are release-only, so only the release names
-        # are exercised there; the debug postfix is a CMake-level convention
-        # that holds on Unix too, but that combination is unverified.
+        # The release-only CI triplets on Unix only exercise the release names; the
+        # Debug spellings (spdlogd/fmtd) are what debug.yml's macOS Debug legs link,
+        # which is the measurement this comment used to call unverified.
         if(_is_debug)
             set(_spdlog_lib "spdlogd")
             set(_fmt_lib    "fmtd")

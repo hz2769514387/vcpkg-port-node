@@ -4,11 +4,12 @@
 Why this exists
 ---------------
 
-That function decides what the port says when it cannot find a usable MSVC environment, and two of
-its four cases can only happen on a machine that is *missing* Visual Studio or its SDK. No CI runner
-here is missing either, and neither is a developer's machine, so before this file existed the two
-interesting answers were never executed by anything - which is how the port came to warn when nothing
-was wrong, say nothing when the SDK was missing, and warn-and-continue in the case that should stop.
+That function decides what the port says when it cannot find a usable MSVC environment, and four of
+its five cases can only happen on a machine that is missing Visual Studio, missing its SDK, or
+already inside a developer prompt. No CI runner here is any of those, and neither is a developer's
+machine, so before this file existed those answers were never executed by anything - which is how
+the port came to warn when nothing was wrong, say nothing when the SDK was missing, and
+warn-and-continue in the case that should stop.
 
 The function takes the two resolved values as arguments and reads INCLUDE/LIB from the environment,
 so it needs no toolchain: `cmake -P` drives it in milliseconds, on any platform.

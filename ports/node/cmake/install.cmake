@@ -1,7 +1,8 @@
 # Install: what leaves the build tree and lands in the package.
 #
-# Owns: the headers, the gyp archives (and the shared library when the linkage is dynamic),
-# compiler-rt's builtins archive, and the licence.
+# Owns: the headers, the gyp archives (and the shared library when the linkage is dynamic), and
+# compiler-rt's builtins archive. The licence is installed by the portfile, which also sweeps the
+# empty directories a Node.js release happens to contain.
 #
 # Expects from the portfile: _node_configs, the build output directory, and the linkage.
 
@@ -15,7 +16,6 @@ file(INSTALL "${SOURCE_PATH}/src/" DESTINATION "${CURRENT_PACKAGES_DIR}/include/
 # `v8` port installs include/v8.h. The consumer config adds this directory to
 # the include path, so `#include <v8.h>` still resolves.
 file(INSTALL "${SOURCE_PATH}/deps/v8/include/" DESTINATION "${CURRENT_PACKAGES_DIR}/include/node-v8")
-file(REMOVE_RECURSE "${CURRENT_PACKAGES_DIR}/include/node/api" "${CURRENT_PACKAGES_DIR}/include/node/res")
 
 if(VCPKG_TARGET_IS_WINDOWS)
     set(_node_lib_suffix ".lib")
@@ -333,7 +333,6 @@ foreach(_node_cfg IN LISTS _node_configs)
         unset(_n)
     endif()
     unset(_node_archives)
-    unset(_node_archives_root)
 endforeach()
 unset(_node_out_dir)
 unset(_node_pkg_lib_dir)

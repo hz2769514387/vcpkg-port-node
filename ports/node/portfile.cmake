@@ -98,9 +98,6 @@ vcpkg_download_distfile(NODE_ARCHIVE
     FILENAME node-v${VERSION}.tar.xz
 )
 
-# The patch set fixes defects in gyp's ninja/MSVC emulation that upstream never
-# sees (its Windows build goes through MSBuild, its Unix builds through Make),
-# plus the v26 crates target and the externalization of simdutf/zlib.
 # The patch set fixes defects in gyp's ninja/MSVC emulation that upstream never sees (its Windows
 # build goes through the MSBuild generator, its Unix builds through Make), plus the v26 crates
 # target and the externalization of simdutf/zlib.
@@ -129,7 +126,11 @@ foreach(_patch IN LISTS _node_patch_files)
     math(EXPR _node_patch_expected "${_node_patch_expected} + 1")
 endforeach()
 list(LENGTH _node_patch_files _node_patch_count)
-message(STATUS "node port: ${_node_patch_count} patches, numbered 0001-${_patch_number}")
+if(_node_patch_count GREATER 0)
+    message(STATUS "node port: ${_node_patch_count} patches, numbered 0001-${_patch_number}")
+else()
+    message(STATUS "node port: no patches")
+endif()
 unset(_patch)
 unset(_patch_name)
 unset(_patch_number)
@@ -180,10 +181,10 @@ vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
 #
 # vcpkg reports an installed empty directory as a post-build problem, and which directories are
 # empty is a property of the Node.js tree, not of this port: 26.13.0 brought
-# include/node/ffi/platforms and two test-suite fixture directories, and cmake/install.cmake's
-# hand-written removal of include/node/api and include/node/res is what the list looked like one
-# release earlier (issue #63). Nothing in a binary package needs an empty directory, so the walk
-# is unconditional.
+# include/node/ffi/platforms and two test-suite fixture directories. A hand-written removal of
+# include/node/api and include/node/res lived in cmake/install.cmake one release earlier; it was a
+# list that went stale, which is why nothing is named here and the walk is the only mechanism.
+# Nothing in a binary package needs an empty directory, so the walk is unconditional.
 #
 # A directory whose only entries are dotfiles reads as empty to file(GLOB), which does not match
 # them by default; no part of this package ships one, and the alternative (LIST_DIRECTORIES) does

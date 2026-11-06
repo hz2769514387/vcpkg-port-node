@@ -3,7 +3,7 @@
 // Everything here is about *provenance*: did the dependency Node.js just used come from the
 // vcpkg tree, or did it come out of the vendored copy inside the Node.js source tree? Two
 // copies of one library in a single process is the failure mode this whole repository
-// exists to avoid, and a the-library-still-works test cannot tell the two apart.
+// exists to avoid, and a library-still-works test cannot tell the two apart.
 //
 // So each check has two halves where it can: the build-time variable that says where it
 // comes from (`process.config.variables.node_shared_*`), and a runtime behaviour that only
