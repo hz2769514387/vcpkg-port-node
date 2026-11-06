@@ -19,3 +19,6 @@ compile_commands.json
 
 # Logs and scratch.
 *.log
+
+# Python bytecode from running tools/ locally.
+__pycache__/
