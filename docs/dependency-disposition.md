@@ -106,7 +106,7 @@ required by this upgrade.
 | hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → `ports/hdr-histogram` pins 0.12.0 (overlay) |
 | LIEF | 1.0.0 | 0.17.6 | `--shared-lief` | vcpkg behind a major → overlay pin 1.0.0 |
 | libffi | 3.8.0 | 3.8.0 | `--shared-ffi` | equal → overlay pin 3.8.0 |
-| perfetto | 58.2 | 53.0 | `--shared-perfetto` | overlay pin 58.2 (node-only, not V8) — **ready but not wired**, see below |
+| perfetto | 58.2 | 53.0 | `--shared-perfetto` | **no overlay**: the channel is unwired (see below), and an overlay that nothing links would only shadow the registry for a consumer who names perfetto (issue #88) |
 | zlib | 1.3.2.1-motley (Chromium fork) | 1.3.2 (madler) | `--shared-zlib` | different source → overlay port, built and measured: [zlib-fork.md](zlib-fork.md) |
 | googletest | Chromium fork 1.8.0.git-9518a57 | 1.18.0 | `--shared-gtest` | test only → see §4 |
 | V8: abseil | Chromium fork, rev `6d8e1a5c…` | 20260107.1 | `--shared-abseil` | different fork → the registry port is what V8 compiles against; verified and closed (issue #1) |
@@ -143,8 +143,10 @@ Three entries deserve a correction note:
   drops `src/libplatform/tracing/trace-object.cc` from `v8_libplatform`, while legacy
   tracing members still emitted into `v8_libplatform` and `mksnapshot` reference
   `TraceObject::~TraceObject()`, so `mksnapshot.exe` fails to link with LNK2019/LNK1120.
-  The `ports/perfetto` overlay is built and verified; wiring it needs that V8 build-system
-  gap fixed first (tracked in issue #12).
+  A 58.2 overlay was built and verified, and then withdrawn: nothing in this repository's
+  graph links it, so its only effect was to replace the registry's 53.0 for any consumer
+  who names perfetto themselves (issue #88). It comes back with the channel, once that V8
+  build-system gap is fixed.
 
 ### 3.1 LIEF's own dependencies (the rule applied transitively)
 
@@ -278,7 +280,7 @@ of an install tree deserves the explanation instead of a suspicion that the tree
 |---|---|
 | Use the vcpkg port as-is | zstd, nghttp3 (link sfparse alongside), ngtcp2 |
 | Overlay: same upstream source, different build | icu (78.3, compiled by clang-cl - ADR 0011), openssl (3.6.5, C code compiled by clang-cl - ADR 0009), simdutf (8.2.0, forced C++20 - issue #2) |
-| Overlay: pin the version Node.js ships, add its patches | libuv, brotli, c-ares, nghttp2, llhttp, simdjson, ada-url, hdr-histogram, libffi, LIEF, perfetto, sqlite3 |
+| Overlay: pin the version Node.js ships, add its patches | libuv, brotli, c-ares, nghttp2, llhttp, simdjson, ada-url, hdr-histogram, libffi, LIEF, sqlite3 |
 | Overlay: replace the upstream source entirely | zlib → Chromium fork (issue #4) |
 | Externalize from V8's tree (the must-unify four) | abseil, highway — registry ports (issue #1); simdutf — `ports/simdutf` (issue #2); zlib — `ports/zlib` (issue #4) |
 | LIEF's own third-party set — all externalized, none embedded (§3.1) | registry: nlohmann-json, spdlog, tl-expected; overlays: utfcpp, frozen, mbedtls, tcb-span |
@@ -302,6 +304,6 @@ issue carries the evidence:
 
 Still to measure before any of this is called done:
 
-- Byte-level deltas for nghttp3, icu, hdr-histogram, libffi, LIEF, perfetto, openssl.
+- Byte-level deltas for nghttp3, icu, hdr-histogram, libffi, LIEF, openssl.
 - The `c-ares` generated headers: `config/*/ares_config.h` and `ares_build.h` as Node.js
   checks them in, against what vcpkg's CMake generates on each platform.
