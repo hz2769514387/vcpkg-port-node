@@ -58,6 +58,16 @@ if(CMAKE_PARENT_LIST_FILE MATCHES "^.*/scripts/buildsystems/vcpkg[.]cmake$")
     get_filename_component(_vcpkg_scripts "${_vcpkg_scripts}" DIRECTORY)
     include("${_vcpkg_scripts}/toolchains/windows.cmake")
     unset(_vcpkg_scripts)
+
+    # Resource files, and why this wrapper is off.
+    #
+    # CMake's Ninja generator otherwise wraps the rc step in `cmcldeps` and hands the
+    # *CMake C compiler* the resource flags. With clang-cl in that slot, vcpkg's
+    # /c65001 reaches clang-cl as a file name and the build stops with
+    # "clang-cl: error: no such file or directory: '/c65001'". Measured on sqlite3, the
+    # first port in this graph with a .rc. The plain rc rule leaves the code-page flag
+    # with rc.exe, which is where it belongs.
+    set(CMAKE_NINJA_CMCLDEPS_RC 0)
 else()
     message(FATAL_ERROR
         "clang-cl toolchain: the vcpkg checkout could not be located; this file is meant to be "
