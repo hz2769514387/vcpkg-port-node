@@ -43,31 +43,43 @@ One file, at the repository root, machine-read and hand-edited only in the `port
 
 ```json
 {
-  "port":  { "version": "20261018", "released": false,
-             "manifest_version": "26.12.0", "manifest_port_version": 0 },
-  "node":  { "version": "26.12.0", "released": "2026-10-14", "lts": false,
+  "port":  { "version": "20261024", "released": false,
+             "tagged_version": "26.12.0", "tagged_port_version": 16,
+             "manifest_version": "26.13.0", "manifest_port_version": 2 },
+  "node":  { "version": "26.13.0", "released": "2026-10-28", "lts": true,
              "lts_start": "2026-10-28", "eol": "2029-04-30",
-             "url": "https://nodejs.org/dist/v26.12.0/node-v26.12.0.tar.xz",
-             "sha512": "c3c4…", "v8": "14.6.202.34",
+             "url": "https://nodejs.org/dist/v26.13.0/node-v26.13.0.tar.xz",
+             "sha512": "b264…", "v8": "14.6.202.34",
              "module_version": 147, "napi_version": 8, "npm": "11.20.0" },
-  "vcpkg": { "release": "2026.07.29", "commit": "9e593bb…" }
+  "vcpkg": { "release": "2026.10.16", "commit": "9eec002…" }
 }
 ```
 
-`port.released` is `false` while no tag exists for that version. It went `true` on 2026-10-24 with
-the first release, `20261024_26.12.0_vcpkg-2026.07.29`; from then on the version is set when a
-release is prepared and nowhere else.
+The two halves of the `port` block answer different questions and must not be confused:
+
+- `port.version` identifies the **release record** (the tag's date component). It is set when a
+  release is prepared and at no other time.
+- `tagged_version` / `tagged_port_version` are the `ports/node` manifest that release shipped.
+- `manifest_version` / `manifest_port_version` are the manifest **now**, on `main`.
+- `port.released` is `true` only while the two pairs are equal. The first commit that moves
+  `ports/node`'s version or `port-version` after a tag sets it `false`; the release preparation
+  sets it back to `true` with the new `tagged_*`. Without that, the record claims a release
+  contains a tree it never shipped - which is what it did between the `20261024` tag (26.12.0,
+  port-version 16) and the 26.13.0 work on `main`.
+
 `node.lts_start` / `node.eol` are Node.js's published schedule for the line (they are what §6
 is derived from), not something this repository decides.
 
 Rules:
 
-- **One writer per field.** `port.version` is set when a release is prepared and at no other
-  time. Everything else is *derived*: a Node.js bump changes `node.*` and the portfile
-  together; a vcpkg bump changes `vcpkg.*` and the workflows' default together.
+- **One writer per field.** `port.version` and the `tagged_*` pair are set when a release is
+  prepared and at no other time; `manifest_*` follow `ports/node` wherever it goes. Everything
+  else is *derived*: a Node.js bump changes `node.*` and the portfile together; a vcpkg bump
+  changes `vcpkg.*` and the workflows' default together.
 - **It is checked, not trusted.** `tools/check_repo.py` compares it against the portfile
   (Node.js version and SHA512), `ports/node/vcpkg.json` (`version`, `port-version`) and the
-  `vcpkg-commit` default in `.github/workflows/build-test.yml`. Drift fails Lint.
+  `vcpkg-commit` default in `.github/workflows/build-test.yml`; it also fails when `released`
+  disagrees with the `tagged_*` versus `manifest_*` comparison. Drift fails Lint.
 - **It does not replace the ADRs.** The *policy* behind the pins is in ADR 0002 (Node.js
   line), ADR 0003 (vcpkg baseline); `versions.json` is the current value of those decisions.
 
@@ -133,8 +145,10 @@ Preparing a release is a checklist, and the lint covers half of it:
 
 1. the matrix is green on the commit that will be tagged (link it in the release body);
 2. `versions.json`: `port.version` = today's date (`.N` if today already has one),
-   `port.released` = `true`;
-3. the README's Status table (the human mirror of the pins) still matches `versions.json`;
+   `port.tagged_version` / `port.tagged_port_version` = the manifest being released,
+   `port.released` = `true`; the `manifest_*` pair already mirrors it;
+3. the README's Status table (the human mirror of the pins) still matches `versions.json` -
+   including whether `main` is ahead of the last release or carries it;
 4. `tools/version_tree.py` and `tools/check_repo.py` pass — the second one is what catches a
    half-finished Node.js or vcpkg bump. For a vcpkg bump, `tools/check_triplets.py --vcpkg-root
    <the new pin>` also reports no field difference between `test/cmake/triplets/` and the stock
