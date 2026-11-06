@@ -164,7 +164,8 @@ match the compiler Node.js uses.
 
 ## 7. Where this stops
 
-The README's *Known limits* is the authoritative list, and it is short: the macOS deployment target
-comes from the dependency graph rather than from Node.js, Visual Studio 2022 or newer is required,
-and consuming this repository substitutes its build for twenty registry ports across the whole
-graph. Consuming it is also building it: the first configure costs tens of minutes.
+The README's *Known limits* is the authoritative list. Three of its rows are worth reading before a
+first build: the macOS deployment target comes from the dependency graph rather than from Node.js,
+Visual Studio 2022 or newer is required, and consuming this repository substitutes its build for
+twenty registry ports across the whole graph. Consuming it is also building it: the first
+configure costs tens of minutes.

@@ -23,28 +23,11 @@ write the sentence that explains why a fork matters, and a generated table would
 from __future__ import annotations
 
 import argparse
-import json
 import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-TABLE = os.path.join(ROOT, "docs", "overlay-replacements.md")
-PORTS = os.path.join(ROOT, "ports")
-
-# | `name` | registry | graph gets | what changes for you |
-ROW = re.compile(r"^\|\s*`(?P<name>[a-z0-9][a-z0-9-]*)`\s*\|\s*(?P<registry>[^|]*)\|\s*(?P<graph>[^|]*)\|")
-
-VERSION_KEYS = ("version", "version-semver", "version-date", "version-string")
-
-
-def port_version(path: str) -> str | None:
-    with open(os.path.join(path, "vcpkg.json"), encoding="utf-8") as handle:
-        manifest = json.load(handle)
-    for key in VERSION_KEYS:
-        if key in manifest:
-            return str(manifest[key])
-    return None
+from overlay_common import PORTS, ROW, TABLE, manifest_version
 
 
 def main() -> int:
@@ -60,7 +43,7 @@ def main() -> int:
                 rows[match.group("name")] = (match.group("registry").strip(), match.group("graph").strip())
 
     ports = {
-        name: port_version(os.path.join(PORTS, name))
+        name: manifest_version(os.path.join(PORTS, name))
         for name in sorted(os.listdir(PORTS))
         if os.path.isfile(os.path.join(PORTS, name, "vcpkg.json"))
     }

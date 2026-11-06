@@ -12,8 +12,8 @@ Using it, from CMake:
     target_link_libraries(<your target> PRIVATE unofficial::node::node)
 
 `unofficial::node::node` carries the include directories, C++20, the platform
-libraries (winmm, crypt32, the Windows manifest and the 8 MiB stack reserve) and
-every third-party dependency the library was built against - OpenSSL, zlib, libuv,
+libraries (winmm, crypt32, the Windows manifest and the stack reserve node.gyp
+declares) and every third-party dependency the library was built against - OpenSSL, zlib, libuv,
 ICU, sqlite3, abseil, highway, simdutf, simdjson, nghttp2 and the rest. Do not link
 any of them yourself: the library already contains one copy of each, and a second
 copy in one process is exactly what must not happen.

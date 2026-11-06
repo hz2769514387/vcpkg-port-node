@@ -23,7 +23,7 @@ matters.
 | `brotli` | 1.2.0 | **1.2.1** plus Node.js's `c/common/platform.h` | the version is ahead of the registry on purpose: CVE-2026-111497 is fixed in 1.2.1, and Node.js v26.12.1 carries that same fix as a cherry-pick into its 1.2.0. Shipping the registry's 1.2.0 would leave the delivered library vulnerable to a CVE the release it claims to package has fixed. The header patch is unchanged in kind (IA64 target, `BROTLI_MODEL` guards) and regenerated for 1.2.1 |
 | `c-ares` | 1.34.8 | **1.34.9** | the registry is one patch release behind the Node.js v26.12.1 tree, and this port externalizes c-ares: the 1.34.9 update is part of that release's security content, so shipping 1.34.8 would deliver a library older than the release it claims to package. No source patches - the built sources are upstream's |
 | `zlib` | 1.3.2 (madler) | Chromium fork, `1.3.2.1-motley` | compression behaviour and `process.versions.zlib` are Node.js's. **248 registry ports depend on zlib** and all of them get the fork. Evidence and accepted downside: `docs/zlib-fork.md` |
-| `simdutf` | 9.1.1 | **8.2.0**, built as **C++20** with `SIMDUTF_ATOMIC_REF` | same version, different ABI: V8 needs the atomic base64 entry points, which only exist in that configuration. A consumer that uses simdutf's C++ API must compile as C++20 too |
+| `simdutf` | 9.1.1 | **8.2.0**, built as **C++20** with `SIMDUTF_ATOMIC_REF` | not the version V8 vendors (7.7.0, a single header): the overlay ships the 8.2.0 the port was verified against, and what matters is the build - C++20 with `SIMDUTF_ATOMIC_REF`, which compiles the atomic base64 entry points V8 calls. A consumer that uses simdutf's C++ API must compile as C++20 too |
 | `sqlite3` | 3.53.4 | 3.54.0 with `SQLITE_ENABLE_FTS3_PARENTHESIS` and `SQLITE_ENABLE_RBU` | newer minor than the registry, two extra features on. A consumer that links sqlite3 sees both |
 | `simdjson` | 5.0.2 | 5.0.3 | major version jump; the C++ API between 4.x and 5.0 is not source compatible |
 | `nghttp2` | 1.70.0 | 1.70.0, with Node.js's 31 differing files | minor version; the public header and the session/HPACK internals move (31 files differ), so the registry build is not the library Node.js is tested against |
@@ -43,8 +43,9 @@ matters.
 
 
 One row now reads as "older than the registry", and that is the point of that overlay rather than a
-drift: `simdutf` is the version V8 vendors and is compiled the way V8 needs it (`SIMDUTF_ATOMIC_REF`,
-C++20). `openssl` is at the registry's 3.6.5 again - the overlay exists for the compiler, not for the
+drift: `simdutf` ships the 8.2.0 the port was verified against, compiled the way V8 needs it
+(`SIMDUTF_ATOMIC_REF`, C++20) - V8's own copy is 7.7.0, and the registry is now at 9.1.1. `openssl`
+is at the registry's 3.6.5 again - the overlay exists for the compiler, not for the
 version - and it is a whole portfile derived from a baseline, so refreshing it (#29) means re-deriving
 the two deliberate edits rather than editing a version line.
 

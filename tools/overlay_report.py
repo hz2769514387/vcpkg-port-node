@@ -39,16 +39,10 @@ import os
 import re
 import sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-PORTS = os.path.join(ROOT, "ports")
+from overlay_common import PORTS, ROOT, ROW, TABLE, manifest_version
+
 DATA = os.path.join(ROOT, "docs", "overlay-versions.json")
-TABLE = os.path.join(ROOT, "docs", "overlay-replacements.md")
 VERSIONS = os.path.join(ROOT, "versions.json")
-
-VERSION_KEYS = ("version", "version-semver", "version-date", "version-string")
-
-# | `name` | registry | graph gets | what changes for you |
-ROW = re.compile(r"^\|\s*`(?P<name>[a-z0-9][a-z0-9-]*)`\s*\|\s*(?P<registry>[^|]*)\|\s*(?P<graph>[^|]*)\|")
 
 # "not in the registry" is the only cell that is prose rather than a version.
 NOT_IN_REGISTRY = re.compile(r"not in the registry", re.IGNORECASE)
@@ -57,14 +51,6 @@ NOT_IN_REGISTRY = re.compile(r"not in the registry", re.IGNORECASE)
 def load_json(path):
     with open(path, encoding="utf-8") as handle:
         return json.load(handle)
-
-
-def manifest_version(port_dir):
-    manifest = load_json(os.path.join(port_dir, "vcpkg.json"))
-    for key in VERSION_KEYS:
-        if key in manifest:
-            return str(manifest[key])
-    return None
 
 
 def overlay_versions():
