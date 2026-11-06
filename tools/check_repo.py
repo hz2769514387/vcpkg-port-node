@@ -92,6 +92,41 @@ def read_blob(sha, cwd):
     ).stdout
 
 
+class Index:
+    """The tracked files as the index holds them, not as the working tree has them.
+
+    Every check reads through this, so the run judges what a commit would contain: an edit
+    that was never staged is invisible here, exactly as it is invisible to CI. Paths use
+    forward slashes, the spelling `git ls-files` prints on every platform.
+    """
+
+    def __init__(self, cwd):
+        self.cwd = cwd
+        self.blobs = dict(tracked_files(cwd))
+        self._text = {}
+
+    def text(self, path):
+        if path not in self._text:
+            self._text[path] = read_blob(self.blobs[path], self.cwd).decode(
+                "utf-8", "replace"
+            )
+        return self._text[path]
+
+    def isfile(self, path):
+        return path in self.blobs
+
+    def listdir(self, directory):
+        prefix = directory.rstrip("/") + "/"
+        names = set()
+        for path in self.blobs:
+            if path.startswith(prefix):
+                names.add(path[len(prefix):].split("/", 1)[0])
+        return sorted(names)
+
+    def paths(self):
+        return sorted(self.blobs)
+
+
 def cjk_characters(line):
     hits = []
     for ch in line:
@@ -159,14 +194,42 @@ def check_blob(report, path, blob):
         report.warn(path, "contains non-NFC Unicode sequences")
 
 
-def check_port_patches(report, root, ports):
-    for port in ports:
-        portfile = os.path.join(root, "ports", port, "portfile.cmake")
-        if not os.path.isfile(portfile):
-            report.error("ports/%s/portfile.cmake" % port, "port directory has no portfile.cmake")
+def patch_argument_names(lines):
+    """`[(line, token)]` for the patch files a portfile names in a `PATCHES` argument list.
+
+    vcpkg takes bare names there (`install.patch`, `windows/install-pdbs.patch`), which is how
+    every overlay in this repository writes them; the `${CMAKE_CURRENT_LIST_DIR}/...` form the
+    other check knows about is the explicit variant. Only the argument list is scanned, so a
+    comment that names a patch, and a glob that discovers the set, are not references.
+    """
+    found = []
+    in_list = False
+    for number, line in enumerate(lines, 1):
+        stripped = line.strip()
+        if not in_list:
+            if stripped == "PATCHES":
+                in_list = True
             continue
-        with open(portfile, "r", encoding="utf-8") as fh:
-            lines = fh.readlines()
+        if stripped.startswith(")"):
+            in_list = False
+            continue
+        content = stripped.split("#", 1)[0]
+        for token in content.split():
+            token = token.strip('"')
+            if "${" in token or "$<" in token or "$ENV{" in token:
+                continue
+            if token.endswith(".patch") or token.endswith(".diff"):
+                found.append((number, token))
+    return found
+
+
+def check_port_patches(report, index, ports):
+    for port in ports:
+        portfile = "ports/%s/portfile.cmake" % port
+        if not index.isfile(portfile):
+            report.error(portfile, "port directory has no portfile.cmake")
+            continue
+        lines = index.text(portfile).splitlines()
         missing = []
         # Paths built with a generator expression or a variable ($<TARGET_FILE:...>,
         # scripts/${_shim}) are resolved later; only literal references are checkable. Neither is a
@@ -181,56 +244,54 @@ def check_port_patches(report, root, ports):
                     continue
                 if any(ch in referenced for ch in "*?[]") or "..." in referenced:
                     continue
-                if not os.path.isfile(os.path.join(root, "ports", port, referenced)):
+                if not index.isfile("ports/%s/%s" % (port, referenced)):
                     missing.append(referenced)
+        for number, token in patch_argument_names(lines):
+            if not index.isfile("ports/%s/%s" % (port, token)):
+                missing.append(token)
         for referenced in missing:
             report.error(
-                "ports/%s/portfile.cmake" % port,
+                portfile,
                 "references %s, which does not exist" % referenced,
             )
 
 
-def check_port_versions(report, root, ports):
+def check_port_versions(report, index, ports):
     for port in ports:
-        manifest_path = os.path.join(root, "ports", port, "vcpkg.json")
-        portfile_path = os.path.join(root, "ports", port, "portfile.cmake")
-        with open(manifest_path, "r", encoding="utf-8") as fh:
-            manifest = json.load(fh)
+        manifest_path = "ports/%s/vcpkg.json" % port
+        portfile_path = "ports/%s/portfile.cmake" % port
+        manifest = json.loads(index.text(manifest_path))
         version = None
         for key in ("version", "version-string", "version-semver", "version-date"):
             if key in manifest:
                 version = manifest[key]
                 break
         if not version:
-            report.error("ports/%s/vcpkg.json" % port, "has no version field")
+            report.error(manifest_path, "has no version field")
             continue
-        if not os.path.isfile(portfile_path):
+        if not index.isfile(portfile_path):
             continue
-        with open(portfile_path, "r", encoding="utf-8") as fh:
-            content = fh.read()
+        content = index.text(portfile_path)
         if "${VERSION}" in content:
             # Standard vcpkg shape: the portfile builds whatever the manifest declares.
             continue
         if version not in content:
             report.error(
-                "ports/%s/portfile.cmake" % port,
+                portfile_path,
                 "mentions neither %s nor ${VERSION}; the manifest version and the portfile "
                 "drifted apart" % version,
             )
 
 
-def discover_ports(root):
-    ports_dir = os.path.join(root, "ports")
-    if not os.path.isdir(ports_dir):
-        return []
+def discover_ports(index):
     return sorted(
         name
-        for name in os.listdir(ports_dir)
-        if os.path.isfile(os.path.join(ports_dir, name, "vcpkg.json"))
+        for name in index.listdir("ports")
+        if index.isfile("ports/%s/vcpkg.json" % name)
     )
 
 
-def check_port_usage(report, root, ports):
+def check_port_usage(report, index, ports):
     """`ports/<port>/usage` is installed into the package and read by a consumer.
 
     It must not name a version. It is shipped *by* the port, so a version written into it is a
@@ -240,26 +301,24 @@ def check_port_usage(report, root, ports):
     """
     version = re.compile(r"[0-9]+[.][0-9]+[.][0-9]+")
     for port in ports:
-        usage = os.path.join(root, "ports", port, "usage")
+        usage = "ports/%s/usage" % port
         # The portfile's own header is the same claim in the same place: it said "build the Node.js
         # v26.12.0 source tree" long after the manifest had moved on. Only the leading comment block
         # is scanned - a later comment recording which version a measurement came from is history.
         header = []
-        portfile = os.path.join(root, "ports", port, "portfile.cmake")
+        portfile = "ports/%s/portfile.cmake" % port
         # Only this project's own port. An overlay's header exists to name the two versions it sits
         # between - what it pins and what the registry has - so a version there is the point.
-        if port == "node" and os.path.isfile(portfile):
-            with open(portfile, "r", encoding="utf-8") as handle:
-                for line in handle:
-                    if not line.startswith("#") and line.strip():
-                        break
-                    header.append(line)
+        if port == "node" and index.isfile(portfile):
+            for line in index.text(portfile).splitlines(keepends=True):
+                if not line.startswith("#") and line.strip():
+                    break
+                header.append(line)
         targets = []
         if header:
-            targets.append(("ports/%s/portfile.cmake" % port, header, 1))
-        if os.path.isfile(usage):
-            with open(usage, "r", encoding="utf-8") as handle:
-                targets.append(("ports/%s/usage" % port, handle.readlines(), 1))
+            targets.append((portfile, header, 1))
+        if index.isfile(usage):
+            targets.append((usage, index.text(usage).splitlines(keepends=True), 1))
         for where, lines, first in targets:
             for number, line in enumerate(lines, first):
                 match = version.search(line)
@@ -273,7 +332,7 @@ def check_port_usage(report, root, ports):
                     )
 
 
-def check_node_patch_version_in_descriptions(report, root, ports):
+def check_node_patch_version_in_descriptions(report, index, ports):
     """An overlay description must not name the Node.js *patch* version it was derived from.
 
     It says "the version Node.js v26 ships" for a reason, and the reason survives a patch bump -
@@ -283,18 +342,17 @@ def check_node_patch_version_in_descriptions(report, root, ports):
     """
     pattern = re.compile(r"Node[.]js v[0-9]+[.][0-9]+[.][0-9]+")
     for port in ports:
-        manifest = os.path.join(root, "ports", port, "vcpkg.json")
-        with open(manifest, "r", encoding="utf-8") as handle:
-            description = json.dumps(json.load(handle).get("description", ""))
+        manifest = "ports/%s/vcpkg.json" % port
+        description = json.dumps(json.loads(index.text(manifest)).get("description", ""))
         for match in pattern.finditer(description):
             report.error(
-                "ports/%s/vcpkg.json" % port,
+                manifest,
                 "the description names '%s'. Say the major version instead - the patch version "
                 "drifts on every bump and this sentence is not what pins it." % match.group(0),
             )
 
 
-def check_overlay_disclosure(report, root, ports):
+def check_overlay_disclosure(report, index, ports):
     """Every port must be disclosed in docs/overlay-replacements.md.
 
     An overlay whose name exists in the registry silently replaces that library for
@@ -302,25 +360,24 @@ def check_overlay_disclosure(report, root, ports):
     visible before it happens, so a new port without a row is a review blocker.
     Rows are matched by the backticked port name in the first column.
     """
-    doc = os.path.join(root, "docs", "overlay-replacements.md")
-    if not os.path.isfile(doc):
+    doc = "docs/overlay-replacements.md"
+    if not index.isfile(doc):
         report.error(
-            "docs/overlay-replacements.md",
+            doc,
             "missing: every port under ports/ has to be disclosed there",
         )
         return
-    with open(doc, "r", encoding="utf-8") as fh:
-        text = fh.read()
+    text = index.text(doc)
     for port in ports:
         if "| `%s` |" % port not in text:
             report.error(
-                "docs/overlay-replacements.md",
+                doc,
                 "ports/%s has no row in the disclosure table (say what it replaces and "
                 "what changes for a consumer)" % port,
             )
 
 
-def check_versions_json(report, root):
+def check_versions_json(report, index):
     """versions.json has to agree with the files it summarises.
 
     It is the repository's own record of the three numbers (release date, Node.js version,
@@ -328,19 +385,18 @@ def check_versions_json(report, root):
     else, so the check is a drift detector: the portfile's source archive hash, the manifest
     version, and the workflows' vcpkg pin all have to be the same values it records.
     """
-    path = os.path.join(root, "versions.json")
-    if not os.path.isfile(path):
+    path = "versions.json"
+    if not index.isfile(path):
         report.error(
-            "versions.json",
+            path,
             "missing: it records the current Node.js and vcpkg pins (docs/versioning.md)",
         )
         return
-    with open(path, "r", encoding="utf-8") as fh:
-        try:
-            data = json.load(fh)
-        except ValueError as exc:
-            report.error("versions.json", "is not valid JSON: %s" % exc)
-            return
+    try:
+        data = json.loads(index.text(path))
+    except ValueError as exc:
+        report.error(path, "is not valid JSON: %s" % exc)
+        return
 
     port = data.get("port") or {}
     node = data.get("node") or {}
@@ -349,25 +405,24 @@ def check_versions_json(report, root):
     release = str(port.get("version", ""))
     if not re.match(r"^\d{8}(\.\d+)?$", release):
         report.error(
-            "versions.json",
+            path,
             "port.version '%s' is neither YYYYMMDD nor YYYYMMDD.N" % release,
         )
     if not isinstance(port.get("released"), bool):
-        report.error("versions.json", "port.released has to be true or false")
+        report.error(path, "port.released has to be true or false")
 
-    manifest_path = os.path.join(root, "ports", "node", "vcpkg.json")
-    if os.path.isfile(manifest_path):
-        with open(manifest_path, "r", encoding="utf-8") as fh:
-            manifest = json.load(fh)
+    manifest_path = "ports/node/vcpkg.json"
+    if index.isfile(manifest_path):
+        manifest = json.loads(index.text(manifest_path))
         if node.get("version") != manifest.get("version"):
             report.error(
-                "versions.json",
+                path,
                 "node.version '%s' does not match ports/node/vcpkg.json '%s'"
                 % (node.get("version"), manifest.get("version")),
             )
         if port.get("manifest_version") != manifest.get("version"):
             report.error(
-                "versions.json",
+                path,
                 "port.manifest_version '%s' does not match ports/node/vcpkg.json '%s'"
                 % (port.get("manifest_version"), manifest.get("version")),
             )
@@ -375,47 +430,45 @@ def check_versions_json(report, root):
             manifest.get("port-version", 0)
         ):
             report.error(
-                "versions.json",
+                path,
                 "port.manifest_port_version %s does not match ports/node/vcpkg.json %s"
                 % (port.get("manifest_port_version"), manifest.get("port-version", 0)),
             )
 
-    portfile_path = os.path.join(root, "ports", "node", "portfile.cmake")
-    if os.path.isfile(portfile_path):
-        with open(portfile_path, "r", encoding="utf-8") as fh:
-            portfile = fh.read()
+    portfile_path = "ports/node/portfile.cmake"
+    if index.isfile(portfile_path):
+        portfile = index.text(portfile_path)
         archive = re.search(r"SHA512\s+([0-9a-f]{128})", portfile)
         if not archive:
             report.error(
-                "ports/node/portfile.cmake",
+                portfile_path,
                 "no SHA512 for the Node.js source archive",
             )
         elif node.get("sha512") != archive.group(1):
             report.error(
-                "versions.json",
+                path,
                 "node.sha512 does not match the Node.js archive hash in "
                 "ports/node/portfile.cmake (one of them was bumped without the other)",
             )
 
-    workflow_path = os.path.join(root, ".github", "workflows", "build-test.yml")
-    if os.path.isfile(workflow_path):
-        with open(workflow_path, "r", encoding="utf-8") as fh:
-            workflow = fh.read()
+    workflow_path = ".github/workflows/build-test.yml"
+    if index.isfile(workflow_path):
+        workflow = index.text(workflow_path)
         pin = re.search(r"vcpkg-commit:.*?default:\s*([0-9a-f]{40})", workflow, re.S)
         if not pin:
             report.error(
-                ".github/workflows/build-test.yml",
+                workflow_path,
                 "no default commit under the vcpkg-commit input",
             )
         elif vcpkg.get("commit") != pin.group(1):
             report.error(
-                "versions.json",
+                path,
                 "vcpkg.commit does not match the workflows' vcpkg-commit default "
                 "(ADR 0003: they move together)",
             )
 
 
-def check_preset_names(report, root):
+def check_preset_names(report, index):
     """A preset is named after the triplet it selects, with one documented suffix at most.
 
     The name is how a reader knows which install a preset consumes, and the test project grew two
@@ -423,15 +476,14 @@ def check_preset_names(report, root):
     `cl.exe` consumer against the same install, and `-debug`, the Debug configuration on a
     generator that fixes it at configure time.
     """
-    path = os.path.join(root, "test", "CMakePresets.json")
-    if not os.path.isfile(path):
+    path = "test/CMakePresets.json"
+    if not index.isfile(path):
         return
-    with open(path, "r", encoding="utf-8") as fh:
-        try:
-            data = json.load(fh)
-        except ValueError as exc:
-            report.error("test/CMakePresets.json", "is not valid JSON: %s" % exc)
-            return
+    try:
+        data = json.loads(index.text(path))
+    except ValueError as exc:
+        report.error(path, "is not valid JSON: %s" % exc)
+        return
     suffixes = ("-msvc", "-debug")
     for preset in data.get("configurePresets") or []:
         if preset.get("hidden"):
@@ -459,25 +511,24 @@ def check_preset_names(report, root):
             )
 
 
-def check_triplet_role_markers(report, root):
+def check_triplet_role_markers(report, index):
     """Every triplet this repository carries says, in its first line, that it is a CI cell.
 
     The files are named exactly like the triplets a consumer may use, and one of them was copied
     into a product build that then failed at configure time on the CRT (issue #61). A marker is
     cheap; a directory name that cannot say it is not.
     """
-    directory = os.path.join(root, "test", "cmake", "triplets")
-    if not os.path.isdir(directory):
+    directory = "test/cmake/triplets"
+    if not index.listdir(directory):
         return
-    for name in sorted(os.listdir(directory)):
+    for name in index.listdir(directory):
         if not name.endswith(".cmake"):
             continue
-        path = os.path.join(directory, name)
-        with open(path, "r", encoding="utf-8") as fh:
-            first = fh.readline()
-        if "CI cell" not in first:
+        path = "%s/%s" % (directory, name)
+        first = index.text(path).splitlines()[:1]
+        if not first or "CI cell" not in first[0]:
             report.error(
-                "test/cmake/triplets/%s" % name,
+                path,
                 "the first line has to say what this file is - a CI cell, not a consumer "
                 "recipe. Copying one of these into a product build is the mistake issue #61 "
                 "is about.",
@@ -488,19 +539,20 @@ def main(argv=None):
     cwd = os.getcwd()
     root = repo_root(cwd)
     report = Report()
+    index = Index(root)
 
-    for path, sha in tracked_files(root):
-        check_blob(report, path, read_blob(sha, root))
+    for path in index.paths():
+        check_blob(report, path, read_blob(index.blobs[path], root))
 
-    ports = discover_ports(root)
-    check_port_patches(report, root, ports)
-    check_port_versions(report, root, ports)
-    check_overlay_disclosure(report, root, ports)
-    check_port_usage(report, root, ports)
-    check_node_patch_version_in_descriptions(report, root, ports)
-    check_versions_json(report, root)
-    check_preset_names(report, root)
-    check_triplet_role_markers(report, root)
+    ports = discover_ports(index)
+    check_port_patches(report, index, ports)
+    check_port_versions(report, index, ports)
+    check_overlay_disclosure(report, index, ports)
+    check_port_usage(report, index, ports)
+    check_node_patch_version_in_descriptions(report, index, ports)
+    check_versions_json(report, index)
+    check_preset_names(report, index)
+    check_triplet_role_markers(report, index)
 
     for line in report.warnings:
         print(line)
