@@ -177,7 +177,8 @@ function(_node_shared_args _out _libdir _is_debug)
         # TraceObject::~TraceObject, so mksnapshot fails to link). perfetto
         # tracing is an opt-in embedder feature that Node's own release build
         # does not enable, so the channel stays unwired until that is fixed;
-        # ports/perfetto is ready and the issue is written up in docs.
+        # a 58.2 overlay was built and withdrawn because nothing linked it
+        # (issue #88), and it returns together with this line.
         # "perfetto|perfetto"
         # LIEF is a C++ static library whose own TUs use spdlog (which is built
         # against external fmt) and mbedtls directly, so a consumer has to put

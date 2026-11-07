@@ -78,11 +78,6 @@
       "vendored": "3.5.9",
       "vendored_source": "deps/openssl/openssl/include/openssl/opensslv.h"
     },
-    "perfetto": {
-      "registry": "53.0",
-      "vendored": "58.2",
-      "vendored_source": "deps/perfetto/VERSION"
-    },
     "simdjson": {
       "registry": "5.0.2",
       "vendored": "5.0.3",

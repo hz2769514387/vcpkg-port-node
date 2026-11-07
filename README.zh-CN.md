@@ -85,7 +85,7 @@ CMake 消费者无论哪种方式都会继承到。
 | 限制 | 原因 | 处理 |
 |---|---|---|
 | 消费它就要从源码构建 Node.js —— 首次 configure 需要几十分钟，且不提供任何预编译产物 | V8 是 Node.js 维护的分支，没有预编译渠道；curated registry 也无法容纳 overlay | 为构建做准备：`cargo`、Python 3，以及（Windows）Visual Studio 2022 的 clang-cl 组件。交叉构建还需要目标架构的 Rust 标准库（`rustup target add ...`） |
-| overlay 会把 **21 个 registry port** 替换到整棵依赖图上 | `overlay-ports` 在全图生效；仅 zlib 分支就有 248 个依赖方 | 先读 [docs/overlay-replacements.md](docs/overlay-replacements.md) —— `mbedtls` 那一行是破坏性 API 变更（4.0 对 3.6） |
+| overlay 会把 **20 个 registry port** 替换到整棵依赖图上 | `overlay-ports` 在全图生效；仅 zlib 分支就有 248 个依赖方 | 先读 [docs/overlay-replacements.md](docs/overlay-replacements.md) —— `mbedtls` 那一行是破坏性 API 变更（4.0 对 3.6） |
 | macOS 的部署目标是依赖图的，不是 Node.js 的 13.5 | Node.js 把 13.5 写死且没有开关；其余依赖跟随 triplet | 需要 13.5 下限时在 triplet 里设 `VCPKG_OSX_DEPLOYMENT_TARGET 13.5` |
 | Windows 需要 Visual Studio 2022 或更新 | Node.js 24 起要求 clang-cl | 更旧的版本未构建、未测量 |
 | clang-cl triplet 必须自己加载 vcvars，并包含 vcpkg 的 Windows 平台文件 | vcpkg 只为自己内置的 MSVC triplet 加载 vcvars，自定义 clang-cl triplet 启动时没有 MSVC/UCRT 头文件和库；不包含 vcpkg 的 `windows.cmake` 时，每个 CMake 依赖都会退回 clang-cl 默认的 `/MD` | 设 `VCPKG_LOAD_VCVARS_ENV ON`，并 chainload [test/cmake/toolchains/clang-cl.cmake](test/cmake/toolchains/clang-cl.cmake) —— 形状见 [consumer-recipes.md](docs/consumer-recipes.md) §6，实测见 ADR 0012 |
