@@ -3,11 +3,7 @@
     {
       "version": "26.13.0",
       "port-version": 2,
-<<<<<<< HEAD
-      "git-tree": "c45b729d971a027d64ea0c528da0dbb61d6c59dd"
-=======
-      "git-tree": "b5797cabff6c66080085e46b23698494e60a6ea9"
->>>>>>> bcd184e (node: assert ffi, LIEF and nghttp3 are externalized, and widen the vendored check)
+      "git-tree": "cdd9e7975568412f9ea1ef18c9aaaead0e45fc77"
     },
     {
       "version": "26.13.0",
