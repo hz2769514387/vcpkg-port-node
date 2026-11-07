@@ -133,7 +133,9 @@ are carried in `test/cmake/triplets/`: `arm64-windows-release`,
 `arm64-windows-static-md-release`, the four dynamic triplets (`x64-linux-dynamic-release`,
 `arm64-linux-dynamic-release`, `x64-osx-dynamic-release`, `arm64-osx-dynamic-release`), and
 the four clang-cl cells described below. They are CI cells, not consumer recipes - issue #61
-is where the two roles get separated for readers.
+is where the two roles get separated for readers. The six that copy a stock triplet are
+compared with its definition in the pinned checkout by `tools/check_triplets.py`; the tool
+reads a checkout, so it runs at a vcpkg bump (docs/versioning.md §4) rather than in Lint.
 
 `debug.yml` installs the *stock* (dual) triplet instead, because Debug is a property of the
 install rather than of the consumer: on Windows a Debug consumer is the debug CRT and cannot
