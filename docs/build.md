@@ -3,12 +3,9 @@
 Reference for the `gyp → ninja` route on the v26 line: the externalization mechanism, the
 platform behaviour that is not obvious from upstream's documentation, and the fixes the
 port has to carry. Findings marked **measured** were reproduced on this machine against
-`node-v26.12.0`; see §5 for the exact commands. The upgrade to v26.12.1 is a security patch with the
-same V8 (14.6.202.34), so these findings are carried over rather than re-measured - the parts that
-did move are the dependency versions, and those are in
-[dependency-disposition.md](dependency-disposition.md).
-
-The disposition of individual dependencies is in
+`node-v26.12.0`; see §5 for the exact commands. The pinned tree is v26.13.0, which changes no
+dependency and keeps the same V8 (14.6.202.34), so these findings are carried over rather than
+re-measured - the parts that did move are the dependency versions, and those are in
 [dependency-disposition.md](dependency-disposition.md).
 
 ## 0. What the machine needs
@@ -51,8 +48,9 @@ Notes that matter when driving it from a port:
 - `DXSDK_DIR` must be set to a non-existent path on non-English Windows: gyp's
   `_FindDirectXInstallation` decodes `reg.exe` output as UTF-8 and dies on a localized
   code page (measured).
-- The bundled OpenSSL needs an assembler: `nasm` (the port acquires it from vcpkg's tool
-  cache), otherwise configure stops with "Did not find a new enough assembler".
+- OpenSSL's own build needs an assembler: `nasm`, which `ports/openssl` acquires from vcpkg's
+  tool cache, otherwise that port stops with "Did not find a new enough assembler". Node.js does
+  not build OpenSSL, so the node build itself needs no assembler.
 - The compiler for the `cc`/`cxx` ninja rules comes from `CC`/`CXX`, not from
   `--clang-cl=…`. `--clang-cl=<ver>` only sets the gyp `clang` variable and the
   `lib/clang/<ver>` runtime path. Windows needs clang-cl for Node.js itself (upstream
@@ -209,8 +207,7 @@ The ninja generator used to drop the MSBuild `LanguageStandard` setting (V8 then
 source-root-relative header path, while ninja runs commands from the build directory. Both
 need converting; the translation unit that *creates* the PCH must also not carry `/Yu`.
 
-Status: the port carries this fix; on the machine used for these measurements the PCH stage
-is where a full build currently stops (§6).
+Status: the port carries this fix; the full build in §6 includes it.
 
 ### 4.5 `node.gyp` still links with MSBuild-shaped `/WHOLEARCHIVE` paths
 
@@ -290,18 +287,20 @@ every link line).
 
 ## 6. Full build status
 
-The port builds `libnode.lib` successfully on `x64-windows-static` with Node.js v26.12.0
-(measured: 2026-10-15). Both Release and Debug configurations complete; the full
-`vcpkg install` including binary cache submission takes ~40 min on this machine.
+The port builds `libnode.lib` successfully on `x64-windows-static` with the pinned Node.js
+(v26.13.0; measured 2026-10-15 on v26.12.0, whose dependency set is unchanged). Both Release
+and Debug configurations complete; the full `vcpkg install` including binary cache submission
+takes ~40 min on this machine.
 
 ### 6.1 What was needed beyond §4
 
 The fixes in §4 were necessary but not sufficient. Three additional problems surfaced
 during the full build:
 
-1. **simdutf `atomic_*` symbols missing.** V8 bundles simdutf 7.7.0 (identical in v26.12.0 and
-   v26.12.1 - same V8); the 2026.07.29 baseline shipped 8.2.0, and the 2026.10.16 baseline ships
-   9.1.1 while this repository's overlay stays on 8.2.0, the version V8 vendors. V8 calls `simdutf::atomic_binary_to_base64` and `simdutf::atomic_base64_to_binary_safe`,
+1. **simdutf `atomic_*` symbols missing.** V8 bundles simdutf **7.7.0** (identical in v26.12.0,
+   v26.12.1 and v26.13.0 - same V8). The registry shipped 8.2.0 at the 2026.07.29 pin and ships
+   9.1.1 at 2026.10.16; this repository's overlay stays on **8.2.0**, the version the port was
+   verified against, not the version V8 vendors. V8 calls `simdutf::atomic_binary_to_base64` and `simdutf::atomic_base64_to_binary_safe`,
    which are gated by `SIMDUTF_ATOMIC_REF` (requires `__cpp_lib_atomic_ref >= 201806L`, a
    C++20 feature). vcpkg's simdutf defaults to `SIMDUTF_CXX_STANDARD=11`, so the `atomic_*`
    functions are not compiled into the library. Fix: an overlay port `ports/simdutf` that
@@ -473,14 +472,14 @@ by rebuilding the `torque` tool, regenerating one CSA file and compiling it: the
 becomes `../../deps/v8/src/builtins/aggregate-error.tq`, and that translation unit compiles
 without a single warning.
 
-## 7. Shared libnode: making the shared objects findable (measured)
+## 8. Shared libnode: making the shared objects findable (measured)
 
 A dynamic triplet turns every dependency into a shared object, and three separate consumers
 of those objects then need help finding them. Each failure below was measured on a CI leg,
 and each one is silent about its cause: the messages name neither the tool nor the missing
 library.
 
-### 7.1 The port's own host tools
+### 8.1 The port's own host tools
 
 `torque`, `mksnapshot`, `node_mksnapshot` and `bytecode_builtins_list_generator` **run**
 during the build - they generate the sources everything else compiles - and they are linked
@@ -512,7 +511,7 @@ into `build.ninja`, and the command is run through `sh`. `$` is ninja's escape c
 `$$` -> `$`; sh: `\$` -> `$`). `node.gyp` spells its own the same way
 (`'-Wl,-rpath,\$$ORIGIN/../lib'`). `@loader_path` has no `$` and needs no such care.
 
-### 7.2 The installed artifacts
+### 8.2 The installed artifacts
 
 The exported config links libnode itself and nothing else (a consumer that linked the
 dependencies again would get two copies of every symbol), so libnode.so finds its
@@ -526,10 +525,10 @@ loop with `uv_run`, say - has to put it on its own link line, because neither ma
 two-level namespace nor Windows resolves a symbol through a library's own dependency. Under
 a static libnode the exported config already carries them (the archives cannot resolve each
 other on their own), so nothing shows; under a shared one the omission shows up as
-`Undefined symbols: _uv_run` and nothing else. `test/embedding` links libuv explicitly in
+`Undefined symbols: _uv_run` and nothing else. `test/cases/host-loop` links libuv explicitly in
 `host_loop` for exactly this reason, and it is the shape a real consumer needs too.
 
-### 7.3 The consumer side (what the test project does, and why)
+### 8.3 The consumer side (what the test project does, and why)
 
 Windows has no rpath. The loader searches the executable's own directory and then PATH -
 **not** the directory of the DLL whose import is being resolved. Measured, because the
@@ -552,7 +551,7 @@ Two traps in that mechanism, both measured:
   one directory is truncated at the first one and the inherited PATH is lost with it. That
   is why the tools executable gets the DLLs copied next to it instead of a `PATH` entry.
 
-### 7.4 `MultiThreadedDebugDLL` is the value; `MultiThreadedDLLDebug` is not
+### 8.4 `MultiThreadedDebugDLL` is the value; `MultiThreadedDLLDebug` is not
 
 CMake's four `CMAKE_MSVC_RUNTIME_LIBRARY` values are `MultiThreaded`, `MultiThreadedDLL`,
 `MultiThreadedDebug` and `MultiThreadedDebugDLL` - Debug before DLL. The test presets for
