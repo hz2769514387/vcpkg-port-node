@@ -143,9 +143,11 @@ definitions and the process runs - the port does not rely on this measurement st
 after each configuration builds, `ports/node/check-no-vendored-build.py` reads the generated build
 graph and fails the build if any source under a vendored copy is still compiled. It is cheap
 (one pass over the ninja files, well under a second) and it is the check that would have caught
-`simdutf.gyp` arriving through `ada.gyp` before a consumer did. The set it reads covers every
-library this port externalizes, V8's own zlib directory included; the one deliberate exception
-is Chromium's `compression_utils_portable`, the wrapper V8 calls rather than the library.
+`simdutf.gyp` arriving through `ada.gyp` before a consumer did. It reads one directory per
+library the port passes `--shared-*` for - V8's third-party set, Node.js's own `deps/`, and
+the nghttp3 and ngtcp2 copies under `deps/ngtcp2/` - and has two deliberate exceptions:
+Chromium's `compression_utils_portable`, the wrapper V8 calls rather than the library, and
+Node.js's own `deps/openssl/nodejs-openssl.cnf`, a data file an action copies.
 
 ## 4. Platform quirks and fixes the port carries
 

@@ -23,8 +23,9 @@ Usage
 
 Exits 0 when no compile step comes from a vendored directory, 1 when one does (naming the file
 and the source), 2 on a usage or environment error. `--except` names a subpath that is
-legitimately compiled inside a vendored directory - an adapter the embedding project owns,
-not the library that was externalized.
+legitimately compiled inside a vendored directory - an adapter the embedding project owns, or a
+data file an action copies, rather than the library that was externalized. A directory entry
+covers its subtree; a file entry is matched exactly.
 """
 
 from __future__ import annotations
@@ -34,19 +35,41 @@ import os
 import sys
 
 #: Directories whose contents must not be compiled when the library they hold is externalized.
+#: One entry per library the port passes --shared-* for: the V8 third-party set, Node.js's own
+#: deps, and the copies nghttp3 and ngtcp2 keep under deps/ngtcp2/. Nothing here is a guess -
+#: an externalized library whose directory is missing would hide exactly the duplicate this
+#: check exists to find.
 DEFAULT_VENDORED = (
+    "deps/ada",
+    "deps/brotli",
+    "deps/cares",
+    "deps/histogram",
+    "deps/libffi",
+    "deps/LIEF",
+    "deps/llhttp",
+    "deps/nghttp2",
+    "deps/ngtcp2/nghttp3",
+    "deps/ngtcp2/ngtcp2",
+    "deps/openssl",
+    "deps/simdjson",
+    "deps/sqlite",
+    "deps/uv",
     "deps/v8/third_party/abseil-cpp",
     "deps/v8/third_party/highway",
     "deps/v8/third_party/simdutf",
     "deps/v8/third_party/zlib",
     "deps/zlib",
+    "deps/zstd",
 )
 
-#: Subpaths of a vendored directory that are legitimately compiled even though the library
-#: itself is externalized, because the embedding project owns them - an adapter, not the
-#: library. V8's `third_party/zlib/google` is Chromium's `compression_utils_portable`, the
-#: wrapper V8's own code calls; only the zlib implementation below the wrapper has to be gone.
+#: Subpaths of a vendored directory that are legitimately present even though the library itself
+#: is externalized, because the embedding project owns them - an adapter or a data file, not the
+#: library. V8's `third_party/zlib/google` is Chromium's `compression_utils_portable`, the wrapper
+#: V8's own code calls; only the zlib implementation below the wrapper has to be gone.
+#: `deps/openssl/nodejs-openssl.cnf` is Node.js's own config file, copied by an action rather
+#: than compiled. A directory covers its subtree; a file is matched exactly.
 DEFAULT_VENDORED_EXCEPTIONS = (
+    "deps/openssl/nodejs-openssl.cnf",
     "deps/v8/third_party/zlib/google",
 )
 
@@ -83,11 +106,11 @@ def check(build_dir, vendored, exceptions):
     """Return `[(source, ninja_file, offset)]` for every vendored compile step found.
 
     Compile steps under an exception subpath are skipped: they are the embedding project's own
-    adapter, and the library below them is what was externalized.
+    adapter or data file, and the library below them is what was externalized.
     """
     found = []
     scanned = 0
-    excluded = tuple(native(e) + os.sep for e in exceptions)
+    excluded = tuple(native(e) for e in exceptions)
     for ninja in ninja_files(build_dir):
         scanned += 1
         with open(ninja, "r", encoding="utf-8", errors="replace") as fh:
@@ -107,7 +130,9 @@ def check(build_dir, vendored, exceptions):
                     while name_end < len(text) and text[name_end] not in " \t\r\n":
                         name_end += 1
                     source = native_dir + os.sep + text[name_start:name_end]
-                    if any(source.startswith(e) for e in excluded):
+                    if any(
+                        source == e or source.startswith(e + os.sep) for e in excluded
+                    ):
                         continue
                     found.append((source, ninja, offset))
     return found, scanned
@@ -122,8 +147,8 @@ def main(argv=None):
                          "port externalizes.")
     ap.add_argument("--except", action="append", default=[], metavar="DIR",
                     dest="exceptions",
-                    help="a subpath of a vendored directory that is legitimately compiled; "
-                         "repeatable. Defaults to the adapters this project owns.")
+                    help="a subpath of a vendored directory that is legitimately present; "
+                         "repeatable. Defaults to the adapters and data files this project owns.")
     args = ap.parse_args(argv)
 
     build_dir = args.build_dir
