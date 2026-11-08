@@ -16,7 +16,6 @@ set(NODE_PORT_IS_APPLE      "@NODE_PORT_IS_APPLE@")
 set(NODE_PORT_CRT_STATIC    "@NODE_PORT_CRT_STATIC@")
 set(NODE_PORT_LINK_GROUP    "@NODE_PORT_LINK_GROUP@")
 set(NODE_PORT_ARCHIVES      "@NODE_PORT_ARCHIVES@")
-set(NODE_PORT_TEST_ABI      "@NODE_PORT_ABI@")
 
 include(CMakeFindDependencyMacro)
 
@@ -253,8 +252,16 @@ else()
     string(REPLACE "|" ";" _parts "${_dep_pair}")
     list(GET _parts 0 _libname)
     list(GET _parts 1 _target)
-    list(GET _parts 2 _debugfile)
-    find_library(_node_lib_path_${_libname} ${_libname} HINTS ${_node_lib} REQUIRED)
+    list(GET _parts 2 _file)
+    find_library(_node_lib_path_${_libname} ${_libname} HINTS ${_node_lib})
+    # find_library has no REQUIRED keyword: a miss leaves "-NOTFOUND", and the prefix check
+    # below would then report "outside this install prefix" for a file that is simply absent.
+    if(NOT _node_lib_path_${_libname})
+      message(FATAL_ERROR
+        "${_libname} was not found under '${_node_lib}': expected the file\n"
+        "'${_node_lib}/${_file}'. This install ships its own copy on purpose - a system\n"
+        "copy would be built with a different CRT.")
+    endif()
     string(FIND "${_node_lib_path_${_libname}}" "${PACKAGE_PREFIX_DIR}" _pos)
     if(NOT _pos EQUAL 0)
       message(FATAL_ERROR
@@ -267,7 +274,7 @@ else()
         IMPORTED_LOCATION "${_node_lib_path_${_libname}}")
       if(NODE_PORT_HAS_DEBUG)
         set_target_properties(${_target} PROPERTIES
-          IMPORTED_LOCATION_DEBUG "${PACKAGE_PREFIX_DIR}/debug/lib/${_debugfile}")
+          IMPORTED_LOCATION_DEBUG "${PACKAGE_PREFIX_DIR}/debug/lib/${_file}")
       endif()
     endif()
   endforeach()
@@ -275,7 +282,7 @@ else()
   unset(_parts)
   unset(_libname)
   unset(_target)
-  unset(_debugfile)
+  unset(_file)
   unset(_pos)
 endif()
 

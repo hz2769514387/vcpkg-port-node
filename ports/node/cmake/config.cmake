@@ -139,9 +139,11 @@ configure_package_config_file(
 
 # The version a consumer sees is the source tree's, compared against the manifest by
 # cmake/source-facts.cmake:
-# a package can no longer claim a version it does not deliver. AnyNewerVersion is the
-# compatibility the hand-written file used to express.
+# a package can no longer claim a version it does not deliver. SameMajorVersion, not
+# AnyNewerVersion: Node's ABI changes with every major line (NODE_MODULE_VERSION), so a 27.x
+# install cannot load a 26.x addon - `find_package(unofficial-node 26 REQUIRED)` has to fail
+# against it rather than accept the newer package.
 write_basic_package_version_file(
     "${CURRENT_PACKAGES_DIR}/share/unofficial-node/unofficial-node-config-version.cmake"
     VERSION "${node_version_string}"
-    COMPATIBILITY AnyNewerVersion)
+    COMPATIBILITY SameMajorVersion)
