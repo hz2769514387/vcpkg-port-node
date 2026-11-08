@@ -435,6 +435,47 @@ def check_versions_json(report, index):
                 % (port.get("manifest_port_version"), manifest.get("port-version", 0)),
             )
 
+        # `released` describes port.version and the tree that tag shipped, recorded explicitly
+        # in tagged_version/tagged_port_version. It may stay true only while main still carries
+        # that tree; the commit that moves the manifest sets it false.
+        tagged_version = port.get("tagged_version")
+        tagged_port_version = port.get("tagged_port_version")
+        tagged_ok = (
+            isinstance(tagged_version, str)
+            and re.match(r"^\d+[.]\d+[.]\d+$", tagged_version)
+            and isinstance(tagged_port_version, int)
+            and tagged_port_version >= 0
+        )
+        if not tagged_ok:
+            report.error(
+                "versions.json",
+                "port.tagged_version / port.tagged_port_version have to name the tree that "
+                "the release in port.version shipped, e.g. \"26.12.0\" and 16",
+            )
+        else:
+            same_as_tag = (
+                manifest.get("version") == tagged_version
+                and int(manifest.get("port-version", 0)) == tagged_port_version
+            )
+            if bool(port.get("released")) != same_as_tag:
+                report.error(
+                    "versions.json",
+                    "port.released is %s while the manifest (Node.js %s, port-version %s) %s "
+                    "the tree port.version %s shipped (Node.js %s, port-version %s). released "
+                    "is true only while main carries that tree: set it false in the commit "
+                    "that moves the manifest, and back to true with tagged_* when the next "
+                    "release is prepared."
+                    % (
+                        "true" if port.get("released") else "false",
+                        manifest.get("version"),
+                        manifest.get("port-version", 0),
+                        "matches" if same_as_tag else "does not match",
+                        port.get("version"),
+                        tagged_version,
+                        tagged_port_version,
+                    ),
+                )
+
     portfile_path = "ports/node/portfile.cmake"
     if index.isfile(portfile_path):
         portfile = index.text(portfile_path)
