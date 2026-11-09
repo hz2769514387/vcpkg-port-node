@@ -9,10 +9,30 @@
 #
 # lint.yml runs the same scanner over the whole history, so a clone that never
 # enables the hook is still caught, just later and more publicly.
-# python3 first: Debian/Ubuntu and current macOS images have no `python`, and a hook that dies with
-# "python: not found" blocks the commit with a message about the wrong thing. The scanner itself is
-# Python 3 either way.
-if command -v python3 >/dev/null 2>&1; then
-  exec python3 tools/check_secrets.py --staged
-fi
-exec python tools/check_secrets.py --staged
+#
+# The interpreter is chosen by *running* it, not by finding its name. On Windows `python3` is
+# the Microsoft Store app execution alias: the name resolves, running it prints nothing and
+# exits 49, so a `command -v` probe accepts an interpreter that cannot execute a script - and
+# git then aborts the commit with no output at all (#102). `python` comes after `python3`
+# because Debian/Ubuntu and current macOS images have no `python`, and `py` last because it is
+# the Windows launcher. The scanner is Python 3 whichever one answers.
+for candidate in python3 python py; do
+  command -v "$candidate" >/dev/null 2>&1 || continue
+  if "$candidate" -c 'import sys' >/dev/null 2>&1; then
+    exec "$candidate" tools/check_secrets.py --staged
+  fi
+done
+
+# No interpreter means the scan did not happen, and silence is indistinguishable from a pass.
+# printf rather than a heredoc: the state being reported is "nothing on PATH works", so the
+# message must not need a program from PATH to print itself.
+printf '%s\n' \
+  "pre-commit: no working Python 3 interpreter, so the staged lines were NOT scanned." \
+  "" \
+  "Tried python3, python and py. A \`python3\` that resolves but exits without printing anything is" \
+  "the Microsoft Store app execution alias rather than an interpreter; install Python 3, or turn" \
+  "that alias off under Settings > Apps > Advanced app settings > App execution aliases." \
+  "" \
+  "The commit is refused rather than allowed unscanned. lint.yml scans the whole history with the" \
+  "same scanner, so nothing stays hidden - it would simply be found in public instead of here." >&2
+exit 1
