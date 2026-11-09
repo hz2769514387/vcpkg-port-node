@@ -102,3 +102,4 @@ test-process-execve-throws | macos-x64 | SIGBUS under Rosetta 2; the official bi
 test-process-execve-socket | macos-x64 | SIGBUS under Rosetta 2; the official binary fails this very case on the same image (run 39342169919)
 test-process-execve-on-exit | macos-x64 | SIGBUS under Rosetta 2, a third member of the same family; added under the standing rule above (run 39351011619)
 test-process-execve-permission-granted | macos-x64 | SIGBUS under Rosetta 2, a fourth member of the same family; the standing rule above says to add it rather than treat it as a new defect (runs 40130285780 crashed, passed on rerun; 40130285788 crashed)
+test-process-execve | macos-x64 | SIGBUS under Rosetta 2, the fifth member of the same family; crashed at 15:35 into the parallel suite while the four entries above passed in that same run (run 42543416853)
