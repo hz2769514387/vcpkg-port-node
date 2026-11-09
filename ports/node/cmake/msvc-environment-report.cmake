@@ -1,10 +1,11 @@
 # The closing decision of the MSVC environment probe, on its own so it can be exercised.
 #
-# Why this is a separate file: the three cases have three different right answers, and two of them can
-# only be reached on a machine that is missing Visual Studio or missing its environment. Leaving the
-# `if`/`elseif` at the end of msvc-environment.cmake meant those two answers were never executed by
-# anything - not by this repository's CI, which always has a complete toolchain, and not by a
-# developer, whose machine does too. As a function, `cmake -P` drives all three in milliseconds.
+# Why this is a separate file: the five cases have five different right answers, and four of them
+# can only be reached on a machine that is missing Visual Studio, missing its SDK, or already
+# inside a developer prompt. Leaving the `if`/`elseif` at the end of msvc-environment.cmake meant
+# those answers were never executed by anything - not by this repository's CI, which always has a
+# complete toolchain, and not by a developer, whose machine does too. As a function, `cmake -P`
+# drives all five in milliseconds.
 #
 # The cases, in the order they are checked:
 #
@@ -16,7 +17,9 @@
 #                                    works. Warning there is a false alarm - the old code did exactly
 #                                    that, and a message that fires when nothing is wrong is how the
 #                                    one that matters gets ignored.
-#   3. neither                    -> FATAL_ERROR. gyp's own failure for this case is
+#   3. toolset, no SDK            -> FATAL_ERROR naming the Windows SDK.
+#   4. SDK, no toolset            -> FATAL_ERROR naming the MSVC toolset.
+#   5. neither                    -> FATAL_ERROR naming both. gyp's own failure for this case is
 #                                    `ValueError: Could not locate Visual Studio installation.`
 #                                    several hundred lines of ninja later, and it never says the port
 #                                    looked for Visual Studio at all.
