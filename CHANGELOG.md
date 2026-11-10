@@ -13,7 +13,7 @@ repository reads without a network. Versions are dates — see
 | Node.js | v26.13.0 (V8 14.6.202.34, `NODE_MODULE_VERSION` 147, napi 8, npm 11.20.0) |
 | vcpkg | 2026.10.16 (`9eec002df1cd109f8f104cd966a763daf9751489`), pinned |
 | port | `node` 26.13.0, `port-version` 4, 27 patches |
-| verified by | CI 42620823526 (six Release cells with Node.js's own suite), Debug 42625261941 (four cells), Matrix 42630961636 (twelve cells) |
+| verified by | CI 42735914269 (six Release cells with Node.js's own suite), Debug 42735914565 (four cells), Matrix 42735914275 (twelve cells) |
 
 Everything since the `20261024` tag, in one release. A preparation that called itself `20261026`
 was written but never tagged - `versions.json` claimed `released: true` for a tag that does not
