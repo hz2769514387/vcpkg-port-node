@@ -43,9 +43,9 @@ One file, at the repository root, machine-read and hand-edited only in the `port
 
 ```json
 {
-  "port":  { "version": "20261024", "released": false,
-             "tagged_version": "26.12.0", "tagged_port_version": 16,
-             "manifest_version": "26.13.0", "manifest_port_version": 2 },
+  "port":  { "version": "20261110", "released": true,
+             "tagged_version": "26.13.0", "tagged_port_version": 4,
+             "manifest_version": "26.13.0", "manifest_port_version": 4 },
   "node":  { "version": "26.13.0", "released": "2026-10-28", "lts": true,
              "lts_start": "2026-10-28", "eol": "2029-04-30",
              "url": "https://nodejs.org/dist/v26.13.0/node-v26.13.0.tar.xz",

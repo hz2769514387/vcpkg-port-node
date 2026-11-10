@@ -1,9 +1,9 @@
 {
   "port": {
-    "version": "20261024",
-    "released": false,
-    "tagged_version": "26.12.0",
-    "tagged_port_version": 16,
+    "version": "20261110",
+    "released": true,
+    "tagged_version": "26.13.0",
+    "tagged_port_version": 4,
     "manifest_version": "26.13.0",
     "manifest_port_version": 4
   },
