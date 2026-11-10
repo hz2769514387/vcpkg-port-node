@@ -53,8 +53,9 @@ Current target: Node.js **v26.13.0** on vcpkg **2026.10.16**. Versions, branches
 
 Maintenance period, since the `20261024` tag:
 
-- Everything through a pull request; `main` is protected. Only the release commit and the tag are
-  the maintainer's alone.
+- Everything through a pull request, and `main` has no bypass actor - not even the maintainer's
+  account. Only the tag is the maintainer's alone: it names a commit, so no pull request can
+  carry it.
 - A pull request carries what and why, a linked issue, green CI, and a changelog entry at tag time.
 - The full matrix is expected green on `main` for every commit that touched a build-affecting
   path. A documentation-only change runs Lint alone - it has no matrix question
