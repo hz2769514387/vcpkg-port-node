@@ -6,8 +6,10 @@ file is the short version for a pull request.
 
 ## The shape of a change
 
-- **`main` is protected.** Everything lands through a pull request with green CI. Two exceptions,
-  both the maintainer's: a release tag and the release commit itself.
+- **`main` is protected.** Everything lands through a pull request with green CI, and the branch
+  rule has no bypass actor — the release preparation included, which is why it is a pull request
+  like any other. The one exception is the tag itself: a tag names a commit, so nothing but the
+  maintainer can make it.
 - **One change per pull request.** A Node.js bump and a vcpkg bump in one branch is two reviews in
   one, and the second one hides in the first.
 - **A packaging change bumps `port-version`** in `ports/node/vcpkg.json`. That is what makes the
