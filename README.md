@@ -25,9 +25,9 @@ overlay port* below says why. Where the support stops is in *Known limits*.
 
 ## Status
 
-Released: **`20261024_26.12.0_vcpkg-2026.07.29`**. `main` is ahead of that tag — it carries
-Node.js v26.13.0 on vcpkg 2026.10.16, and the next release is prepared from it. Every change
-goes through a pull request, and the full matrix is green on `main` on every push.
+Released: **`20261110_26.13.0_vcpkg-2026.10.16`**. `main` carries that tag — Node.js v26.13.0
+on vcpkg 2026.10.16. Every change goes through a pull request, and the full matrix is green on
+`main` on every push.
 
 |             |                                                 |
 | ----------- | ----------------------------------------------- |
