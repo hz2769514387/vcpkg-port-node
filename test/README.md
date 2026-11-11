@@ -20,7 +20,7 @@ not treated as evidence for any of those.
 |---|---|
 | `cases/embed/` | `unofficial::node::node` links into a consumer executable that behaves like `node.exe`, plus exit-code semantics, `worker_threads` and spawning a child process. Doubles as the example everyone asks for and as the shell the official suite runs against. |
 | `cases/abi/` | The two ABI numbers a consumer reads without linking anything. |
-| `cases/addon/` | A consumer-built N-API addon loads into the embedding executable: the installed headers' `NODE_MODULE_VERSION`, JS callbacks, Buffers, thrown errors, async work on libuv's pool and a thread-safe function fed by a `std::thread`. |
+| `cases/addon/` | A consumer-built N-API addon loads into the embedding executable: the installed headers' `NODE_MODULE_VERSION`, JS callbacks, Buffers, thrown errors, async work on libuv's pool and a thread-safe function fed by a `std::thread`. A second case loads it again in a worker thread and in a forked child process. |
 | `cases/application/` | A shipping application tree: `package.json` with `type: module`, ESM, CommonJS through `createRequire`, a bare `node_modules` specifier, JSON import attributes, dynamic import, top-level await, and the `process` shape a host reads. |
 | `cases/cli/` | Command-line flags, `-e` in both module modes, `-p`, `--require` preloads and `NODE_OPTIONS` (compared between two runs, so no machine-specific heap constant is needed). |
 | `cases/coexist/` | One process linking the port next to the very libraries it externalizes. |

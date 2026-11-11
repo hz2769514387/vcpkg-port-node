@@ -53,3 +53,16 @@ set_tests_properties(addon.napi_module PROPERTIES
   FAIL_REGULAR_EXPRESSION "addon_error:"
   TIMEOUT 300
   LABELS "smoke")
+
+# A worker thread has its own isolate; a forked child is a whole new process started from
+# process.execPath. Both have to load the addon and find napi_* again. These are the shapes a
+# product uses for a native work pool, and neither is implied by the main-thread case.
+add_test(NAME addon.in_workers_and_children
+         COMMAND node_embedder "${CMAKE_CURRENT_SOURCE_DIR}/addon_processes.mjs"
+                 "$<TARGET_FILE:node_port_addon>")
+set_tests_properties(addon.in_workers_and_children PROPERTIES
+  ENVIRONMENT "NODE_OPTIONS="
+  PASS_REGULAR_EXPRESSION "addon: worker thread and child process ok"
+  FAIL_REGULAR_EXPRESSION "addon_error:"
+  TIMEOUT 300
+  LABELS "smoke")

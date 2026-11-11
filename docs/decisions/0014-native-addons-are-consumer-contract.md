@@ -41,7 +41,8 @@ port, on both static and shared installs, and is a CI-verified guarantee.
 - `test/cases/addon` builds a real N-API module from the installed headers and loads it. It
   asserts the headers' `NODE_MODULE_VERSION` against the runtime, then exercises sync calls,
   JS callbacks, Buffers, thrown errors, async work on libuv's thread pool and a thread-safe
-  function fed by a `std::thread`.
+  function fed by a `std::thread`. A second case loads the same module in a worker thread
+  (a second isolate in the same process) and in a forked child (a second process).
 - `docs/consumer-recipes.md` §7 states both link shapes and the `NODE_PORT_SHARED` switch.
 - The rest of the expanded test suite tests consumer behaviour rather than startup: a real
   application's module graph and CLI, shutdown semantics, the builtin modules that reach the
