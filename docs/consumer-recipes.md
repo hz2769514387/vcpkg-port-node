@@ -7,7 +7,8 @@ own `test/cmake/triplets/` are CI cells, not recipes, and copying one is how a d
 met a CRT mismatch at configure time (issue #61).
 
 Everything here except §6 is exercised by `test/` on every push, on both architectures of all
-three platforms; §6 is exercised by the four clang-cl cells in `matrix.yml` (ADR 0013).
+three platforms; §6 is exercised by the four clang-cl cells in `matrix.yml` (ADR 0013). §7 is
+exercised by `test/cases/addon` on the same legs, including the static and shared Windows cells.
 
 ## 0. The three rules a preset cannot state
 
@@ -162,7 +163,57 @@ The stock triplets stay supported. ICU and OpenSSL force clang-cl inside their o
 a consumer who never asks for a clang-cl triplet still gets a libnode whose Windows libraries
 match the compiler Node.js uses.
 
-## 7. Where this stops
+## 7. Loading native addons
+
+A product that embeds Node.js usually ends up loading at least one `.node` module - a serial
+port driver, an image codec, a database client built with node-addon-api. Those modules call
+`napi_*` functions that they do not define themselves. On Unix the dynamic loader finds them
+in the process; on Windows the module has to be linked against whoever exports them.
+
+**A static install:** the `napi_*` implementation is in the archives your executable linked,
+so your executable has to export those symbols. CMake does that with one property:
+
+```cmake
+add_executable(my_app main.cpp)
+target_link_libraries(my_app PRIVATE unofficial::node::node)
+set_target_properties(my_app PROPERTIES ENABLE_EXPORTS ON)
+
+add_library(my_addon MODULE addon.cpp)
+set_target_properties(my_addon PROPERTIES PREFIX "" SUFFIX ".node")
+target_include_directories(my_addon PRIVATE
+  "$<TARGET_PROPERTY:unofficial::node::node,INTERFACE_INCLUDE_DIRECTORIES>")
+target_compile_definitions(my_addon PRIVATE BUILDING_NODE_EXTENSION)
+target_link_libraries(my_addon PRIVATE my_app)
+```
+
+Without `ENABLE_EXPORTS` the application itself works perfectly and the addon fails to load
+with "The specified procedure could not be found". `BUILDING_NODE_EXTENSION` is what makes
+`node_api.h` declare `napi_*` as `dllimport` instead of `dllexport`. `test/cases/addon` builds
+exactly this shape and loads it; `test/cases/embed` is the executable it links against.
+
+**A shared install:** `napi_*` is exported by `libnode.dll`, so link the addon against the
+imported target the config exports instead of against your executable:
+
+```cmake
+target_link_libraries(my_addon PRIVATE unofficial::node::libnode)
+```
+
+Use the config's own `NODE_PORT_SHARED` variable to choose between the two. Do **not** use
+`if(TARGET unofficial::node::libnode)`: once `find_package(unofficial-node)` has loaded a
+config that mentions that name, CMake reports it as an existing target on a static install too
+(measured on CMake 3.31), and the link then names a target that is not really there.
+
+On macOS a `MODULE` target resolves its undefined symbols from the process; the addon case
+passes `-Wl,-undefined,dynamic_lookup` explicitly rather than relying on the generator's
+default. On Linux an ordinary `MODULE` already allows undefined symbols, and `-rdynamic` on
+the executable (which `ENABLE_EXPORTS` adds) puts them in the dynamic symbol table.
+
+The headers are the ones in `<prefix>/include/node`: `node_api.h`, `js_native_api.h`,
+`node_version.h` and `node_buffer.h`. `NODE_MODULE_VERSION` from those headers has to match
+`process.versions.modules`; `test/cases/addon` asserts it, because a mismatch is otherwise only
+reported when a prebuilt addon is rejected.
+
+## 8. Where this stops
 
 The README's *Known limits* is the authoritative list. Three of its rows are worth reading before a
 first build: the macOS deployment target comes from the dependency graph rather than from Node.js,

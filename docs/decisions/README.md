@@ -19,3 +19,4 @@ a change of mind gets a new ADR that supersedes the old one, so the history stay
 | [0011](0011-icu-is-built-with-clang-cl.md) | ICU is compiled with clang-cl, so a clang-cl Debug process can format a date | Accepted | 2026-11-04 |
 | [0012](0012-vcpkg-make-supports-clang-cl.md) | The make flow drives a clang-cl triplet, through an overlay of `vcpkg-make` | Accepted | 2026-11-04 |
 | [0013](0013-clang-cl-triplets-live-here.md) | clang-cl triplets live here as CI cells, and the chainloaded toolchain is the copyable part | Accepted | 2026-11-05 |
+| [0014](0014-native-addons-are-consumer-contract.md) | Consumer-built native addons are part of the embedding contract | Accepted | 2026-11-11 |

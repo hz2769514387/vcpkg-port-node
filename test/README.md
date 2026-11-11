@@ -10,27 +10,56 @@ It is never installed anywhere and it is not an example to copy into another bui
 
 ## What is in here
 
+The cases are written from the consumer's side, not as a checklist of features that start
+successfully. Where a real product loads a module graph, passes CLI flags, shuts the runtime
+down, serves an HTTP request, loads a native addon or drives the loop from its own thread,
+there is a case that does the same thing and asserts the result. A passing "it started" is
+not treated as evidence for any of those.
+
 | Path | What it verifies |
 |---|---|
-| `cases/embed/` | `unofficial::node::node` links into a consumer executable that behaves like `node.exe`, plus exit-code semantics, `worker_threads` and spawning a child process. Doubles as the example everyone asks for, and as the shell the official suite runs against. |
-| `cases/coexist/` | One process linking the port next to the very libraries it externalizes. |
-| `cases/layered/` | A library that hides the port behind a PRIVATE link, and two applications on top of it. |
-| `cases/thread-loop/` | The runtime on a thread the host owns. |
-| `cases/host-loop/` | The host owns the loop and pumps it itself - the UI-toolkit arrangement. |
+| `cases/embed/` | `unofficial::node::node` links into a consumer executable that behaves like `node.exe`, plus exit-code semantics, `worker_threads` and spawning a child process. Doubles as the example everyone asks for and as the shell the official suite runs against. |
 | `cases/abi/` | The two ABI numbers a consumer reads without linking anything. |
+| `cases/addon/` | A consumer-built N-API addon loads into the embedding executable: the installed headers' `NODE_MODULE_VERSION`, JS callbacks, Buffers, thrown errors, async work on libuv's pool and a thread-safe function fed by a `std::thread`. |
+| `cases/application/` | A shipping application tree: `package.json` with `type: module`, ESM, CommonJS through `createRequire`, a bare `node_modules` specifier, JSON import attributes, dynamic import, top-level await, and the `process` shape a host reads. |
+| `cases/cli/` | Command-line flags, `-e` in both module modes, `-p`, `--require` preloads and `NODE_OPTIONS` (compared between two runs, so no machine-specific heap constant is needed). |
+| `cases/coexist/` | One process linking the port next to the very libraries it externalizes. |
+| `cases/config/` | The exported config's contract: C++20, both public include trees, `/STACK` on Windows, the ABI numbers, the installed library list, a matching linkage flag, and no build-machine paths in the installed config. |
+| `cases/compression/` | gzip, deflate, brotli and zstd, in both sync and stream form, with a truncated-stream error path. |
+| `cases/crt/` | The executable has the CRT the preset asked for, read out of its import table; the archives agree with it. |
+| `cases/crypto/` | OpenSSL-backed hashing, HMAC, AEAD, key generation, sign/verify and WebCrypto. |
+| `cases/exit/` | Exit hooks, `process.exit`, `beforeExit` adding work to the loop, an `uncaughtException` handler, and the `--unhandled-rejections` switch. |
 | `cases/externalization/` | Did each externalized dependency really come from vcpkg - on both hosts. |
-| `cases/snapshot/` | The startup snapshot is there and is used - on both hosts. |
-| `cases/crt/` | The executable has the CRT the preset asked for, read out of its import table. |
+| `cases/fs/` | Unicode and special-character filenames, promise and stream APIs, recursive copy, symlinks (probed as a capability), and a non-ASCII argument passed from CMake through ctest into the embedder's `wmain`. |
+| `cases/host-loop/` | The host owns the loop and pumps it itself - the UI-toolkit arrangement. |
 | `cases/install/` | The package holds what its config tells a consumer to link - and a shared install holds no archives. |
-| `cases/tools/` | The tools feature: `node.exe`, npm and npx. |
-| `cases/zlib/` | zlib resolves to one copy, through the object graph and at run time. |
-| `cases/symbols/` | No strong symbol is defined by two archives, which "it links" cannot tell you. |
+| `cases/intl/` | Full ICU locale data, calendars, collation and segmentation, plus Temporal from the Rust crate. |
+| `cases/layered/` | A library that hides the port behind a PRIVATE link, and two applications on top of it. |
+| `cases/lifecycle/` | Three environments started and torn down in sequence in one process, each with its own cleanup and AtExit hooks. |
+| `cases/loop-wakeup/` | A native thread outside the runtime signals a `uv_async_t` on Node.js's loop, and the callback runs in a host-driven pump. |
+| `cases/multi-isolate/` | Two environments alive at once, two isolates and loops, alternately pumped by the host, with separate globals. |
+| `cases/net/` | Loopback HTTP/1.1, `fetch`, HTTP/2, TCP, `dns.lookup` and WHATWG URL - llhttp, nghttp2, libuv, c-ares and ada. |
+| `cases/runtime/` | V8 heap statistics and explicit GC, `vm` contexts and timeouts, WebAssembly compilation, Buffers, `TextDecoder`, `structuredClone` and microtask ordering. |
+| `cases/snapshot/` | The startup snapshot is there and is used - on both hosts. |
+| `cases/sqlite/` | `node:sqlite` with FTS5, JSON1, math functions, a user-defined function, R*Tree, transactions and iterators. |
 | `cases/suite/` | Node.js's own suite, through its own driver, labelled `node-suite`, plus its skip lists. Minutes to an hour. |
+| `cases/symbols/` | No strong symbol is defined by two archives, which "it links" cannot tell you. |
+| `cases/thread-loop/` | The runtime on a thread the host owns. |
+| `cases/tools/` | The tools feature: `node.exe`, npm and npx. |
+| `cases/workers/` | A worker pool with shared memory and message ports, and `child_process` fork/spawn with an IPC channel over `process.execPath`. |
+| `cases/zlib/` | zlib resolves to one copy, through the object graph and at run time. |
 
 `cases/` is one directory per claim: a directory holds the sources, the scripts and the `CMakeLists.txt`
 of one thing this project asserts, and a case that needs an executable from another directory is handed
 its path (`NODE_TEST_EMBED_DIR`) rather than reaching for `../`. The `smoke` **label** still selects the
-fast tier across all of them - splitting directories did not split the group.
+fast tier across all of them - splitting directories did not split the group. Every new case sets
+`NODE_OPTIONS` explicitly: a developer machine can carry its own language shim in that variable, and
+a test that inherits it would be measuring the machine instead of the port.
+
+`cases/embed` sets `ENABLE_EXPORTS ON` because a statically linked embedding executable has to
+export the `napi_*` symbols for a consumer-built addon to load. `cases/addon` is what checks that
+this property is real rather than documented; [docs/consumer-recipes.md §7](../docs/consumer-recipes.md)
+has the recipe a product copies.
 
 ## Running it
 

@@ -8,20 +8,28 @@
 #      executable this project links from libnode, which is a stricter claim than it running
 #      against anything else.
 #
-# Layout, by prefix:
+# Layout: `cases/<claim>/` is one directory per claim, with its own sources, scripts and
+# CMakeLists. `cases/embed` builds the executable most of the others run (and is the example
+# a consumer copies); a case that needs something from another directory is handed its path
+# rather than reaching for ../. `support/` holds the two shared helpers (DLL placement, rpath).
 #
-#   embedder/        the embedding executable: it links unofficial::node::node and behaves
-#                    like upstream node.exe, which is what lets Node.js's own tools/test.py
-#                    use it as a shell. It is also the example a consumer would copy.
-#   smoke/           fast assertions about the *installed* port: Node.js identity, and which
-#                    dependencies actually came from vcpkg rather than out of the vendored
-#                    source tree. Seconds, so they run on every push.
-#   cases/suite/     Node.js's own suite through its own driver, plus its skip lists. Minutes
-#                    to an hour; labelled `node-suite` so a fast run can skip it with
-#                    `ctest -LE node-suite`.
-#   symbols/         the symbol audit: no strong symbol defined twice in one process.
-#                    Seconds; labelled `symbols` so a fast run can skip it with
-#                    `ctest -LE symbols`.
+# The claims fall into four groups:
+#
+#   consumption       config, install, abi, symbols, crt, coexist, layered,
+#                     externalization, snapshot, tools, zlib - what the installed package
+#                     is, and whether it links the way its own config says.
+#   a real application application, cli, exit, crypto, net, compression, intl, sqlite,
+#                     fs, workers, runtime - what a product does with the runtime once it
+#                     is linked: a module graph, command-line flags, shutdown, the
+#                     externalized dependencies behind the builtin modules, and V8.
+#   the host's side   embed, thread-loop, host-loop, lifecycle, multi-isolate,
+#                     loop-wakeup, addon - repeated runtimes, concurrent isolates, a loop
+#                     driven and signalled by the host, and a consumer-built native addon.
+#   Node.js's suite   cases/suite - minutes to an hour, labelled `node-suite`.
+#
+# `LABELS "smoke"` spans every fast case across all of those directories, so `ctest -L smoke`
+# kept its meaning when the cases were split up. The symbol audit is labelled `symbols` and
+# the official suite `node-suite`; the fast test presets exclude both.
 #
 # Each directory stands on its own - deleting any one of them leaves the others working.
 # The dependency direction is exactly one way: this project consumes `../ports`.
@@ -142,19 +150,36 @@ include("${CMAKE_CURRENT_SOURCE_DIR}/support/node-test.cmake")
 # NODE_TEST_EMBED_DIR rather than reaching for ../, so a dependency on another directory is visible.
 set(NODE_TEST_EMBED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cases/embed")
 
+# `embed` first: it builds the executable the rest of the cases run.
 add_subdirectory(cases/embed)
 add_subdirectory(cases/abi)
+add_subdirectory(cases/addon)
+add_subdirectory(cases/application)
+add_subdirectory(cases/cli)
 add_subdirectory(cases/coexist)
+add_subdirectory(cases/config)
+add_subdirectory(cases/compression)
 add_subdirectory(cases/crt)
+add_subdirectory(cases/crypto)
+add_subdirectory(cases/exit)
 add_subdirectory(cases/externalization)
+add_subdirectory(cases/fs)
 add_subdirectory(cases/host-loop)
 add_subdirectory(cases/install)
+add_subdirectory(cases/intl)
 add_subdirectory(cases/layered)
+add_subdirectory(cases/lifecycle)
+add_subdirectory(cases/loop-wakeup)
+add_subdirectory(cases/multi-isolate)
+add_subdirectory(cases/net)
+add_subdirectory(cases/runtime)
 add_subdirectory(cases/snapshot)
+add_subdirectory(cases/sqlite)
 add_subdirectory(cases/suite)
 add_subdirectory(cases/symbols)
 add_subdirectory(cases/thread-loop)
 add_subdirectory(cases/tools)
+add_subdirectory(cases/workers)
 add_subdirectory(cases/zlib)
 
 message(STATUS "node consumer test project")

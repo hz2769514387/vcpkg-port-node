@@ -13,6 +13,15 @@ target_link_libraries(node_embedder PRIVATE unofficial::node::node)
 target_compile_features(node_embedder PRIVATE cxx_std_20)
 set_target_properties(node_embedder PROPERTIES OUTPUT_NAME node_embed)
 
+# An embedding executable that loads native addons has to export the napi_* symbols it
+# linked from the static libraries. CMake's ENABLE_EXPORTS generates the export table (and
+# an import library on Windows) from the objects in the link; without it a consumer-built
+# .node module fails to load with "The specified procedure could not be found" while the
+# embedder itself works perfectly. cases/addon builds exactly that module and links it to
+# this target on a static Windows install. With a shared libnode the symbols come from the
+# DLL instead, so the addon links that on those cells; the property is harmless there.
+set_target_properties(node_embedder PROPERTIES ENABLE_EXPORTS ON)
+
 # Node.js only ever exports symbols through its own DLL list when built shared; for the static
 # library everything stays visible, which is what this binary needs.
 install(TARGETS node_embedder RUNTIME DESTINATION bin)
