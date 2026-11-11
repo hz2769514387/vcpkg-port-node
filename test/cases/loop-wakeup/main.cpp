@@ -98,6 +98,12 @@ int main(int argc, char* argv[]) {
 
       unsigned iterations = 0;
       int timer_at = -1;
+      // The timer can fire several iterations before the native thread's uv_async_send is
+      // delivered: the loop keeps pumping until both have happened. What has to match is the
+      // iteration the script recorded and the iteration in which the host first read it, not
+      // the iteration on which the host finally stopped pumping. Measured on macOS: the timer
+      // fired in iteration 4 while the async callback arrived in iteration 12.
+      int timer_observed_at = -1;
       {
         v8::Locker locker(isolate);
         v8::Isolate::Scope isolate_scope(isolate);
@@ -127,6 +133,7 @@ int main(int argc, char* argv[]) {
           if (context->Global()->Get(context, Name(isolate, kTimer)).ToLocal(&value) &&
               !value->IsUndefined()) {
             timer_at = value->Int32Value(context).FromMaybe(-1);
+            if (timer_observed_at < 0) timer_observed_at = static_cast<int>(iterations);
           }
           if (timer_at >= 0 && g_async_calls.load() > 0) break;
           uv_sleep(1);
@@ -137,10 +144,10 @@ int main(int argc, char* argv[]) {
             std::fprintf(stderr, "loop_wakeup_error: the JS timer never fired in %u pumps\n",
                          iterations);
             exit_code = 1;
-          } else if (timer_at != static_cast<int>(iterations)) {
+          } else if (timer_at != timer_observed_at) {
             std::fprintf(stderr,
-                         "loop_wakeup_error: the JS timer fired in iteration %d, host drove %u\n",
-                         timer_at, iterations);
+                         "loop_wakeup_error: the JS timer recorded iteration %d, but the host "
+                         "first saw it in iteration %d\n", timer_at, timer_observed_at);
             exit_code = 1;
           } else if (g_async_calls.load() != 1 || !g_async_on_expected_loop.load()) {
             std::fprintf(stderr,

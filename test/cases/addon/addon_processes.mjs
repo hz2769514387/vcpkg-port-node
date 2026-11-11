@@ -26,9 +26,13 @@ const child = fork(childScript, [addonPath], {
   execPath: process.execPath,
   stdio: ['ignore', 'ignore', 'ignore', 'ipc'],
 });
+// Registered before the message: the child disconnects as soon as it has answered, so it
+// can be gone before a listener added afterwards would see 'exit'. Waiting for it keeps a
+// stray process from overlapping the next ctest case and stealing CPU from its timers.
+const childExited = once(child, 'exit');
 const [childMessage] = await once(child, 'message');
 assert.equal(childMessage.result, 465);
 assert.notEqual(childMessage.pid, process.pid, 'the child shares the parent pid');
-child.kill();
+await childExited;
 
 console.log('addon: worker thread and child process ok');
