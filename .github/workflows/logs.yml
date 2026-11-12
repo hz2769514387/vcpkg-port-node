@@ -22,11 +22,23 @@ jobs:
   merge:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/download-artifact@v4
+      # Archival is best-effort here too: see the comment on the same step in
+      # build-test.yml. A run with no logs is worth an annotation, not a red workflow that
+      # makes every leg look suspect (issue #109).
+      - name: Download every leg's log artifact
+        id: download-logs
+        continue-on-error: true
+        uses: actions/download-artifact@v4
         with:
           pattern: logs-part-*
           path: all-logs
           merge-multiple: false
+
+      - name: Say so when there was nothing to download
+        if: steps.download-logs.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning title=log archive incomplete::no leg's log artifact could be downloaded; the merged archive will be empty."
 
       - name: Merge them into one archive
         shell: bash
@@ -49,9 +61,18 @@ jobs:
             echo '```'
           } >> "$GITHUB_STEP_SUMMARY"
 
-      - uses: actions/upload-artifact@v4
+      - name: Upload the merged archive
+        id: upload-merged
+        continue-on-error: true
+        uses: actions/upload-artifact@v4
         with:
           name: ${{ inputs.label }}-logs
           path: ${{ inputs.label }}-logs.tar.gz
           if-no-files-found: error
           retention-days: 7
+
+      - name: Say so when the merged archive could not be uploaded
+        if: steps.upload-merged.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning title=log archive missing::the merged log archive could not be uploaded to the artifact service; the legs' test results are unaffected."
