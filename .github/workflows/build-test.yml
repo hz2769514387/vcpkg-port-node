@@ -271,7 +271,15 @@ jobs:
           consumer-configs: ${{ inputs.consumer-configs }}
           suite-configs: ${{ inputs.suite-configs }}
       - name: Upload this leg's logs
+        id: upload-logs
         if: always()
+        # Best-effort evidence, not part of the verdict. On 2026-11-12 (PR #108, attempt 1)
+        # three legs whose "Run the tests" step had succeeded were marked failed here, by
+        # the artifact service returning "404: workflow run not found". That reads as a test
+        # incident, and the only way to clear it is re-running a job that already proved
+        # what it had to prove. The step still attempts the upload and still annotates a
+        # failure (the step below); it just cannot change the leg's result.
+        continue-on-error: true
         uses: actions/upload-artifact@v4
         with:
           # Named so that the merge job in every calling workflow picks all legs up with one
@@ -280,3 +288,9 @@ jobs:
           path: ${{ runner.temp }}/ci-logs
           if-no-files-found: warn
           retention-days: 7
+
+      - name: Say so when this leg's logs could not be archived
+        if: always() && steps.upload-logs.outcome == 'failure'
+        shell: bash
+        run: |
+          echo "::warning title=log archive missing::this leg's logs could not be uploaded to the artifact service. The test result above is unaffected; only this leg's archive is missing from the run."

@@ -410,6 +410,12 @@ Every leg uploads its logs unconditionally (`if: always()`), named
 `logs-part-<triplet>-<config>`, and the `logs` job calls `logs.yml` to merge all of them into
 one `ci-logs.tar.gz` (or `debug-logs` / `node-suite-logs`). One download per run.
 
+Archival is **best-effort**: the upload steps carry `continue-on-error`, so a failure of the
+artifact service annotates the leg and leaves its verdict alone - the tests are the gate, the
+archive is evidence. That is not hypothetical: on 2026-11-12 three legs whose tests had passed
+were marked failed by an artifact upload returning `404: workflow run not found`, and the only
+way to clear them was re-running a job that had already proved what it had to prove (#109).
+
 The build step's output is tee'd, and the job summary carries the ctest pass/fail counts, the
 list of failed tests and the first error, so the run page answers the obvious questions before
 any log is opened. The port's own output is separate from the consumer's: vcpkg keeps a port's
