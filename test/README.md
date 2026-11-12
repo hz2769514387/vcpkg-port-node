@@ -26,6 +26,7 @@ not treated as evidence for any of those.
 | `cases/coexist/` | One process linking the port next to the very libraries it externalizes. |
 | `cases/config/` | The exported config's contract: C++20, both public include trees, `/STACK` on Windows, the ABI numbers, the installed library list, a matching linkage flag, and no build-machine paths in the installed config. |
 | `cases/compression/` | gzip, deflate, brotli and zstd, in both sync and stream form, with a truncated-stream error path. |
+| `cases/context/` | `AsyncLocalStorage` across await, timers, promises, microtasks and emitters; two interleaved requests never sharing a store; snapshot re-entry; `AsyncResource`; async ids and hooks; `diagnostics_channel` pub/sub and tracing; and a worker pool where each isolate keeps its own store. |
 | `cases/crt/` | The executable has the CRT the preset asked for, read out of its import table; the archives agree with it. |
 | `cases/crypto/` | OpenSSL-backed hashing, HMAC, AEAD, key generation, sign/verify and WebCrypto. |
 | `cases/exit/` | Exit hooks, `process.exit`, `beforeExit` adding work to the loop, an `uncaughtException` handler, and the `--unhandled-rejections` switch. |
