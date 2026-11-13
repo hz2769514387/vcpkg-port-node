@@ -94,7 +94,7 @@ endif()
 # after the bump looked fine.
 vcpkg_download_distfile(NODE_ARCHIVE
     URLS "https://nodejs.org/dist/v${VERSION}/node-v${VERSION}.tar.xz"
-    SHA512 b26477a172f99513c03ec9bb32f7f72bf88c05443acc2383a6c4bc28f796061ba81f78358353bc4aeaf77d7e2de818746503ac287a2ff74032ee1d261d0388e6
+    SHA512 149fd201f1b99c67484daacdb2f6b0dbfc742c9f71f120b5b7160b389b04d6e0b1c17b228c5e27dd0194bc42076fb16909756d021ab0eb0054dacba1a589131a
     FILENAME node-v${VERSION}.tar.xz
 )
 
@@ -167,7 +167,7 @@ include("${NODE_PORT_DIR}/cmake/config.cmake")
 file(INSTALL "${NODE_PORT_DIR}/usage"
     DESTINATION "${CURRENT_PACKAGES_DIR}/share/${PORT}")
 
-# Node.js's own LICENSE is already the aggregate: 2923 lines in 26.13.0, carrying
+# Node.js's own LICENSE is already the aggregate: 2420 lines in 26.13.1, carrying
 # the licence texts of everything in the source tree - V8, ICU, OpenSSL, npm,
 # brotli, libuv, zlib and the rest of deps/ - which is what Node.js ships as the
 # licence of its binaries. The
@@ -180,8 +180,9 @@ vcpkg_install_copyright(FILE_LIST "${SOURCE_PATH}/LICENSE")
 # Empty directories, swept rather than named.
 #
 # vcpkg reports an installed empty directory as a post-build problem, and which directories are
-# empty is a property of the Node.js tree, not of this port: 26.13.0 brought
-# include/node/ffi/platforms and two test-suite fixture directories. A hand-written removal of
+# empty is a property of the Node.js tree, not of this port: the 26.13.0 install carried
+# include/node/ffi/platforms and two test-suite fixture directories, and 26.13.1 still ships
+# test/fixtures/wasi/subdir. A hand-written removal of
 # include/node/api and include/node/res lived in cmake/install.cmake one release earlier; it was a
 # list that went stale, which is why nothing is named here and the walk is the only mechanism.
 # Nothing in a binary package needs an empty directory, so the walk is unconditional.

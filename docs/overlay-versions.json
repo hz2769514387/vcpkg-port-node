@@ -4,8 +4,8 @@
     "commit": "9eec002df1cd109f8f104cd966a763daf9751489"
   },
   "node": {
-    "version": "26.13.0",
-    "vendored_read_at": "the deps/ tree of node-v26.13.0.tar.xz (sha512 in versions.json)"
+    "version": "26.13.1",
+    "vendored_read_at": "the deps/ tree of node-v26.13.1.tar.xz (sha512 in versions.json)"
   },
   "ports": {
     "ada-url": {
@@ -15,7 +15,7 @@
     },
     "brotli": {
       "registry": "1.2.0",
-      "vendored": "1.2.0",
+      "vendored": "1.2.1",
       "vendored_source": "deps/brotli/c/common/version.h"
     },
     "c-ares": {
@@ -55,7 +55,7 @@
     },
     "llhttp": {
       "registry": "9.3.1",
-      "vendored": "9.4.3",
+      "vendored": "9.4.4",
       "vendored_source": "deps/llhttp/include/llhttp.h"
     },
     "mbedtls": {
@@ -70,7 +70,7 @@
     },
     "node": {
       "registry": null,
-      "vendored": "26.13.0",
+      "vendored": "26.13.1",
       "vendored_source": "src/node_version.h"
     },
     "openssl": {
@@ -90,7 +90,7 @@
     },
     "sqlite3": {
       "registry": "3.53.4",
-      "vendored": "3.54.0",
+      "vendored": "3.54.1",
       "vendored_source": "deps/sqlite/sqlite3.h (SQLITE_VERSION)"
     },
     "tcb-span": {

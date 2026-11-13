@@ -26,12 +26,13 @@ Node.js 一起交付，不单独提供），更不是 curated vcpkg 仓库能收
 
 ## 状态
 
-已发布：**`20261110_26.13.0_vcpkg-2026.10.16`**。`main` 即该 tag —— 携带 Node.js v26.13.0
-与 vcpkg 2026.10.16。所有改动都走 pull request，`main` 上每次 push 的完整矩阵都要求通过。
+已发布：**`20261110_26.13.0_vcpkg-2026.10.16`**。`main` 已前进到 Node.js v26.13.1（vcpkg 仍为
+2026.10.16），该组合尚未进入 tag —— `versions.json` 将其记录为未发布，下一次发布会为它命名。
+所有改动都走 pull request，`main` 上每次 push 的完整矩阵都要求通过。
 
 |             |                                                 |
 | ----------- | ----------------------------------------------- |
-| Node.js     | v26.13.0（v26 线，LTS）                         |
+| Node.js     | v26.13.1（v26 线，LTS）                         |
 | vcpkg       | 2026.10.16（已钉死）                            |
 | 构建路线    | `configure.py` → `gyp -f ninja` → `ninja`       |
 | 交付形态    | 静态库或共享库 + CMake 配置，以 overlay port 交付 |

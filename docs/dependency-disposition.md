@@ -1,14 +1,14 @@
-# Dependency disposition — Node.js v26.13.0 against vcpkg 2026.10.16
+# Dependency disposition — Node.js v26.13.1 against vcpkg 2026.10.16
 
 Every dependency Node.js carries, what vcpkg has, what was measured, and what we do about
 it. This is the reference behind `ports/` and its overlay ports; keep it in step with them.
 
-Node.js 26.13.0 is the LTS transition of 26.12.1 and changes no dependency: every version
-in the tables below was re-read from the 26.13.0 tarball and is the value already recorded
-for 26.12.1 (V8 14.6.202.34, OpenSSL 3.5.9, libuv 1.52.1, c-ares 1.34.9, brotli 1.2.x +
-the CVE cherry-pick, zlib 1.3.2.1-motley, nghttp2 1.70.0, ngtcp2 1.25.0, sqlite3 3.54.0,
-llhttp 9.4.3, simdjson 5.0.3, zstd 1.5.7, ICU 78.3, npm 11.20.0). The measurements quoted
-below are the 26.12.0/26.12.1 ones and are carried over unchanged.
+Node.js 26.13.1 is the security release after 26.13.0. It keeps V8 14.6.202.34, OpenSSL
+3.5.9, libuv 1.52.1, c-ares 1.34.9, zlib 1.3.2.1-motley, nghttp2 1.70.0, ngtcp2 1.25.0,
+simdjson 5.0.3, zstd 1.5.7, ICU 78.3 and npm 11.20.0, and moves four vendored copies:
+brotli 1.2.0 → 1.2.1, llhttp 9.4.3 → 9.4.4, sqlite3 3.54.0 → 3.54.1 and undici 8.12.2 →
+8.12.4. The measurements quoted below are the ones already recorded for the earlier trees
+and are carried over unchanged.
 
 ## 1. Decision rule
 
@@ -46,7 +46,7 @@ registry's `expected-lite`). LIEF's own dependency set is dispositioned in §3.1
 ## 2. How these numbers were produced
 
 - **Node.js side**: the official release tarball the port downloads and hash-pins — the
-  version column of §3 was read from `node-v26.13.0.tar.xz`, the byte-level pass quoted in
+  version column of §3 was read from `node-v26.13.1.tar.xz`, the byte-level pass quoted in
   §5 from `node-v26.12.0.tar.xz`. Versions were read from the source itself —
   `include/uv/version.h`, `VERSION.dat`, `zlib.h`, `include/LIEF/version.h`,
   `README.chromium`, `package.json` and so on — not from upstream documentation.
@@ -71,7 +71,7 @@ registry's `expected-lite`). LIEF's own dependency set is dispositioned in §3.1
 
 ## 3. Version baseline
 
-Versions read from the Node.js v26.13.0 source tree. "vcpkg" is release 2026.10.16.
+Versions read from the Node.js v26.13.1 source tree. "vcpkg" is release 2026.10.16.
 
 The machine-readable copy of these two columns - Node.js's version and vcpkg's, per overlay -
 is [`overlay-versions.json`](overlay-versions.json), and `tools/overlay_report.py --check`
@@ -85,22 +85,24 @@ bytes changed - c-ares (1.34.8 → 1.34.9), brotli (1.2.0 → 1.2.1) and zlib (u
 compared again; the verdicts for the rest are carried over and are what the matrix re-checks in
 practice. That is a weaker claim than the original pass and it is written down rather than implied:
 re-running `tools/compare_vendored.py` against the new tarballs is worth an afternoon and not
-required by this upgrade.
+required by this upgrade. The 26.13.1 bump re-read the vendored column again; the four copies
+that moved are named at the top of this page, and the byte-level comparison remains the
+26.12.1 one.
 
-| Dependency | Node.js 26.13.0 | vcpkg | Channel | Version verdict |
+| Dependency | Node.js 26.13.1 | vcpkg | Channel | Version verdict |
 |---|---|---|---|---|
 | V8 | 14.6.202.34 | — | none | vendored (node fork, no `--shared-v8`) |
 | openssl | 3.5.9 | 3.6.5 (overlay, same version as the registry) | `--shared-openssl` | vcpkg ahead of Node.js → use the overlay, which differs from the registry only in building the C code with clang-cl (ADR 0009) |
 | libuv | 1.52.1 | 1.52.1 | `--shared-libuv` | equal, node patches → overlay |
 | c-ares | 1.34.9 | 1.34.8 | `--shared-cares` | **overlay at 1.34.9**: the registry is a patch release behind the tree, and 1.34.9 is part of 26.12.1's security content |
-| brotli | 1.2.0 + CVE cherry-pick | 1.2.0 | `--shared-brotli` | **overlay at 1.2.1**: the registry's 1.2.0 does not carry CVE-2026-111497, which Node.js has and 1.2.1 fixes upstream; plus Node.js's `c/common/platform.h` |
+| brotli | 1.2.1 | 1.2.0 | `--shared-brotli` | **overlay at 1.2.1**: the registry is a patch release behind, and Node.js and the overlay now carry the same release; the overlay also keeps Node.js's `c/common/platform.h` |
 | zstd | 1.5.7 | 1.5.7 | `--shared-zstd` | equal, sources match → use vcpkg |
 | nghttp2 | 1.70.0 | 1.70.0 | `--shared-nghttp2` | equal → `ports/nghttp2` carries Node.js's patches on top of the same version (overlay) |
 | ngtcp2 | 1.25.0 | 1.25.0 | `--shared-ngtcp2` | equal; vcpkg port's TLS backends are opt-in features (none default-on) → use vcpkg port |
 | nghttp3 | 1.18.0 | 1.18.0 | `--shared-nghttp3` | equal → use vcpkg port; its static lib devendors sfparse, so the link line carries `-lsfparse` too |
-| sqlite3 | 3.54.0 | 3.53.4 | `--shared-sqlite` | vcpkg behind → overlay pin 3.54.0 |
+| sqlite3 | 3.54.1 | 3.53.4 | `--shared-sqlite` | vcpkg behind → overlay pin 3.54.1 |
 | icu | 78.3 (icu-small) | 78.3 | `--with-intl=system-icu` | equal → use vcpkg (decision: full ICU) |
-| llhttp | 9.4.3 | 9.3.1 | `--shared-http-parser` | vcpkg behind → `ports/llhttp` pins 9.4.3 (overlay) |
+| llhttp | 9.4.4 | 9.3.1 | `--shared-http-parser` | vcpkg behind → `ports/llhttp` stays at the public 9.4.3 until 9.4.4 is published as a tag: the 9.4.4 source Node.js ships is not public yet, and its header differs only in the version macro (issue #114) |
 | simdjson | 5.0.3 | 5.0.2 | `--shared-simdjson` | vcpkg behind → overlay pin 5.0.3 |
 | ada-url | 4.0.0 (amalgamation: `ADA_VERSION`) | 4.0.0 | `--shared-ada` | equal → `ports/ada-url` pins the same 4.0.0 the registry now ships |
 | hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → `ports/hdr-histogram` pins 0.12.0 (overlay) |
