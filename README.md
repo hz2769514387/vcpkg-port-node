@@ -25,13 +25,14 @@ overlay port* below says why. Where the support stops is in *Known limits*.
 
 ## Status
 
-Released: **`20261110_26.13.0_vcpkg-2026.10.16`**. `main` carries that tag — Node.js v26.13.0
-on vcpkg 2026.10.16. Every change goes through a pull request, and the full matrix is green on
-`main` on every push.
+Released: **`20261110_26.13.0_vcpkg-2026.10.16`**. `main` has moved on to Node.js v26.13.1 on
+the same vcpkg release, which is not part of a tag yet — `versions.json` records it as
+unreleased, and the next release will name it. Every change goes through a pull request, and
+the full matrix is green on `main` on every push.
 
 |             |                                                 |
 | ----------- | ----------------------------------------------- |
-| Node.js     | v26.13.0 (v26 line, LTS)                        |
+| Node.js     | v26.13.1 (v26 line, LTS)                        |
 | vcpkg       | 2026.10.16 (pinned)                             |
 | Build route | `configure.py` → `gyp -f ninja` → `ninja`       |
 | Delivery    | static or shared library + CMake config, as overlay ports |

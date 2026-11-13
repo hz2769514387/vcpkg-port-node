@@ -3,10 +3,10 @@
 Reference for the `gyp → ninja` route on the v26 line: the externalization mechanism, the
 platform behaviour that is not obvious from upstream's documentation, and the fixes the
 port has to carry. Findings marked **measured** were reproduced on this machine against
-`node-v26.12.0`; see §5 for the exact commands. The pinned tree is v26.13.0, which changes no
-dependency and keeps the same V8 (14.6.202.34), so these findings are carried over rather than
-re-measured - the parts that did move are the dependency versions, and those are in
-[dependency-disposition.md](dependency-disposition.md).
+`node-v26.12.0`; see §5 for the exact commands. The pinned tree is v26.13.1, which keeps the
+same V8 (14.6.202.34) and the same externalize channels, so these findings are carried over
+rather than re-measured - the dependency versions that moved are brotli, llhttp, sqlite3 and
+undici, and those are in [dependency-disposition.md](dependency-disposition.md).
 
 ## 0. What the machine needs
 
