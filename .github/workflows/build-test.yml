@@ -260,9 +260,33 @@ jobs:
             echo "::group::ctest $cfg ($opts)"
             # -C is only meaningful for multi-config generators (Visual Studio); the
             # single-config ones ignore it.
+            #
+            # errexit is off for this one pipeline so the copy below still runs on a red
+            # leg: a failing round is the one most worth reading, and `set -e` would skip
+            # straight past it. The verdict is restored immediately afterwards, from every
+            # status in the pipeline so a failed tee cannot be mistaken for a green leg.
+            set +e
             ctest --test-dir "build/$PRESET" -C "$cfg" --output-on-failure $opts \
               2>&1 | tee "$RUNNER_TEMP/ci-logs/ctest-$cfg.log"
+            statuses=("${PIPESTATUS[@]}")
+            set -e
             echo "::endgroup::"
+            # ctest records every case's output - passing ones included - in
+            # Testing/Temporary/LastTest.log, for the run that just finished. With
+            # --output-on-failure a green suite prints none of that to stdout, so this file
+            # is the only copy of the official driver's per-case timing, and the next
+            # configuration's ctest overwrites it before the logs are collected. Issue #113
+            # is the case in point: an upstream 60 s suite deadline was hit once on x64-osx,
+            # and the margin in the passing rounds could not be recovered from the archive.
+            # The name avoids report's `ctest-*.log` glob, which reads tee'd stdout and would
+            # print this file as an empty entry in the job summary.
+            last_test="build/$PRESET/Testing/Temporary/LastTest.log"
+            if [ -f "$last_test" ]; then
+              cp "$last_test" "$RUNNER_TEMP/ci-logs/lasttest-$cfg.log"
+            fi
+            for status in "${statuses[@]}"; do
+              [ "$status" -eq 0 ] || exit "$status"
+            done
           done
       - name: Report the run
         uses: ./.github/actions/report

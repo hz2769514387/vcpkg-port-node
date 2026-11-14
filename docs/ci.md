@@ -422,6 +422,14 @@ any log is opened. The port's own output is separate from the consumer's: vcpkg 
 stdout and stderr in `buildtrees/node/build-<config>-{out,err}.log`, and the manifest log embeds
 only one of the two, which is why the collector copies both.
 
+A leg builds more than one consumer configuration, and only some of them run Node.js's own
+suite. `--output-on-failure` keeps a green suite's per-case output off stdout, but ctest still
+writes all of it - passing cases included - to `Testing/Temporary/LastTest.log`, which the next
+configuration's ctest overwrites. `Run the tests` therefore copies that file to
+`lasttest-<config>.log` after each run, including a failing one. Without it the archive holds
+only the last, usually suite-free, configuration's driver output, and a passing round's
+per-case timing cannot be compared with a failing round's - the measurement #113 needed.
+
 ## 7. Release watch
 
 `node-release-watch.yml` runs `tools/node_release_watch.py` once a day. The tool makes a
