@@ -283,8 +283,12 @@ The fix is one `-lsynchronization` entry in `crates.gyp`'s Windows `link_setting
 beside the `-lntdll` and `-luserenv` upstream already names. `AdjustLibraries` in the port's
 MSVS-emulation patches turns it into `synchronization.lib`, and `link_settings` propagates to
 the host tools as well as to the delivered library — a fix that only makes `mksnapshot.exe`
-link would leave `node.exe` broken. This is the same class of correction as the system import
-libraries re-added for the externalized dependencies in patch `0008`.
+link would leave `node.exe` broken. A **static** libnode keeps the same undefined symbols, so
+the exported target adds `synchronization` to its INTERFACE libraries too; otherwise the
+failure moves to the consumer and reads as
+`lld-link: error: undefined symbol: __declspec(dllimport) WaitOnAddress`. This is the same
+class of correction as the system import libraries re-added for the externalized dependencies
+in patch `0008`.
 
 It stayed invisible for a long time because a restored binary package never reaches the
 linker. The first cold arm64 Windows builds after the hosted runner moved to MSVC 14.52
