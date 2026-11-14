@@ -1,0 +1,24 @@
+# LIB_LIEF_RUNTIME was pinned to C++23 while LIB_LIEF itself is C++17. MSVC 14.52 in
+# C++23 mode makes std::unique_ptr's destructor and default_delete::operator() constexpr,
+# and the constexpr deleter then requires details::Module to be complete in every
+# translation unit that destroys a Module - including the stub translation units that
+# define the type only locally. The result is
+#   error C2338: static assertion failed: 'can't delete an incomplete type'
+# from <memory> for LIEF::runtime::details::Module, in the no-runtime stubs that the port
+# builds with LIEF_RUNTIME=OFF. C++20 is enough for what those stubs use, and it matches
+# what LIB_LIEF already compiles as.
+#
+--- a/src/runtime/CMakeLists.txt
++++ b/src/runtime/CMakeLists.txt
+@@ -19,7 +19,10 @@
+   CXX_VISIBILITY_PRESET     hidden
+   C_VISIBILITY_PRESET       hidden)
+ 
+-target_compile_features(LIB_LIEF_RUNTIME PRIVATE cxx_std_23)
++# MSVC 14.52 instantiates the constexpr unique_ptr deleter eagerly under C++23 and trips
++# its incomplete-type static_assert on details::Module in the stubs. C++20 is enough for
++# the runtime sources and matches LIB_LIEF's own level.
++target_compile_features(LIB_LIEF_RUNTIME PRIVATE cxx_std_20)
+ 
+ target_sources(LIB_LIEF PRIVATE $<TARGET_OBJECTS:LIB_LIEF_RUNTIME>)
+ 
