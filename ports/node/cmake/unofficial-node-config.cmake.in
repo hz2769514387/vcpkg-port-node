@@ -358,6 +358,14 @@ if(NODE_PORT_IS_WINDOWS)
   # GatherCertsForLocation needs them too. Depending on how OpenSSL was located (vcpkg's config
   # file hands multi-config consumers over to module mode) those dependencies do not always arrive
   # with OpenSSL::Crypto, so they are stated here.
+  #
+  # synchronization: node_crates.lib, the Rust static library from deps/crates, calls
+  # WaitOnAddress / WakeByAddressSingle / WakeByAddressAll. Their import library is
+  # Synchronization.lib and it is not in link.exe's default set, so every consumer that links a
+  # static libnode has to name it. A shared libnode carries the import itself and does not need
+  # it, but naming it on both sides keeps the two linkages interchangeable - measured on
+  # arm64-windows-static-clang, where the embedding executable failed with
+  # "undefined symbol: __declspec(dllimport) WaitOnAddress" until this entry existed.
   if(NOT NODE_PORT_SHARED)
     if(NOT TARGET unofficial::node::clang_rt_builtins)
       add_library(unofficial::node::clang_rt_builtins STATIC IMPORTED)
@@ -370,9 +378,10 @@ if(NODE_PORT_IS_WINDOWS)
       endif()
     endif()
     target_link_libraries(unofficial::node::node INTERFACE
-      winmm ntdll bcrypt crypt32 ws2_32 unofficial::node::clang_rt_builtins)
+      winmm ntdll bcrypt crypt32 ws2_32 synchronization unofficial::node::clang_rt_builtins)
   else()
-    target_link_libraries(unofficial::node::node INTERFACE winmm ntdll bcrypt crypt32 ws2_32)
+    target_link_libraries(unofficial::node::node INTERFACE
+      winmm ntdll bcrypt crypt32 ws2_32 synchronization)
   endif()
 
   # The stack reserve and the manifest are properties of the executable that hosts Node.js, not of

@@ -1,0 +1,25 @@
+# crates.gyp links node_crates.lib with link.exe directly instead of through rustc,
+# so the Windows import libraries Rust's std needs have to be named explicitly.
+# WaitOnAddress, WakeByAddressSingle and WakeByAddressAll are in Synchronization.lib
+# (Windows 8+, synchapi.h) and are not part of link.exe's default import-library set.
+# A cold arm64 Windows build therefore died at LINK_EMBED mksnapshot.exe with three
+# LNK2019s (__imp_WaitOnAddress / __imp_WakeByAddressSingle / __imp_WakeByAddressAll)
+# and LNK1120, even though ntdll and userenv were already listed.
+#
+# link_settings propagates to every target that links node_crates.lib - host tools as
+# well as the delivered library - so one entry covers all of them. The binary cache
+# had hidden this: runs that restored the port never reached the linker, and the first
+# cold build after the MSVC 14.52 runner rollout exposed it.
+#
+--- a/deps/crates/crates.gyp
++++ b/deps/crates/crates.gyp
+@@ -63,7 +63,8 @@
+         'conditions': [
+           ['OS=="win"', {
+             'libraries': [
+               '-lntdll',
+-              '-luserenv'
++              '-luserenv',
++              '-lsynchronization'
+             ],
+           }],

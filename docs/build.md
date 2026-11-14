@@ -263,6 +263,61 @@ consumer keeps a stock triplet. The mechanism (CC/CXX and INCLUDE/LIB through th
 `--disable-extras`, and why flags were not the way) is in
 [ADR 0011](decisions/0011-icu-is-built-with-clang-cl.md).
 
+### 4.9 The Rust archive needs `synchronization.lib` on Windows
+
+`deps/crates/crates.gyp` puts `node_crates.lib` on the link line of every target that uses the
+Temporal C API, but gyp links that archive with `link.exe` directly rather than through
+`rustc`. Rust's standard library calls `WaitOnAddress`, `WakeByAddressSingle` and
+`WakeByAddressAll`, whose import library is `Synchronization.lib` (Windows 8+, `synchapi.h`);
+it is not in `link.exe`'s default set. Without it a cold Windows build dies at the first host
+tool that links the archive:
+
+```
+node_crates.lib(...std...rcgu.o) : error LNK2019: unresolved external symbol __imp_WaitOnAddress
+node_crates.lib(...std...rcgu.o) : error LNK2019: unresolved external symbol __imp_WakeByAddressSingle
+node_crates.lib(...std...rcgu.o) : error LNK2019: unresolved external symbol __imp_WakeByAddressAll
+mksnapshot.exe : fatal error LNK1120: 3 unresolved externals
+```
+
+The fix is one `-lsynchronization` entry in `crates.gyp`'s Windows `link_settings.libraries`,
+beside the `-lntdll` and `-luserenv` upstream already names. `AdjustLibraries` in the port's
+MSVS-emulation patches turns it into `synchronization.lib`, and `link_settings` propagates to
+the host tools as well as to the delivered library — a fix that only makes `mksnapshot.exe`
+link would leave `node.exe` broken. A **static** libnode keeps the same undefined symbols, so
+the exported target adds `synchronization` to its INTERFACE libraries too; otherwise the
+failure moves to the consumer and reads as
+`lld-link: error: undefined symbol: __declspec(dllimport) WaitOnAddress`. This is the same
+class of correction as the system import libraries re-added for the externalized dependencies
+in patch `0008`.
+
+It stayed invisible for a long time because a restored binary package never reaches the
+linker. The first cold arm64 Windows builds after the hosted runner moved to MSVC 14.52
+(compiler hash changed, cache invalidated) failed three times with the identical three
+symbols; the earlier green runs had no ninja or cargo output at all in their configure logs.
+The verification that matters for this fix is therefore a **cold** build, not a cached one.
+
+### 4.10 LIEF's runtime object library needs a language level below C++23
+
+LIEF 1.0.0 pins `LIB_LIEF_RUNTIME` to `cxx_std_23` while `LIB_LIEF` itself is C++17. Under
+MSVC 14.52 that makes `std::unique_ptr`'s destructor and `default_delete::operator()`
+constexpr, and the constexpr deleter then requires `LIEF::runtime::details::Module` to be a
+complete type in every translation unit that destroys a `Module`. The no-runtime stubs that
+`ports/lief` builds (`LIEF_RUNTIME=OFF`) each define the type locally but the header's
+`std::unique_ptr<details::Module> impl_` is evaluated before that point, so the build dies
+with
+
+```
+<memory>(3337): error C2338: static assertion failed: 'can't delete an incomplete type'
+  with _Ty=LIEF::runtime::details::Module
+```
+
+`ports/lief` therefore lowers that one target to `cxx_std_20` (patch `0001`), which is enough
+for what the runtime sources use and matches `LIB_LIEF`. The static_assert itself is not
+standard-version gated - `default_delete::operator()` has always had it - so the difference
+is how eagerly the deleter is instantiated, which is why lowering the level is the fix rather
+than an `#ifdef`. Same story as section 4.9: it only shows up on a **cold** build, because
+a restored package never compiles it.
+
 ## 5. Reproducing these measurements
 
 ```sh
