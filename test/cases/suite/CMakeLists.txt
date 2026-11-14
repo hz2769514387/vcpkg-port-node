@@ -284,17 +284,32 @@ if(node_LIBRARY_LINKAGE STREQUAL "dynamic")
   list(APPEND _skips "test-module-loading-globalpaths")
 endif()
 
-# sequential/test-watch-mode.mjs is intermittent on the x64-osx **shared** cell and passes on the
-# same architecture's static cell and on every other cell: runs 40025248617, 40063985432 and
-# 40130285788 failed it, and re-running 40063985432's leg passed it. File-system events, a shared
-# libnode and an x64 binary under Rosetta is the environment rather than this port; issue #28 holds
-# the data and the criterion ("two failures in five rounds") this skip is standing on. Linkage and
-# architecture are both part of the reason, which the per-platform list cannot express.
-if(node_LIBRARY_LINKAGE STREQUAL "dynamic" AND APPLE AND
-   CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
+# sequential/test-watch-mode.mjs is intermittent on **both** x64-osx cells and passes on every
+# other cell. The mechanism is upstream's own suite deadline, not this port: line 178 of the file
+# is `describe('watch mode', { concurrency: ..., timeout: 60_000 })` - one wall-clock deadline
+# around all 43 subtests - and unlike the file's per-restart waits it is a literal, not
+# `common.platformTimeout(...)`. On the slowest cell, an x64 binary under Rosetta on arm64
+# hardware, the file sits a few seconds inside it:
+#
+#   official v26.13.1 binary   ~47 s    run 43428878719
+#   this port, clean round    53.010 s  run 43434070432, lasttest-Release.log
+#   this port, failed rounds  61.786 s  job 131209191758
+#                             61.107 s  job 132386061076
+#   upstream deadline         60 s      test-watch-mode.mjs:178
+#
+# The report reads as eleven cancelled cases because the parent expires and cancels whatever is
+# still pending - the tail of the file - not because those cases are broken. #28 recorded three
+# failures on the shared cell (runs 40025248617, 40063985432, 40130285788) and stands on "two
+# failures in five rounds"; #113 recorded the same mechanism on the static cell, including a
+# recurrence after five clean rounds. Linkage is therefore not part of the reason and architecture
+# is, which the per-platform skip list cannot express.
+#
+# Cost: the 43 subtests of this one file on one cell. They still run on arm64 macOS and on every
+# other platform, and the case's code paths are not cell-specific.
+if(APPLE AND CMAKE_OSX_ARCHITECTURES MATCHES "x86_64")
   message(STATUS
-    "Node.js test suite: shared libnode on x64 macOS, skipping test-watch-mode (intermittent; "
-    "issue #28)")
+    "Node.js test suite: x64 macOS under Rosetta, skipping test-watch-mode (an upstream 60 s "
+    "suite deadline this cell sits seconds inside; issues #28 and #113)")
   list(APPEND _skips "test-watch-mode")
 endif()
 

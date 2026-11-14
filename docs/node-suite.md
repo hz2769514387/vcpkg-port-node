@@ -83,6 +83,14 @@ between Node.js versions:
 - **Environment variables the runner itself sets.** A test asserting empty stderr can fail
   because the environment carries both `NO_COLOR` and `FORCE_COLOR`, which Node.js warns
   about. Re-check against the official binary before trusting this one.
+- **An upstream suite-level wall-clock deadline on the slowest cell.**
+  `sequential/test-watch-mode.mjs` puts one 60 s `timeout` on a `describe` holding 43 subtests,
+  and unlike the file's per-restart waits that value is a literal rather than
+  `common.platformTimeout(...)`. On x64 macOS under Rosetta the file takes about 53 s on a clean
+  round and has been measured at 61.786 s and 61.107 s, so it crosses the deadline at random.
+  The report reads as eleven cancelled cases, because the parent expiring cancels whatever is
+  still pending; the mechanism is the deadline. Skipped on both x64 macOS cells (#28 for the
+  shared one, #113 for the static one) - architecture is the reason, not linkage.
 - **A shell that is not a console.** Eight `parallel/test-repl-*` cases - `-context`,
   `-custom-eval`, `-custom-eval-previews`, `-empty`, `-eval-error-after-close`, `-multiline`,
   `-pretty-stack-custom-writer`, `-underscore` - fail when the driver is started from a shell
