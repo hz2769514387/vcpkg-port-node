@@ -4,6 +4,9 @@ vcpkg_from_github(
     REF "${VERSION}"
     SHA512 35d86d23306be0d9713fe6feb4632d83945a3e81557d12c6bdc23164818981dea30483d9ed7fdd5f8ba91803ceec716244f43527221e407f4b8fae021743e6a3
     HEAD_REF main
+    PATCHES
+        # MSVC 14.52 cannot compile the runtime object library at C++23; see the patch.
+        patches/0001-runtime-object-library-cxx20.patch
 )
 
 # LIEF 1.0.0 can pull its third-party dependencies with FetchContent from zips
