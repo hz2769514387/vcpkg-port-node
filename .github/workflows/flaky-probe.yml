@@ -41,11 +41,6 @@ on:
         required: false
         type: number
         default: 100
-      timeout-minutes:
-        description: Job timeout; a cold port install can take hours.
-        required: false
-        type: number
-        default: 330
 
 concurrency:
   group: flaky-probe-${{ inputs.preset }}
@@ -57,7 +52,11 @@ permissions:
 jobs:
   probe:
     runs-on: ${{ inputs.runner }}
-    timeout-minutes: ${{ inputs.timeout-minutes }}
+    # A literal, not an input: a workflow_dispatch number input reaches the expression
+    # evaluator as a string, and `timeout-minutes` rejects "330" with "Unexpected value".
+    # build-test.yml can use an input there because workflow_call inputs keep their
+    # number type. 330 minutes matches the Debug legs and covers a cold install.
+    timeout-minutes: 330
     env:
       VCPKG_ROOT: ${{ github.workspace }}/vcpkg
       VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-archives,readwrite
