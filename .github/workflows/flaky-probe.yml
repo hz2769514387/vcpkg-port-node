@@ -1,0 +1,185 @@
+name: Flaky case probe
+
+# A measurement, not a gate. #118 needs one case run many times against the port's own
+# embedding executable on a cell where it failed; every existing workflow runs Node.js's
+# whole suite exactly once, and the suite registration has a skip list but no "run only
+# this case, N times" input. Rather than add a repeat option to build-test.yml - which
+# every leg of CI, Debug and Matrix shares, and where a forgotten default would change
+# the gate - this workflow is dispatch-only. It reuses the same prepare/configure
+# composite actions, so the install and the compiler environment cannot drift from a
+# real leg, and it builds the consumer once before looping.
+#
+# The input `case` is any path under the installed test-suite's test/ directory, so the
+# next intermittent case does not need another workflow. Dispatch it from the Actions
+# tab with the runner/preset/triplet of the cell whose failure is being measured.
+
+on:
+  workflow_dispatch:
+    inputs:
+      runner:
+        description: Runner image of the cell to measure.
+        required: true
+        type: string
+        default: ubuntu-latest
+      preset:
+        description: CMake preset in test/CMakePresets.json (also the build preset).
+        required: true
+        type: string
+        default: x64-linux
+      triplet:
+        description: vcpkg triplet of the cell to measure.
+        required: true
+        type: string
+        default: x64-linux-release
+      case:
+        description: "Case path under test/, e.g. parallel/test-tls-resume-servername.js."
+        required: true
+        type: string
+        default: parallel/test-tls-resume-servername.js
+      repeat:
+        description: Number of invocations.
+        required: false
+        type: number
+        default: 100
+      timeout-minutes:
+        description: Job timeout; a cold port install can take hours.
+        required: false
+        type: number
+        default: 330
+
+concurrency:
+  group: flaky-probe-${{ inputs.preset }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ${{ inputs.runner }}
+    timeout-minutes: ${{ inputs.timeout-minutes }}
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}/vcpkg
+      VCPKG_BINARY_SOURCES: clear;files,${{ github.workspace }}/vcpkg-archives,readwrite
+      VCPKG_MAX_CONCURRENCY: 3
+      # English diagnostics from MSVC's tools: gyp decodes their output as UTF-8, and a
+      # localized message turns a real link failure into a UnicodeDecodeError.
+      VSLANG: 1033
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Prepare the leg
+        uses: ./.github/actions/prepare
+        with:
+          runner: ${{ inputs.runner }}
+          preset: ${{ inputs.preset }}
+          triplet: ${{ inputs.triplet }}
+          consumer-configs: Release
+          suite-configs: Release
+          vcpkg-commit: 9eec002df1cd109f8f104cd966a763daf9751489
+          cache-hash: ${{ hashFiles('test/vcpkg.json') }}
+
+      - name: Configure the consumer test project
+        uses: ./.github/actions/configure
+        with:
+          preset: ${{ inputs.preset }}
+          triplet: ${{ inputs.triplet }}
+          config: Release
+
+      - name: Build the consumer test project
+        shell: bash
+        working-directory: test
+        env:
+          PRESET: ${{ inputs.preset }}
+          TRIPLET: ${{ inputs.triplet }}
+        run: |
+          set -euo pipefail
+          cmake --preset "$PRESET" \
+              -DVCPKG_TARGET_TRIPLET="$TRIPLET" \
+              -DCMAKE_BUILD_TYPE=Release
+          cmake --build --preset "$PRESET" --config Release
+
+      - name: Run the case in a loop
+        shell: bash
+        working-directory: test
+        env:
+          PRESET: ${{ inputs.preset }}
+          TRIPLET: ${{ inputs.triplet }}
+          CASE: ${{ inputs.case }}
+          REPEAT: ${{ inputs.repeat }}
+        run: |
+          set -uo pipefail
+          build="build/$PRESET"
+          installed="$build/vcpkg_installed/$TRIPLET"
+          suite="$installed/share/node/test-suite"
+          if [ ! -f "$suite/test/$CASE" ]; then
+            echo "::error::case not installed at $suite/test/$CASE"
+            exit 1
+          fi
+          # cases/embed installs a copy named `node` because Node.js's own tests assume
+          # that executable name. Prefer it over the port's tools/node/node.exe: the
+          # failures being measured were reported against the embedding executable.
+          shell_bin=""
+          for candidate in \
+              "$build/cases/embed/Release/node.exe" \
+              "$build/cases/embed/Release/node" \
+              "$build/cases/embed/node.exe" \
+              "$build/cases/embed/node"; do
+            if [ -f "$candidate" ]; then shell_bin="$candidate"; break; fi
+          done
+          if [ -z "$shell_bin" ]; then
+            echo "::error::no embedding executable found under $build/cases/embed"
+            exit 1
+          fi
+          shell_bin="$(cd "$(dirname "$shell_bin")" && pwd)/$(basename "$shell_bin")"
+          suite="$(cd "$suite" && pwd)"
+
+          log="$RUNNER_TEMP/flaky-probe.log"
+          mkdir -p "$RUNNER_TEMP/ci-logs"
+          : > "$log"
+          failed=0
+          first_failure=""
+          cd "$suite"
+          for i in $(seq 1 "$REPEAT"); do
+            rc=0
+            # NODE_OPTIONS is cleared explicitly: an inherited --require shim would
+            # change the very handshake the case is measuring.
+            env NODE_OPTIONS= "$shell_bin" "test/$CASE" \
+                > "$RUNNER_TEMP/flaky-one.out" 2> "$RUNNER_TEMP/flaky-one.err" || rc=$?
+            if [ "$rc" -eq 0 ]; then
+              echo "run $i: pass" >> "$log"
+            else
+              failed=$((failed + 1))
+              if [ -z "$first_failure" ]; then first_failure="$i"; fi
+              {
+                echo "run $i: FAIL exit=$rc"
+                sed 's/^/  /' "$RUNNER_TEMP/flaky-one.err"
+              } >> "$log"
+            fi
+          done
+
+          cp "$log" "$RUNNER_TEMP/ci-logs/flaky-probe.log"
+          {
+            echo "## Flaky case probe"
+            echo ""
+            echo "- case: \`$CASE\`"
+            echo "- cell: \`$TRIPLET\` on \`$PRESET\`"
+            echo "- shell: embedding executable from \`cases/embed\`"
+            echo "- invocations: $REPEAT; failures: **$failed**"
+            if [ "$failed" -ne 0 ]; then
+              echo "- first failure: run $first_failure"
+              echo ""
+              echo '```'
+              grep -A12 "run $first_failure: FAIL" "$log" | head -14
+              echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the probe log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: flaky-probe-${{ inputs.preset }}
+          path: ${{ runner.temp }}/ci-logs/flaky-probe.log
+          if-no-files-found: warn
+          retention-days: 14
