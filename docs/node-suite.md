@@ -83,6 +83,17 @@ between Node.js versions:
 - **Environment variables the runner itself sets.** A test asserting empty stderr can fail
   because the environment carries both `NO_COLOR` and `FORCE_COLOR`, which Node.js warns
   about. Re-check against the official binary before trusting this one.
+- **A case whose own transient handshake alert becomes a failure.**
+  `parallel/test-tls-resume-servername` (new in 26.13.1) opens several TLSSockets and attaches
+  no `error` listener to any of them, so a single `tlsv1 alert decrypt error` (alert 51) from
+  the peer is thrown as an unhandled `error` event. The case is not listed as SKIP or FLAKY in
+  `parallel.status`, so `--flaky-tests=dontcare` does not cover it. Measured 2026-11-15 against
+  the **official** v26.13.1 Windows x64 binary - which has its own OpenSSL and none of this
+  port's build choices: 2 failures in 100 invocations, the same error and the same
+  `rec_layer_s3.c:918` frame the port's logs show. A ~2% per-run rate explains the three
+  failures on three different cells (#118) without any port defect. Skipped on every platform
+  with that measurement as the written reason; re-check at the next Node.js bump, because an
+  upstream fix or a FLAKY marker makes the skip obsolete.
 - **An upstream suite-level wall-clock deadline on the slowest cell.**
   `sequential/test-watch-mode.mjs` puts one 60 s `timeout` on a `describe` holding 43 subtests,
   and unlike the file's per-restart waits that value is a literal rather than

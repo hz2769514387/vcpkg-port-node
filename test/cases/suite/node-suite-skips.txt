@@ -66,6 +66,23 @@ test-fs-rmSync-special-char-additional-error | windows | the official binary fai
 # without that privilege it never gets as far as the shells.
 test-child-process-exec-any-shells-windows | windows | depends on the shells installed; "echo foo bar" exits 1 on the runner, for the official binary too
 
+# -- All platforms: a case with an inherent upstream flake --------------------
+# New in 26.13.1 (part of the TLS resumption / SNI security fix). It opens several
+# TLSSockets and attaches no `error` listener to any of them, so one transient
+# handshake alert becomes an unhandled `error` event and a failed case. That is not
+# intermittent because of this port: the official v26.13.1 Windows x64 binary, which
+# ships its own OpenSSL 3.5.9 and shares none of the port's build choices, failed
+# 2 of 100 invocations with the identical ERR_SSL_TLSV1_ALERT_DECRYPT_ERROR
+# (alert 51, ssl3_read_bytes, rec_layer_s3.c:918). The port recorded the same error
+# once each on x64-linux static, arm64-windows-static-md and x64-windows shared
+# (jobs 131749365438, 131914578361, 132497527545) while passing it in every other
+# round; a 2% per-run rate across ~26 legs per matrix round is exactly that pattern.
+# Cross-checked against the official binary as this file's header requires - official
+# fails too, so this is upstream's case, not our build. Re-examine at the next Node.js
+# version bump: if upstream fixes the case or marks it FLAKY in parallel.status, remove
+# this entry rather than leaving a frozen decision.
+test-tls-resume-servername | all | inherent upstream flake: the official v26.13.1 binary failed 2 of 100 invocations with the same ERR_SSL_TLSV1_ALERT_DECRYPT_ERROR, so the three failures on this port's cells are not a port defect (issue #118)
+
 # -- Windows ------------------------------------------------------------------
 # The TypeScript compiler emits CRLF on Windows while the fixture expects LF. Upstream test
 # bug, and confirmed environment-shaped by run 39201696549: the official binary fails it on
