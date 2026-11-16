@@ -27,7 +27,7 @@ matters.
 | `sqlite3` | 3.53.4 | 3.54.1 with `SQLITE_ENABLE_FTS3_PARENTHESIS` and `SQLITE_ENABLE_RBU` | newer minor than the registry, two extra features on. A consumer that links sqlite3 sees both |
 | `simdjson` | 5.0.2 | 5.0.3 | major version jump; the C++ API between 4.x and 5.0 is not source compatible |
 | `nghttp2` | 1.70.0 | 1.70.0, with Node.js's 31 differing files | minor version; the public header and the session/HPACK internals move (31 files differ), so the registry build is not the library Node.js is tested against |
-| `llhttp` | 9.3.1 | 9.4.3 | minor version, generated parser included; a consumer that links llhttp sees the newer parser |
+| `llhttp` | 9.3.1 | 9.4.4 | minor version, generated parser included; a consumer that links llhttp sees the newer parser |
 | `hdr-histogram` | 0.11.10 | 0.12.0 | minor version; the sources Node.js compiles differ from the registry's |
 | `ada-url` | 4.0.0 | 4.0.0 | **major** version: Node.js ships 4.0.0 (its amalgamation reports `ADA_VERSION`), so a consumer that also links ada gets the 4.x API |
 | `libffi` | 3.8.0 | 3.8.0 | minor version; ABI compatible |
