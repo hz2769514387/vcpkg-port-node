@@ -32,6 +32,7 @@ not treated as evidence for any of those.
 | `cases/exit/` | Exit hooks, `process.exit`, `beforeExit` adding work to the loop, an `uncaughtException` handler, and the `--unhandled-rejections` switch. |
 | `cases/externalization/` | Did each externalized dependency really come from vcpkg - on both hosts. |
 | `cases/fs/` | Unicode and special-character filenames, promise and stream APIs, recursive copy, symlinks (probed as a capability), and a non-ASCII argument passed from CMake through ctest into the embedder's `wmain`. |
+| `cases/host-call/` | The host calls a JavaScript function after `LoadEnvironment`, and the I/O that call starts is serviced by the loop the host pumps - the `nodejs/node#48760` report, re-measured. |
 | `cases/host-loop/` | The host owns the loop and pumps it itself - the UI-toolkit arrangement. |
 | `cases/install/` | The package holds what its config tells a consumer to link - and a shared install holds no archives. |
 | `cases/intl/` | Full ICU locale data, calendars, collation and segmentation, plus Temporal from the Rust crate. |

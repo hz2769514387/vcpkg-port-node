@@ -213,7 +213,55 @@ The headers are the ones in `<prefix>/include/node`: `node_api.h`, `js_native_ap
 `process.versions.modules`; `test/cases/addon` asserts it, because a mismatch is otherwise only
 reported when a prebuilt addon is rejected.
 
-## 8. Where this stops
+## 8. Driving the loop, and calling into JavaScript
+
+The embedding documentation gives the lifecycle - initialize once, create an environment, load,
+spin, stop - but not the arrangement a host with its own main loop needs. Four arrangements are
+in use, and `test/` exercises three of them on every push:
+
+| The host... | What it gives up | Test |
+|---|---|---|
+| calls `node::SpinEventLoop(env)` on its main thread | that thread: the call blocks until the loop is empty or `node::Stop` runs | `cases/embed` |
+| runs the whole lifecycle on a thread it created | nothing, but every exchange with JavaScript has to be queued | `cases/thread-loop` |
+| pumps `uv_run(loop, UV_RUN_NOWAIT)` itself | it must also call `platform->DrainTasks(isolate)` | `cases/host-loop` |
+| registers `uv_backend_fd(loop)` in its own reactor (Linux) | portability - Windows has no equivalent descriptor under IOCP | not tested here |
+
+The third is what a UI toolkit or a game loop needs, and it has two details that are easy to
+miss: `UV_RUN_NOWAIT` never blocks, so JavaScript cannot delay the host's own iterations; and
+`DrainTasks` is a separate call because V8's platform queues - microtasks, worker callbacks -
+are not something `uv_run` drains. `cases/host-loop` asserts that the script's timer fires
+inside one of the host's iterations rather than before or after them.
+
+A host that keeps its own loop also calls into JavaScript from it: "run this handler", "reload
+this module". That call does not pass through Node.js's execution path the way a script does,
+and nodejs/node#48760 reported that a `fetch` or `net` connection started from such a
+`v8::Function::Call` after `LoadEnvironment` never reached the loop. On the pinned 26.13.x tree
+it does: `cases/host-call` starts one connection from the script's own listen callback and one
+from a host call made afterwards, pumps the same loop, and requires both to complete. That is
+the contract to rely on, and the case turns a regression into a red test instead of a product
+that hangs.
+
+Two boundaries worth knowing before the first deployment:
+
+- **`CommonEnvironmentSetup` takes no `IsolateSettings` and no `EnvironmentFlags`.** Both are
+  reachable only through the lower-level `NewIsolate` / `CreateIsolateData` /
+  `CreateEnvironment` path, and the only upstream example of that path
+  (`test/embedding/embedtest.cc`) uses it together with an `EmbedderSnapshotData`. Every case
+  here uses `CommonEnvironmentSetup`; the low-level path is not verified by this repository, so
+  do not take a recipe for it from these documents.
+- **Two `ProcessInitializationFlags` are worth setting outside a command-line program.**
+  `kDisableNodeOptionsEnv` makes the process ignore `NODE_OPTIONS`, so an ambient development
+  setting cannot change an embedded runtime; `kNoDefaultSignalHandling` stops Node.js from
+  installing its own SIGINT/SIGTERM handlers, which a GUI application or a service that owns its
+  shutdown path cannot have.
+
+Cross-thread work has one official channel: `napi_threadsafe_function` (N-API v4 or newer),
+which queues a call and runs the JavaScript callback on the loop's thread. `uv_async_send` is
+the lower-level version and only wakes the loop - `cases/loop-wakeup` uses it and carries the
+payload itself. `node::Stop(env)` is the exception to "never touch the runtime from another
+thread": it may be called from any thread and behaves like `worker.terminate()`.
+
+## 9. Where this stops
 
 The README's *Known limits* is the authoritative list. Three of its rows are worth reading before a
 first build: the macOS deployment target comes from the dependency graph rather than from Node.js,
