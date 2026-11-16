@@ -102,7 +102,7 @@ that moved are named at the top of this page, and the byte-level comparison rema
 | nghttp3 | 1.18.0 | 1.18.0 | `--shared-nghttp3` | equal → use vcpkg port; its static lib devendors sfparse, so the link line carries `-lsfparse` too |
 | sqlite3 | 3.54.1 | 3.53.4 | `--shared-sqlite` | vcpkg behind → overlay pin 3.54.1 |
 | icu | 78.3 (icu-small) | 78.3 | `--with-intl=system-icu` | equal → use vcpkg (decision: full ICU) |
-| llhttp | 9.4.4 | 9.3.1 | `--shared-http-parser` | vcpkg behind → `ports/llhttp` stays at the public 9.4.3 until 9.4.4 is published as a tag: the 9.4.4 source Node.js ships is not public yet, and its header differs only in the version macro (issue #114) |
+| llhttp | 9.4.4 | 9.3.1 | `--shared-http-parser` | vcpkg behind → `ports/llhttp` pins 9.4.4, the release `nodejs/llhttp` published on 2026-11-13. Its source is byte-identical to the copy in the Node.js 26.13.1 tree - measured file by file, the only differences are Node.js's own `BUILD.gn`/`unofficial.gni` and the public tarball's `.gitignore` - so no Node.js patch is carried (issue #114) |
 | simdjson | 5.0.3 | 5.0.2 | `--shared-simdjson` | vcpkg behind → overlay pin 5.0.3 |
 | ada-url | 4.0.0 (amalgamation: `ADA_VERSION`) | 4.0.0 | `--shared-ada` | equal → `ports/ada-url` pins the same 4.0.0 the registry now ships |
 | hdr-histogram | 0.12.0 | 0.11.10 | `--shared-hdr-histogram` | vcpkg behind → `ports/hdr-histogram` pins 0.12.0 (overlay) |
@@ -228,7 +228,7 @@ is mostly gyp/GN build files, and sometimes generated headers Node.js checks in.
 | ngtcp2 1.25.0 | 0 | 0 | 233 | 90 | Clean sources; Node.js adds `third-party/libev`, `third-party/urlparse` and a generated `version.h` for its own build. |
 | zlib (Chromium fork) | 24 | 19 | 67 | 18 | 24 files differ and 18 more exist only in Node.js (the SIMD sources, `chromeconf.h`, `cpu_features.*`, `zlib.gyp`, `BUILD.gn`). The fork adds SIMD crc32/adler32 with runtime CPU detection and several inflate/deflate corrections upstream never merged. |
 | nghttp2 1.70.0 vs 1.69.0 | 31 | 31 | 553 | 7 | The version gap is real: the public header and the session/HPACK internals all move. |
-| llhttp 9.4.3 vs 9.3.1 | 3 | 3 | 1 | 3 | `include/llhttp.h`, `src/api.c`, `src/llhttp.c` (llhttp ships a generated parser). |
+| llhttp 9.4.4 vs 9.3.1 | 6 | 3 | 1 | 3 | Six files share a name and differ: the three source/header ones are `include/llhttp.h`, `src/api.c` and `src/llhttp.c` (llhttp ships a generated parser), the other three are `CMakeLists.txt`, `LICENSE` and `README.md`. Re-measured 2026-11-16 against the public 9.4.4 tarball; the overlay now carries exactly that tarball, so this row is registry-versus-Node.js, not registry-versus-overlay. |
 | simdjson 5.0.3 vs 4.6.4 | 0 common files | 0 | 740 | 5 | Node.js ships only the amalgamation (`simdjson.h`/`simdjson.cpp`) — but unlike ada's it **does** date itself: the generated header comment and `SIMDJSON_VERSION` both say 5.0.3, so the overlay pin is measured, not guessed. |
 | ada-url (node amalgamation) vs 3.4.4 | 1 (README) | 0 | 192 | 6 | Same shape; this was the 2026.07.29 registry, a major behind. The registry now ships 4.0.0, so what remains is the amalgamation-versus-tarball difference, not a version gap. |
 
