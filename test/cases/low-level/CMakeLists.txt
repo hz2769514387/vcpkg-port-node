@@ -13,9 +13,15 @@
 # Two ctest cases, one binary: the default is kNoBrowserGlobals, and the environment variable asks
 # for kDefaultFlags so both sides of the table are measured on every cell.
 
+find_package(libuv CONFIG REQUIRED)
+
 add_executable(low_level main.cpp)
 target_compile_features(low_level PRIVATE cxx_std_20)
-target_link_libraries(low_level PRIVATE unofficial::node::node)
+# libuv is linked explicitly for the same reason as cases/host-loop: a consumer that
+# calls uv_run() links the library it calls, and with a shared libnode the exported config
+# does not put it on the consumer's link line.
+target_link_libraries(low_level PRIVATE unofficial::node::node
+  $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>)
 
 add_test(NAME low-level.no_browser_globals COMMAND low_level)
 set_tests_properties(low-level.no_browser_globals PROPERTIES

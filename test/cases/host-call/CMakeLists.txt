@@ -15,9 +15,15 @@
 # red case instead of a product that hangs. Measured on the pinned 26.13.x tree: all four events
 # arrive; the issue does not reproduce.
 
+find_package(libuv CONFIG REQUIRED)
+
 add_executable(host_call main.cpp)
 target_compile_features(host_call PRIVATE cxx_std_20)
-target_link_libraries(host_call PRIVATE unofficial::node::node)
+# libuv is linked explicitly for the same reason as cases/host-loop: a consumer that
+# calls uv_run() links the library it calls, and with a shared libnode the exported config
+# does not put it on the consumer's link line.
+target_link_libraries(host_call PRIVATE unofficial::node::node
+  $<IF:$<TARGET_EXISTS:libuv::uv_a>,libuv::uv_a,libuv::uv>)
 
 add_test(NAME host-call.io_from_a_host_call COMMAND host_call)
 set_tests_properties(host-call.io_from_a_host_call PROPERTIES
