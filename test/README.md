@@ -39,6 +39,7 @@ not treated as evidence for any of those.
 | `cases/layered/` | A library that hides the port behind a PRIVATE link, and two applications on top of it. |
 | `cases/lifecycle/` | Three environments started and torn down in sequence in one process, each with its own cleanup and AtExit hooks. |
 | `cases/loop-wakeup/` | A native thread outside the runtime signals a `uv_async_t` on Node.js's loop, and the callback runs in a host-driven pump. |
+| `cases/low-level/` | `NewIsolate` / `CreateIsolateData` / `CreateEnvironment` instead of `CommonEnvironmentSetup`, and what `EnvironmentFlags::kNoBrowserGlobals` actually removes (`console` and `setImmediate` stay). |
 | `cases/multi-isolate/` | Two environments alive at once, two isolates and loops, alternately pumped by the host, with separate globals. |
 | `cases/net/` | Loopback HTTP/1.1, `fetch`, HTTP/2, TCP, `dns.lookup` and WHATWG URL - llhttp, nghttp2, libuv, c-ares and ada. |
 | `cases/runtime/` | V8 heap statistics and explicit GC, `vm` contexts and timeouts, WebAssembly compilation, Buffers, `TextDecoder`, `structuredClone` and microtask ordering. |

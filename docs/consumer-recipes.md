@@ -245,10 +245,17 @@ Two boundaries worth knowing before the first deployment:
 
 - **`CommonEnvironmentSetup` takes no `IsolateSettings` and no `EnvironmentFlags`.** Both are
   reachable only through the lower-level `NewIsolate` / `CreateIsolateData` /
-  `CreateEnvironment` path, and the only upstream example of that path
-  (`test/embedding/embedtest.cc`) uses it together with an `EmbedderSnapshotData`. Every case
-  here uses `CommonEnvironmentSetup`; the low-level path is not verified by this repository, so
-  do not take a recipe for it from these documents.
+  `CreateEnvironment` path, which `cases/low-level` exercises. Three things cost time to
+  discover: the environment has to be given `InitializeOncePerProcess`'s parsed
+  `args()`/`exec_args()`, not an argv you built yourself; `LoadEnvironment(env, source)` returns
+  the **module body's return value**, so a script without `return` evaluates to `undefined` -
+  which is a valid `MaybeLocal`, not an error; and `kNoBrowserGlobals` does not do what its
+  comment suggests. Measured, it makes `fetch`, `setTimeout` and `queueMicrotask` unavailable
+  while `console` and `setImmediate` stay. `cases/low-level` asserts that table for both the
+  flag and `kDefaultFlags`, so a host that relies on `setTimeout` - or means to hide `console` -
+  finds out there rather than in production. Upstream's own low-level example
+  (`test/embedding/embedtest.cc`) pairs the path with an `EmbedderSnapshotData`; the case here
+  uses `node::NewContext` instead.
 - **Two `ProcessInitializationFlags` are worth setting outside a command-line program.**
   `kDisableNodeOptionsEnv` makes the process ignore `NODE_OPTIONS`, so an ambient development
   setting cannot change an embedded runtime; `kNoDefaultSignalHandling` stops Node.js from
