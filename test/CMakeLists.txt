@@ -23,9 +23,10 @@
 #                     is linked: a module graph, command-line flags, shutdown, the
 #                     externalized dependencies behind the builtin modules, and V8.
 #   the host's side   embed, thread-loop, host-loop, host-call, lifecycle, multi-isolate,
-#                     loop-wakeup, low-level, addon - repeated runtimes, concurrent isolates, a
-#                     loop driven and signalled by the host, a host call into JavaScript, the
-#                     lower-level environment API, and a consumer-built native addon.
+#                     loop-wakeup, low-level, embedder-snapshot, addon - repeated runtimes,
+#                     concurrent isolates, a loop driven and signalled by the host, a host call
+#                     into JavaScript, the lower-level environment API, the embedder snapshot
+#                     API, and a consumer-built native addon.
 #   Node.js's suite   cases/suite - minutes to an hour, labelled `node-suite`.
 #
 # `LABELS "smoke"` spans every fast case across all of those directories, so `ctest -L smoke`
@@ -163,6 +164,7 @@ add_subdirectory(cases/compression)
 add_subdirectory(cases/context)
 add_subdirectory(cases/crt)
 add_subdirectory(cases/crypto)
+add_subdirectory(cases/embedder-snapshot)
 add_subdirectory(cases/exit)
 add_subdirectory(cases/externalization)
 add_subdirectory(cases/fs)

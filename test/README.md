@@ -29,6 +29,7 @@ not treated as evidence for any of those.
 | `cases/context/` | `AsyncLocalStorage` across await, timers, promises, microtasks and emitters; two interleaved requests never sharing a store; snapshot re-entry; `AsyncResource`; async ids and hooks; `diagnostics_channel` pub/sub and tracing; and a worker pool where each isolate keeps its own store. |
 | `cases/crt/` | The executable has the CRT the preset asked for, read out of its import table; the archives agree with it. |
 | `cases/crypto/` | OpenSSL-backed hashing, HMAC, AEAD, key generation, sign/verify and WebCrypto. |
+| `cases/embedder-snapshot/` | `CreateForSnapshotting` -> `CreateSnapshot` -> `ToBlob`, then `FromBlob` -> `CreateFromSnapshot`, with a value the builder script assigned: the embedder snapshot API, not the built-in artefact. |
 | `cases/exit/` | Exit hooks, `process.exit`, `beforeExit` adding work to the loop, an `uncaughtException` handler, and the `--unhandled-rejections` switch. |
 | `cases/externalization/` | Did each externalized dependency really come from vcpkg - on both hosts. |
 | `cases/fs/` | Unicode and special-character filenames, promise and stream APIs, recursive copy, symlinks (probed as a capability), and a non-ASCII argument passed from CMake through ctest into the embedder's `wmain`. |
