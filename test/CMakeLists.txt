@@ -22,9 +22,10 @@
 #                     fs, workers, runtime - what a product does with the runtime once it
 #                     is linked: a module graph, command-line flags, shutdown, the
 #                     externalized dependencies behind the builtin modules, and V8.
-#   the host's side   embed, thread-loop, host-loop, lifecycle, multi-isolate,
-#                     loop-wakeup, addon - repeated runtimes, concurrent isolates, a loop
-#                     driven and signalled by the host, and a consumer-built native addon.
+#   the host's side   embed, thread-loop, host-loop, host-call, lifecycle, multi-isolate,
+#                     loop-wakeup, low-level, addon - repeated runtimes, concurrent isolates, a
+#                     loop driven and signalled by the host, a host call into JavaScript, the
+#                     lower-level environment API, and a consumer-built native addon.
 #   Node.js's suite   cases/suite - minutes to an hour, labelled `node-suite`.
 #
 # `LABELS "smoke"` spans every fast case across all of those directories, so `ctest -L smoke`
@@ -165,12 +166,14 @@ add_subdirectory(cases/crypto)
 add_subdirectory(cases/exit)
 add_subdirectory(cases/externalization)
 add_subdirectory(cases/fs)
+add_subdirectory(cases/host-call)
 add_subdirectory(cases/host-loop)
 add_subdirectory(cases/install)
 add_subdirectory(cases/intl)
 add_subdirectory(cases/layered)
 add_subdirectory(cases/lifecycle)
 add_subdirectory(cases/loop-wakeup)
+add_subdirectory(cases/low-level)
 add_subdirectory(cases/multi-isolate)
 add_subdirectory(cases/net)
 add_subdirectory(cases/runtime)
