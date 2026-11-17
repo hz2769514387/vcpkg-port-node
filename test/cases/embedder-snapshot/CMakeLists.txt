@@ -9,6 +9,20 @@
 # so the build and the consume cannot share a process. `DEPENDS` keeps the order even under
 # `ctest -j`. The blob is written into the build directory, not the source tree.
 
+# Windows + shared has no coverage here, on purpose. `EmbedderSnapshotData` is declared without
+# NODE_EXTERN (unlike `class NODE_EXTERN CommonEnvironmentSetup`), so node.exe does not export it;
+# tools/gen_node_def.cc builds libnode.dll's export list from node.exe's export table, so
+# FromBlob/ToBlob/DeleteSnapshotData do not exist in the DLL. Measured on windows-shared and
+# windows-shared-arm64: lld-link "undefined symbol ... EmbedderSnapshotData::FromBlob". The static
+# Windows cells and every POSIX shared cell still cover the API - POSIX shared objects export
+# everything by default, which is why only the Windows DLL cells fail.
+if(WIN32 AND NODE_PORT_SHARED)
+  message(STATUS
+    "Embedder snapshot API: not exported by libnode.dll on Windows (EmbedderSnapshotData has no "
+    "NODE_EXTERN); not registering cases/embedder-snapshot on this cell")
+  return()
+endif()
+
 add_executable(embedder_snapshot main.cpp)
 target_compile_features(embedder_snapshot PRIVATE cxx_std_20)
 target_link_libraries(embedder_snapshot PRIVATE unofficial::node::node)

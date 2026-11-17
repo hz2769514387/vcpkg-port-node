@@ -270,6 +270,12 @@ Two boundaries worth knowing before the first deployment:
   and the consumer must pass no second `args` entry, because `StartExecution` treats one as a
   main module and tries to run it (`Cannot find module .../__node_anonymous_main`). The class
   documentation marks the API subject to change between Node.js versions, including ABI.
+  **On Windows with a shared libnode this API is not available**: `EmbedderSnapshotData` is
+  declared without `NODE_EXTERN`, so `node.exe` does not export it and `libnode.dll` (whose export
+  list `tools/gen_node_def.cc` derives from that table) does not either - `FromBlob`/`ToBlob`
+  fail at link time. The static Windows install and every POSIX shared install have it, because
+  POSIX shared objects export everything by default. `cases/embedder-snapshot` is registered on
+  those cells only.
 
 Cross-thread work has one official channel: `napi_threadsafe_function` (N-API v4 or newer),
 which queues a call and runs the JavaScript callback on the loop's thread. `uv_async_send` is
