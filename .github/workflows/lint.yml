@@ -74,4 +74,11 @@ jobs:
         run: python3 tools/node_release_watch.py --dry-run
 
       - name: The vcpkg release watcher still parses the upstream API
+        # api.github.com allows 60 unauthenticated requests per hour per IP, and the hosted
+        # runners share those addresses: two pull requests in one day failed this step with
+        # "HTTP 403: rate limit exceeded" while every other lint step passed (issue #129).
+        # The token authenticates the request only - `--dry-run` writes nothing even when one
+        # is present - so this cannot turn a real parser regression into a pass.
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python3 tools/vcpkg_release_watch.py --dry-run
