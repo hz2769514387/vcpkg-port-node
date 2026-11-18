@@ -262,6 +262,21 @@ Two boundaries worth knowing before the first deployment:
   installing its own SIGINT/SIGTERM handlers, which a GUI application or a service that owns its
   shutdown path cannot have.
 
+- **The embedder snapshot API is available, and experimental.** `CreateForSnapshotting` /
+  `CreateSnapshot` / `EmbedderSnapshotData::FromBlob` / `CreateFromSnapshot` are all in the
+  installed header, and `cases/embedder-snapshot` builds a snapshot and starts an environment
+  from it. Two constraints come from the API rather than from this port: every setup in one
+  process has to use the same snapshot, so building and consuming belong in separate processes;
+  and the consumer must pass no second `args` entry, because `StartExecution` treats one as a
+  main module and tries to run it (`Cannot find module .../__node_anonymous_main`). The class
+  documentation marks the API subject to change between Node.js versions, including ABI.
+  **On Windows with a shared libnode this API is not available**: `EmbedderSnapshotData` is
+  declared without `NODE_EXTERN`, so `node.exe` does not export it and `libnode.dll` (whose export
+  list `tools/gen_node_def.cc` derives from that table) does not either - `FromBlob`/`ToBlob`
+  fail at link time. The static Windows install and every POSIX shared install have it, because
+  POSIX shared objects export everything by default. `cases/embedder-snapshot` is registered on
+  those cells only.
+
 Cross-thread work has one official channel: `napi_threadsafe_function` (N-API v4 or newer),
 which queues a call and runs the JavaScript callback on the loop's thread. `uv_async_send` is
 the lower-level version and only wakes the loop - `cases/loop-wakeup` uses it and carries the
