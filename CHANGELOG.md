@@ -4,6 +4,67 @@ One entry per release tag: the same facts as that tag's GitHub Release body, kep
 repository reads without a network. Versions are dates — see
 [docs/versioning.md](docs/versioning.md) for why, and for what the three numbers mean.
 
+## 20261118 — Node.js 26.13.1, vcpkg 2026.10.16
+
+`20261118_node-26.13.1_vcpkg-2026.10.16`
+
+| | |
+|---|---|
+| Node.js | v26.13.1 (V8 14.6.202.34, `NODE_MODULE_VERSION` 147, napi 8, npm 11.20.0) |
+| vcpkg | 2026.10.16 (`9eec002df1cd109f8f104cd966a763daf9751489`), pinned |
+| port | `node` 26.13.1, `port-version` 1, 27 patches |
+| verified by | CI 44267411283 (six Release cells with Node.js's own suite), Debug 44267411163 (four cells), Matrix 44267411526 (twelve cells), Benchmark 44309856067 |
+
+The first tag whose name carries the `node-` segment; the two earlier tags keep their original
+spelling. Node.js moved to the 26.13.1 security release, and the tree moved four vendored copies
+with it.
+
+### Node.js 26.13.1
+
+The release keeps V8 14.6.202.34, OpenSSL 3.5.9, libuv 1.52.1, c-ares 1.34.9,
+zlib 1.3.2.1-motley, nghttp2 1.70.0, ngtcp2 1.25.0, simdjson 5.0.3, zstd 1.5.7, ICU 78.3 and
+npm 11.20.0, and moves brotli 1.2.0 → 1.2.1, llhttp 9.4.3 → 9.4.4, sqlite3 3.54.0 → 3.54.1 and
+undici 8.12.2 → 8.12.4.
+
+**llhttp 9.4.4** was the one dependency this repository could not follow while the release was
+private: the source existed only inside the Node.js tarball, and reproducing a `nodejs-private`
+delta in public would have published a security fix before its upstream project released it
+(#114). The release is public now, and `ports/llhttp` pins it. Measured file by file, the public
+tarball and the tree's copy are byte-identical except for Node.js's own
+`BUILD.gn`/`unofficial.gni` and the tarball's `.gitignore`, so no patch is carried.
+
+### Build fixes the matrix found
+
+- **arm64 Windows static consumers could not link.** The Rust crates archive references
+  `synchronization.lib`, which the port did not export; it does now, and the archive links it
+  (#119).
+- **LIEF 1.0.0** refuses to build its runtime object library at C++23. The port builds it at
+  C++20, like the rest of the graph (#121).
+
+### Tests and CI
+
+- Sixteen case directories and thirty-six smoke cases since the last tag (#108), plus
+  `AsyncLocalStorage` and `diagnostics_channel` coverage (#111).
+- Each configuration's ctest output is kept, so a flaky case can be read without a re-run
+  (#117).
+- `test-watch-mode` is skipped on the static x64 cells as well (#122).
+- A dispatch-only probe runs one suite case N times (#123). Built for the TLS resumption case,
+  it showed that the case is an upstream flake - the official binary fails it at the same ~2%
+  rate - and the case is skipped with that measurement as its written reason (#118, #124, #125).
+- Three embedding-contract cases: a host call into JavaScript that starts I/O (`#48760` does not
+  reproduce, #127), the low-level environment API and what `EnvironmentFlags::kNoBrowserGlobals`
+  really removes (`cases/low-level`), and the embedder snapshot API (`cases/embedder-snapshot`,
+  #131).
+- Lint's vcpkg watcher now authenticates its GitHub request, so the step no longer fails on the
+  anonymous rate limit (#129, #130).
+
+### Limits
+
+- The embedder snapshot API is not available to a **Windows shared** consumer:
+  `EmbedderSnapshotData` has no `NODE_EXTERN`, so `libnode.dll` does not export it. Static
+  Windows and POSIX shared installs have it; `docs/consumer-recipes.md` section 8 has the
+  mechanism.
+
 ## 20261110 — Node.js 26.13.0, vcpkg 2026.10.16
 
 `20261110_26.13.0_vcpkg-2026.10.16`

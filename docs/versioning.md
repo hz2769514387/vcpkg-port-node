@@ -128,8 +128,10 @@ Rules:
 
 ## 4. Tags and releases
 
-- **Format**: `<release version>_<node version>_vcpkg-<vcpkg release>`, for example
-  `20261018_26.12.0_vcpkg-2026.07.29`.
+- **Format**: `<release version>_node-<node version>_vcpkg-<vcpkg release>`, for example
+  `20261024_node-26.12.0_vcpkg-2026.07.29`. The `node-` segment was added after the first two
+  tags were cut, and a tag is never moved or renamed: `20261024_26.12.0_vcpkg-2026.07.29` and
+  `20261110_26.13.0_vcpkg-2026.10.16` keep the old spelling.
 - **Annotated**, created on the commit the matrix passed on, never moved and never deleted. A
   tag is the only immutable statement this repository makes; branches and `main` move.
 - **One GitHub Release per tag**, with the same name as the tag. Body: the three numbers, the
