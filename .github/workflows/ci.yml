@@ -16,8 +16,8 @@ name: CI
 # Debug is `debug.yml`; all three run on push as well, so a push covers every dimension, just
 # not inside one job.
 #
-# During the development period this branch is allowed to be red; the point is that the
-# signal is honest (AGENTS.md, section 5).
+# A red leg is an incident, not a background state: diagnose it before moving on
+# (AGENTS.md, section 4).
 
 on:
   push:
