@@ -1,14 +1,16 @@
 # Consumer recipes
 
-Five shapes a consumer actually builds, each with the triplet, the preset and the two or three
-lines of CMake that make it work. Four of them resolve to a triplet that ships with vcpkg; the
+Five build shapes a consumer actually builds, each with the triplet, the preset and the two or
+three lines of CMake that make it work. Four of them resolve to a triplet that ships with vcpkg; the
 clang-cl one needs a triplet you supply, because vcpkg has none for clang-cl. This repository's
 own `test/cmake/triplets/` are CI cells, not recipes, and copying one is how a downstream consumer
 met a CRT mismatch at configure time (issue #61).
 
-Everything here except §6 is exercised by `test/` on every push, on both architectures of all
-three platforms; §6 is exercised by the four clang-cl cells in `matrix.yml` (ADR 0013). §7 is
-exercised by `test/cases/addon` on the same legs, including the static and shared Windows cells.
+Everything here except §6 and the `uv_backend_fd` arrangement in §8 is exercised by `test/` on
+every push, on both architectures of all three platforms; §6 is exercised by the four clang-cl
+cells in `matrix.yml` (ADR 0013). §7 is exercised by `test/cases/addon` on the same legs, including
+the static and shared Windows cells. The Linux reactor arrangement in §8 is documented, not
+tested - nothing here can run it on the other two platforms.
 
 ## 0. The three rules a preset cannot state
 
