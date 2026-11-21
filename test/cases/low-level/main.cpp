@@ -1,13 +1,13 @@
 // The lower-level environment path, and what EnvironmentFlags::kNoBrowserGlobals really removes.
 //
-// CommonEnvironmentSetup covers the usual embedding shape but takes neither IsolateSettings nor
-// EnvironmentFlags. A host that has to own crash handling (fatal error / OOM callbacks), choose a
-// microtask policy, or keep its own globals has to go through NewIsolate / CreateIsolateData /
-// CreateEnvironment. This case proves that path works against this install and pins the flag's
-// effect, because the header's comment ("browser globals like setTimeout, console, etc.") is not
-// what the runtime does: console survives, setImmediate survives, and fetch/setTimeout/
-// queueMicrotask do not. A product that relies on the comment instead of this table gets either a
-// missing timer or a global it thought it had suppressed.
+// CommonEnvironmentSetup takes no EnvironmentFlags, so a host that needs one has to go through
+// NewIsolate / CreateIsolateData / CreateEnvironment - the same path IsolateSettings would be
+// passed through. This case verifies that path is callable against this install and pins the
+// measured effect of kNoBrowserGlobals; it does not exercise the IsolateSettings callbacks. The
+// header's comment ("browser globals like setTimeout, console, etc.") is not what the runtime
+// does: console survives, setImmediate survives, and fetch/setTimeout/queueMicrotask do not. A
+// product that relies on the comment instead of this table gets either a missing timer or a
+// global it thought it had suppressed.
 //
 // Two ctest cases run this binary: the default is kNoBrowserGlobals, and the env var asks for
 // kDefaultFlags so the difference is measured rather than assumed.

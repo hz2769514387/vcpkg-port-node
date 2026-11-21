@@ -96,6 +96,9 @@ int main(int argc, char** argv) {
   int exit_code = 1;
 
   if (build) {
+    // A fixture that did not run must leave consume with nothing to read, rather than a blob
+    // from a previous invocation of a reused build directory.
+    std::remove(blob_path);
     std::unique_ptr<node::CommonEnvironmentSetup> setup =
         node::CommonEnvironmentSetup::CreateForSnapshotting(platform.get(), &errors, args,
                                                             exec_args);
@@ -185,6 +188,18 @@ int main(int argc, char** argv) {
         if (exit_code != 0) {
           std::fprintf(stderr, "embedder_snapshot_error: marker was '%s'\n", value);
         }
+      }
+      // The builder writes a number too. A build that serialised the string but lost numeric
+      // values (or Smi encoding) would pass on the marker alone.
+      v8::Local<v8::Value> number;
+      if (!context->Global()
+               ->Get(context, v8::String::NewFromUtf8Literal(isolate, "__snapshot_number"))
+               .ToLocal(&number) ||
+          !number->IsNumber() || number->Int32Value(context).FromMaybe(-1) != 42) {
+        std::fprintf(stderr, "embedder_snapshot_error: the snapshot has no numeric marker\n");
+        exit_code = 1;
+      } else {
+        std::printf("embedder_snapshot: number=42\n");
       }
       node::Stop(setup->env());
     }
