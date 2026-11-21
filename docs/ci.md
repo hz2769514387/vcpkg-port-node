@@ -289,10 +289,10 @@ neither is claimed.
 
 Every cell in that table has completed a build end to end, and the eight `matrix.yml` cells that
 predate the clang-cl dimension are green as well: the port's claim to support them is verified
-rather than aspirational. The four clang-cl cells are new in the change that adds them, and their
-first run is that pull request's.
+rather than aspirational. The four clang-cl cells have been blocking cells since ADR 0013 and the
+20261110 release; they run on every push.
 
-**Eight of the twelve cells block a merge, four do not** (#35). The blocking eight are the
+**Eight of the twelve cells block a merge, four do not** - #35 records that decision. The blocking eight are the
 shared-library cells - `windows-shared`, `windows-shared-arm64`, `linux-shared`,
 `linux-shared-arm64` - and the four clang-cl cells. A shared libnode changes how the consumer
 finds the library at run time and what the exported config links; the clang-cl cells are the only
@@ -408,7 +408,7 @@ is.
 
 Every leg uploads its logs unconditionally (`if: always()`), named
 `logs-part-<triplet>-<config>`, and the `logs` job calls `logs.yml` to merge all of them into
-one `ci-logs.tar.gz` (or `debug-logs` / `node-suite-logs`). One download per run.
+one `ci-logs.tar.gz` (or `debug-logs`). One download per run.
 
 Archival is **best-effort**: the upload steps carry `continue-on-error`, so a failure of the
 artifact service annotates the leg and leaves its verdict alone - the tests are the gate, the

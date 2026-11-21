@@ -129,7 +129,7 @@ Rules:
 ## 4. Tags and releases
 
 - **Format**: `<release version>_node-<node version>_vcpkg-<vcpkg release>`, for example
-  `20261024_node-26.12.0_vcpkg-2026.07.29`. The `node-` segment was added after the first two
+  `20261118_node-26.13.1_vcpkg-2026.10.16`. The `node-` segment was added after the first two
   tags were cut, and a tag is never moved or renamed: `20261024_26.12.0_vcpkg-2026.07.29` and
   `20261110_26.13.0_vcpkg-2026.10.16` keep the old spelling.
 - **Annotated**, created on the commit the matrix passed on, never moved and never deleted. A
@@ -157,7 +157,7 @@ Preparing a release is a checklist, and the lint covers half of it:
    triplets at that checkout except `VCPKG_BUILD_TYPE`; it needs a checkout, so it is not in
    lint;
 5. a benchmark comparison against the official Node.js binary of the same version has been run
-   on one leg and recorded with its CI link (issue #19): startup, and a slice of Node.js's own
+   on one leg and recorded with its CI link (the record lives in #19): startup, and a slice of Node.js's own
    `benchmark/` directory. Numbers live in the run, not in `docs/`, as everywhere else here;
 6. tag, release, and make sure the release body names the CI run.
 

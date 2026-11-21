@@ -93,6 +93,7 @@ is not a limit: it lives in the [issues](https://github.com/hz2769514387/vcpkg-p
 | A Debug consumer needs a dual triplet | MSVC ABI: a Debug consumer links a Debug library, and a release-only triplet installs none | Use `RelWithDebInfo` when the reason for Debug is debugging your own code - it is the release ABI |
 | On Windows, name the compiler with the toolset, not `CMAKE_CXX_COMPILER` | A Visual Studio generator derives its compiler from the toolset and ignores that variable silently | `toolset: {value: ClangCL, strategy: set}` in the preset; on Linux and macOS the compilers go through `CMAKE_{C,CXX}_COMPILER` |
 | A shared libnode must be findable at run time, and links nothing else | The DLL/`.so`/`.dylib` already contains the externalized dependencies | Copy it next to the executable or set `BUILD_RPATH`; do not link the dependencies a second time |
+| The embedder snapshot API is unavailable with a shared libnode on Windows | `EmbedderSnapshotData` has no `NODE_EXTERN`, so `node.exe` does not export it and `libnode.dll` - whose export list `tools/gen_node_def.cc` derives from that table - has neither `FromBlob` nor `ToBlob` | Use a static libnode on Windows, or a shared install on Linux/macOS; [consumer-recipes.md](docs/consumer-recipes.md) §8 has the mechanism |
 | CMake is the only supported build system | The artifact is a set of gyp-built static archives, not a single describable library | Non-CMake consumers reproduce the link line the exported config describes, by hand |
 
 ## Continuous integration
@@ -111,7 +112,7 @@ every push**, and the one it does not is named rather than implied:
   arm64 never finished at all. `docs/ci.md` has the three measurements;
 - `matrix.yml` — the rest of the matrix: the dynamic CRT on Windows, a **shared libnode** on
   every platform, and the **clang-cl dependency graph** on Windows. Twelve cells; eight block a
-  merge, and the four that do not are tracked in
+  merge; the split was decided in
   [#35](https://github.com/hz2769514387/vcpkg-port-node/issues/35).
 
 Debug and the wider matrix are separate workflows rather than extra legs of `ci.yml` because a
@@ -130,7 +131,7 @@ carries the test counts and the first error.
 | -------------------- | -------------------------------------------------------------------------------------- |
 | `ports/`             | The overlay ports: `node` plus any dependency that has to be pinned or patched         |
 | `test/`              | Consumer-side example project and the validation harness (ctest)                       |
-| `tools/`             | Maintenance scripts: the version-tree hasher, the hygiene checker, the release watcher |
+| `tools/`             | Maintenance scripts: the version-tree hasher, the hygiene checker, the release watchers and the benchmark comparator |
 | `versions/`          | vcpkg version files (one per port), carrying each port's git-tree                      |
 | `.github/workflows/` | Continuous integration; see `docs/ci.md`                                               |
 | `docs/`              | Design notes, dependency disposition, build and CI reference                           |

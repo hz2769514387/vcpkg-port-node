@@ -91,6 +91,7 @@ CMake 消费者无论哪种方式都会继承到。
 | Debug 消费者需要 dual triplet | MSVC ABI：Debug 消费者链接 Debug 库，而 release-only triplet 不安装任何 Debug 库 | 调试自己代码用 `RelWithDebInfo` —— 它就是 release ABI |
 | Windows 上指定编译器要用工具集，不要用 `CMAKE_CXX_COMPILER` | Visual Studio 生成器从工具集推导编译器，静默忽略该变量 | 在 preset 里写 `toolset: {value: ClangCL, strategy: set}`；Linux 与 macOS 的编译器走 `CMAKE_{C,CXX}_COMPILER` |
 | 共享 libnode 必须在运行时可被找到，且不要再链其它东西 | DLL/`.so`/`.dylib` 已包含全部外接依赖 | 把它拷到可执行文件旁，或设 `BUILD_RPATH`；不要二次链接那些依赖 |
+| Windows 上共享 libnode 时无法使用 embedder snapshot API | `EmbedderSnapshotData` 没有 `NODE_EXTERN`，`node.exe` 不导出它；而 `libnode.dll` 的导出表由 `tools/gen_node_def.cc` 从该表生成，因此其中没有 `FromBlob` / `ToBlob` | Windows 上改用静态 libnode，或在 Linux/macOS 上用共享安装；机制见 [consumer-recipes.md](docs/consumer-recipes.md) §8 |
 | 只支持 CMake 集成 | 交付物是 gyp 构建出的一组静态归档，不是单一可描述的库 | 非 CMake 消费者按导出配置描述的链接行手工链接 |
 
 ## 持续集成
@@ -106,8 +107,8 @@ CMake 消费者无论哪种方式都会继承到。
   是 5h36m 的 vcpkg 工作（依赖全部命中缓存的情况下），于是 x64 腿在 GitHub 六小时 job 上限两侧来回
   摇摆，而 arm64 从未跑完。三次测量在 `docs/ci.md` 里；
 - `matrix.yml` —— 矩阵的其余部分：Windows 上的动态 CRT、每个平台上的**共享 libnode**，以及 Windows
-  上的 **clang-cl 依赖图**。十二个 cell；其中八个阻塞合并，不阻塞的四个记在
-  [#35](https://github.com/hz2769514387/vcpkg-port-node/issues/35) 里。
+  上的 **clang-cl 依赖图**。十二个 cell；其中八个阻塞合并，这个划分由
+  [#35](https://github.com/hz2769514387/vcpkg-port-node/issues/35) 决定。
 
 Debug 和更宽的矩阵是独立工作流而不是 `ci.yml` 的额外腿，因为一个 job 要把端口为每个配置安装一遍、
 每个配置再跑一遍套件，就会超出 GitHub 六小时的 job 上限；三个工作流并行跑，各自都在上限之内。
