@@ -9,6 +9,9 @@ on:
   push:
     branches:
       - main
+      # The same maintained lines ci/debug/matrix build; a branch that runs the full matrix
+      # without hygiene, LF/CJK and secret checks is not actually gated.
+      - "*_vcpkg-*"
   pull_request:
   workflow_dispatch:
 

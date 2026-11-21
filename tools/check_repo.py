@@ -508,6 +508,23 @@ def check_versions_json(report, index):
                 "(ADR 0003: they move together)",
             )
 
+    # Dispatch-only workflows pass the pin inline instead of inheriting the reusable input's
+    # default. A copy that lags after an ADR 0003 bump would silently measure another baseline,
+    # while lint stayed green - flaky-probe.yml is the first such call site.
+    for workflow in index.paths():
+        if (not workflow.startswith(".github/workflows/")
+                or not workflow.endswith(".yml")
+                or workflow == workflow_path):
+            continue
+        for inline_pin in re.finditer(r"vcpkg-commit:[ \t]*([0-9a-f]{40})",
+                                      index.text(workflow)):
+            if vcpkg.get("commit") != inline_pin.group(1):
+                report.error(
+                    workflow,
+                    "vcpkg.commit does not match the inline vcpkg-commit pin "
+                    "(ADR 0003: they move together)",
+                )
+
 
 def check_preset_names(report, index):
     """A preset is named after the triplet it selects, with one documented suffix at most.
