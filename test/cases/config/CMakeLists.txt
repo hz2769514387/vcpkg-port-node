@@ -30,3 +30,6 @@ add_test(NAME config.exported_contract
     -DNODE_PORT_SHARED=${NODE_PORT_SHARED}
     -P "${CMAKE_CURRENT_SOURCE_DIR}/check_config.cmake")
 set_tests_properties(config.exported_contract PROPERTIES TIMEOUT 60 LABELS "smoke")
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

@@ -34,3 +34,6 @@ add_test(NAME zlib.cross_paths.verify
 set_tests_properties(zlib.cross_paths.verify PROPERTIES
   FIXTURES_REQUIRED zlib_cross_paths DEPENDS zlib.cross_paths.runtime
   TIMEOUT 120 LABELS "smoke")
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

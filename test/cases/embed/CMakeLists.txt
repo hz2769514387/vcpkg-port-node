@@ -83,3 +83,6 @@ add_custom_command(TARGET node_embedder POST_BUILD
           "$<TARGET_FILE:node_embedder>"
           "$<TARGET_FILE_DIR:node_embedder>/node${CMAKE_EXECUTABLE_SUFFIX}"
   COMMENT "Suite shell: copying the embedder to node${CMAKE_EXECUTABLE_SUFFIX}")
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

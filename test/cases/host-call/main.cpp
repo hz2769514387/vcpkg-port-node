@@ -18,6 +18,7 @@
 #include <uv.h>
 #include <v8.h>
 
+#include <chrono>
 #include <cstdio>
 #include <memory>
 #include <string>
@@ -116,9 +117,14 @@ int main(int argc, char** argv) {
       return 1;
     }
 
-    // Pump until the script's own listen callback recorded the port.
+    // Pump until the script's own listen callback recorded the port. The deadline is wall-clock
+    // time, not an iteration count: a loaded runner must not turn a healthy loopback into a red
+    // leg just because each pump took longer. The iteration ceiling is only a fuse.
+    const auto port_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(10);
     bool port_ready = false;
-    for (int i = 0; i < 2000 && !port_ready; ++i) {
+    for (int i = 0; i < 10000 && !port_ready &&
+         std::chrono::steady_clock::now() < port_deadline; ++i) {
       uv_run(loop, UV_RUN_NOWAIT);
       platform->DrainTasks(isolate);
       v8::Local<v8::Value> port;
@@ -136,9 +142,12 @@ int main(int argc, char** argv) {
       }
     }
 
-    // Keep pumping until both connections have completed, or five seconds passed.
+    // Same deal for the two connections: fifteen seconds of wall clock, with a fuse in case a
+    // pump never returns.
+    const auto events_deadline =
+        std::chrono::steady_clock::now() + std::chrono::seconds(15);
     v8::Local<v8::Array> events;
-    for (int i = 0; i < 2500; ++i) {
+    for (int i = 0; i < 20000 && std::chrono::steady_clock::now() < events_deadline; ++i) {
       uv_run(loop, UV_RUN_NOWAIT);
       platform->DrainTasks(isolate);
       v8::Local<v8::Value> events_value;

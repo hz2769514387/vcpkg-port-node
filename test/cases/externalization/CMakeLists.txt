@@ -29,3 +29,6 @@ set_tests_properties(externalization.tools PROPERTIES
   ENVIRONMENT "NODE_PORT_EXPECTED_VERSION=${unofficial-node_VERSION}"
   TIMEOUT 180
   LABELS "smoke")
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

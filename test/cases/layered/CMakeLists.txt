@@ -30,3 +30,6 @@ set_tests_properties(
 # Its DLLs live next to the library, not next to this executable (Windows shared only).
 node_test_runtime_libs(layered_app)
 node_test_runtime_libs(layered_cli)
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

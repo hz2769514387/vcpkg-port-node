@@ -15,3 +15,6 @@ set_tests_properties(abi.napi_version PROPERTIES
   ENVIRONMENT "NODE_PORT_MODULE_VERSION=${node_MODULE_VERSION};NODE_PORT_NAPI_VERSION=${node_NAPI_VERSION};NODE_PORT_NAPI_VERSION_MAX=${node_NAPI_VERSION_MAX}"
   TIMEOUT 180
   LABELS "smoke")
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")
