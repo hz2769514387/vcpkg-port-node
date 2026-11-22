@@ -35,3 +35,6 @@ if(DEFINED node_TOOLS_DIR AND EXISTS "${node_TOOLS_DIR}/node_modules/npm/bin/npx
     TIMEOUT 300
     LABELS "smoke")
 endif()
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

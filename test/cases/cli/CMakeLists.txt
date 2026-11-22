@@ -19,37 +19,60 @@ set_tests_properties(cli.flags PROPERTIES
   TIMEOUT 180
   LABELS "smoke")
 
+# The four argument cases below go through check_cli.cmake rather than PASS_REGULAR_EXPRESSION:
+# CMake ignores the exit code when a PASS regex matches, and the version in cli.print has to be a
+# real regex rather than a dotted string that also matches "26x13x1".
+string(REPLACE "." "\." _cli_version_regex "${unofficial-node_VERSION}")
+
 add_test(NAME cli.eval_cjs
-         COMMAND node_embedder -e "console.log('cli-eval-cjs-ok')")
+         COMMAND "${CMAKE_COMMAND}"
+           "-DEXE=$<TARGET_FILE:node_embedder>"
+           "-DEXPECT=cli-eval-cjs-ok"
+           "-DARG1=-e"
+           "-DARG2=console.log('cli-eval-cjs-ok')"
+           -P "${CMAKE_CURRENT_SOURCE_DIR}/check_cli.cmake")
 set_tests_properties(cli.eval_cjs PROPERTIES
   ENVIRONMENT "${_cli_clean}"
-  PASS_REGULAR_EXPRESSION "cli-eval-cjs-ok"
   TIMEOUT 120
   LABELS "smoke")
 
 add_test(NAME cli.eval_module
-         COMMAND node_embedder --input-type=module -e
-                 "import assert from 'node:assert/strict'; assert.equal(1 + 1, 2); console.log('cli-eval-module-ok')")
+         COMMAND "${CMAKE_COMMAND}"
+           "-DEXE=$<TARGET_FILE:node_embedder>"
+           "-DEXPECT=cli-eval-module-ok"
+           "-DARG1=--input-type=module"
+           "-DARG2=-e"
+           "-DARG3=import assert from 'node:assert/strict'
+assert.equal(1 + 1, 2)
+console.log('cli-eval-module-ok')"
+           -P "${CMAKE_CURRENT_SOURCE_DIR}/check_cli.cmake")
 set_tests_properties(cli.eval_module PROPERTIES
   ENVIRONMENT "${_cli_clean}"
-  PASS_REGULAR_EXPRESSION "cli-eval-module-ok"
   TIMEOUT 120
   LABELS "smoke")
 
 add_test(NAME cli.print
-         COMMAND node_embedder -p "process.versions.node")
+         COMMAND "${CMAKE_COMMAND}"
+           "-DEXE=$<TARGET_FILE:node_embedder>"
+           "-DEXPECT=${_cli_version_regex}"
+           "-DARG1=-p"
+           "-DARG2=process.versions.node"
+           -P "${CMAKE_CURRENT_SOURCE_DIR}/check_cli.cmake")
 set_tests_properties(cli.print PROPERTIES
   ENVIRONMENT "${_cli_clean}"
-  PASS_REGULAR_EXPRESSION "${unofficial-node_VERSION}"
   TIMEOUT 120
   LABELS "smoke")
 
 add_test(NAME cli.preload
-         COMMAND node_embedder --require "${CMAKE_CURRENT_SOURCE_DIR}/preload.cjs"
-                 "${CMAKE_CURRENT_SOURCE_DIR}/preload_app.cjs")
+         COMMAND "${CMAKE_COMMAND}"
+           "-DEXE=$<TARGET_FILE:node_embedder>"
+           "-DEXPECT=cli: preload ok"
+           "-DARG1=--require"
+           "-DARG2=${CMAKE_CURRENT_SOURCE_DIR}/preload.cjs"
+           "-DARG3=${CMAKE_CURRENT_SOURCE_DIR}/preload_app.cjs"
+           -P "${CMAKE_CURRENT_SOURCE_DIR}/check_cli.cmake")
 set_tests_properties(cli.preload PROPERTIES
   ENVIRONMENT "${_cli_clean}"
-  PASS_REGULAR_EXPRESSION "cli: preload ok"
   TIMEOUT 120
   LABELS "smoke")
 

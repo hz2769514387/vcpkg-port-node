@@ -20,3 +20,6 @@ set_tests_properties(thread-loop.ticks PROPERTIES
 
 # Its DLLs live next to the library, not next to this executable (Windows shared only).
 node_test_runtime_libs(thread_loop)
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

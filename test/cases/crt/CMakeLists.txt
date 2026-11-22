@@ -78,3 +78,6 @@ if(_crt_archives)
 else()
   message(STATUS "node_INSTALLED_LIBRARIES gave no resolvable archive - not registering crt.archives_consistent")
 endif()
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

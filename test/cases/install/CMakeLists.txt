@@ -21,3 +21,6 @@ add_test(NAME install.what_the_linkage_ships
 set_tests_properties(install.what_the_linkage_ships PROPERTIES
   LABELS "smoke"
   TIMEOUT 60)
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

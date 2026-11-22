@@ -395,3 +395,6 @@ message(STATUS "  platform label    : ${_suite_os}-${_suite_arch}")
 message(STATUS "  suites            : ${_suites}")
 message(STATUS "  shards            : ${NODE_TEST_SHARDS}")
 message(STATUS "  skip count        : ${_skips_csv}")
+
+# NODE_OPTIONS in a developer shell must not change what these cases measure.
+include("${CMAKE_CURRENT_LIST_DIR}/../../support/clear-node-options.cmake")

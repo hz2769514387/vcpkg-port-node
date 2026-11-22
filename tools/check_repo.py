@@ -593,6 +593,48 @@ def check_triplet_role_markers(report, index):
             )
 
 
+def check_case_registration(report, index):
+    """Every case with a CMakeLists is registered in the test project and in its README table.
+
+    A new directory that is added to neither never builds or runs, and lint would stay green;
+    the same is true of a README row that was never written. The three lists are small and
+    machine-readable, so drift is a mistake rather than a judgement call.
+    """
+    directories = {
+        name for name in index.listdir("test/cases")
+        if index.isfile("test/cases/%s/CMakeLists.txt" % name)
+    }
+    cmake = index.text("test/CMakeLists.txt")
+    registered = set(re.findall(r"add_subdirectory\(cases/([^)]+)\)", cmake))
+    readme = index.text("test/README.md")
+    listed = set(re.findall(r"^\| `cases/([^/]+)/`", readme, re.M))
+    for name in sorted(directories):
+        if name not in registered:
+            report.error(
+                "test/CMakeLists.txt",
+                "cases/%s has a CMakeLists.txt but no add_subdirectory - its tests never run"
+                % name,
+            )
+        if name not in listed:
+            report.error(
+                "test/README.md",
+                "cases/%s has a CMakeLists.txt but no row in the case table" % name,
+            )
+        content = index.text("test/cases/%s/CMakeLists.txt" % name)
+        if ("add_test(" in content and "NODE_OPTIONS=" not in content
+                and "clear-node-options.cmake" not in content):
+            report.error(
+                "test/cases/%s/CMakeLists.txt" % name,
+                "defines tests but neither clears NODE_OPTIONS nor includes "
+                "support/clear-node-options.cmake",
+            )
+    for name in sorted(registered - directories):
+        report.error(
+            "test/CMakeLists.txt",
+            "add_subdirectory(cases/%s) names a directory with no CMakeLists.txt" % name,
+        )
+
+
 def main(argv=None):
     cwd = os.getcwd()
     root = repo_root(cwd)
@@ -611,6 +653,7 @@ def main(argv=None):
     check_versions_json(report, index)
     check_preset_names(report, index)
     check_triplet_role_markers(report, index)
+    check_case_registration(report, index)
 
     for line in report.warnings:
         print(line)
