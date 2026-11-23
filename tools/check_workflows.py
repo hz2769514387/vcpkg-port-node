@@ -20,11 +20,16 @@ mistakes are caught in seconds rather than after a two-hour build.
 
 Nothing here executes the scripts, and nothing needs a runner: parsing is the
 whole point.
+
+The bash is `bash` on PATH, or Git for Windows' install when PATH has none; a
+machine with neither gets one sentence naming the requirement instead of a
+subprocess traceback.
 """
 
 import argparse
 import glob
 import os
+import shutil
 import subprocess
 import sys
 import tempfile
@@ -89,12 +94,59 @@ def find_workflow_calls(node, path):
             yield from find_workflow_calls(item, f"{path}[{index}]")
 
 
+def find_bash(explicit=None):
+    """Return (path, error). `explicit` may be a path or a name to look up on PATH."""
+    if explicit:
+        if os.path.isfile(explicit):
+            return explicit, None
+        found = shutil.which(explicit)
+        if found:
+            return found, None
+        return None, f"bash not found: {explicit}"
+
+    found = shutil.which("bash")
+    if found:
+        return found, None
+    if os.name == "nt":
+        for variable in ("ProgramFiles", "ProgramFiles(x86)"):
+            root = os.environ.get(variable)
+            if not root:
+                continue
+            candidate = os.path.join(root, "Git", "bin", "bash.exe")
+            if os.path.isfile(candidate):
+                return candidate, None
+    return None, ("bash not found; install Git for Windows (or add its bin directory to "
+                  "PATH), or pass --bash <path>")
+
+
+def self_check():
+    """Drive both ends of find_bash without parsing a workflow."""
+    failures = 0
+    path, error = find_bash("check-workflows-no-such-bash")
+    if path is not None or not error or "not found" not in error:
+        print("FAIL self-check: an explicit missing bash was not reported as not found")
+        failures += 1
+    path, error = find_bash()
+    if path is None:
+        print("FAIL self-check: no bash on this machine; the parse path cannot run")
+        failures += 1
+    print(f"self-check: {2 - failures}/2 cases as specified")
+    return 1 if failures else 0
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("workflows", nargs="*",
                         help="workflow and action files; default: every .yml under "
                              ".github/workflows/ and every action.yml under .github/actions/")
+    parser.add_argument("--bash", metavar="PATH",
+                        help="bash executable; default: PATH, then Git for Windows' install")
+    parser.add_argument("--self-check", action="store_true",
+                        help="check how a missing bash is reported, without parsing workflows")
     args = parser.parse_args()
+
+    if args.self_check:
+        return self_check()
 
     # Composite actions carry `run:` scripts too - more of them than the workflows do - and they were
     # outside this check from the day it was written: prepare alone is ~200 lines of shell. A gate
@@ -110,7 +162,11 @@ def main():
         print("check_workflows: no workflow files found", file=sys.stderr)
         return 1
 
-    bash = "bash"
+    bash, error = find_bash(args.bash)
+    if error:
+        print(f"check_workflows: {error}", file=sys.stderr)
+        return 1
+
     errors = 0
     checked = 0
     documents = {}
