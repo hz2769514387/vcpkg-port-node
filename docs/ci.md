@@ -229,6 +229,8 @@ a Debug consumer on a shared or `/MD` libnode is not verified yet - see issue #1
 assuming it from a passing leg.
 
 Every cell below is a promise a consumer can hold this repository to, and each one is a leg.
+The Blocking column is checked against each job's `experimental` input by
+`tools/check_ci_table.py`, so a cell that starts gating a merge cannot keep the word "no" here.
 
 | Workflow | Leg | Runner | Preset | Triplet | Consumer | Node.js suite | Blocking? |
 |---|---|---|---|---|---|---|---|
@@ -239,14 +241,14 @@ Every cell below is a promise a consumer can hold this repository to, and each o
 | `ci.yml` | arm64 macOS | `macos-latest` | `arm64-osx` | `arm64-osx-release` | Release, RelWithDebInfo | Release | yes |
 | `ci.yml` | x64 macOS | `macos-15` | `x64-osx` | `x64-osx-release` | Release, RelWithDebInfo | Release | yes |
 | `debug.yml` | four: the six above minus **both** Linux legs ([#26](https://github.com/hz2769514387/vcpkg-port-node/issues/26), [#46](https://github.com/hz2769514387/vcpkg-port-node/issues/46)) | as above | as above | stock (dual) | **Debug** | — (off) | yes |
-| `matrix.yml` | x64 Windows, `/MD` | `windows-2022` | `x64-windows-static-md` | `x64-windows-static-md-release` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | arm64 Windows, `/MD` | `windows-11-arm` | `arm64-windows-static-md` | `arm64-windows-static-md-release` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | x64 Windows, shared | `windows-2022` | `x64-windows` | `x64-windows-release` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | arm64 Windows, shared | `windows-11-arm` | `arm64-windows` | `arm64-windows-release` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | x64 Linux, shared | `ubuntu-latest` | `x64-linux-dynamic` | `x64-linux-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | arm64 Linux, shared | `ubuntu-24.04-arm` | `arm64-linux-dynamic` | `arm64-linux-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | arm64 macOS, shared | `macos-latest` | `arm64-osx-dynamic` | `arm64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
-| `matrix.yml` | x64 macOS, shared | `macos-15` | `x64-osx-dynamic` | `x64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no — new cell |
+| `matrix.yml` | x64 Windows, `/MD` | `windows-2022` | `x64-windows-static-md` | `x64-windows-static-md-release` | Release, RelWithDebInfo | Release | no |
+| `matrix.yml` | arm64 Windows, `/MD` | `windows-11-arm` | `arm64-windows-static-md` | `arm64-windows-static-md-release` | Release, RelWithDebInfo | Release | no |
+| `matrix.yml` | x64 Windows, shared | `windows-2022` | `x64-windows` | `x64-windows-release` | Release, RelWithDebInfo | Release | yes |
+| `matrix.yml` | arm64 Windows, shared | `windows-11-arm` | `arm64-windows` | `arm64-windows-release` | Release, RelWithDebInfo | Release | yes |
+| `matrix.yml` | x64 Linux, shared | `ubuntu-latest` | `x64-linux-dynamic` | `x64-linux-dynamic-release` | Release, RelWithDebInfo | Release | yes |
+| `matrix.yml` | arm64 Linux, shared | `ubuntu-24.04-arm` | `arm64-linux-dynamic` | `arm64-linux-dynamic-release` | Release, RelWithDebInfo | Release | yes |
+| `matrix.yml` | arm64 macOS, shared | `macos-latest` | `arm64-osx-dynamic` | `arm64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no |
+| `matrix.yml` | x64 macOS, shared | `macos-15` | `x64-osx-dynamic` | `x64-osx-dynamic-release` | Release, RelWithDebInfo | Release | no |
 | `matrix.yml` | x64 Windows, clang-cl | `windows-2022` | `x64-windows-static-clang-release` | `x64-windows-static-clang-release` | Release, RelWithDebInfo | Release | yes |
 | `matrix.yml` | arm64 Windows, clang-cl | `windows-11-arm` | `arm64-windows-static-clang-release` | `arm64-windows-static-clang-release` | Release, RelWithDebInfo | Release | yes |
 | `matrix.yml` | x64 Windows, clang-cl `/MD` | `windows-2022` | `x64-windows-static-md-clang-release` | `x64-windows-static-md-clang-release` | Release, RelWithDebInfo | Release | yes |

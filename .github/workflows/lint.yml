@@ -43,6 +43,12 @@ jobs:
         # the sentences beside them are not - a tool cannot write "why this fork matters".
         run: python3 tools/overlay_table.py --check
 
+      - name: The ci.md matrix table matches the workflows
+        # The Blocking column is the same kind of prose and it drifted: four shared-libnode
+        # cells said "no" while matrix.yml gated them on every pull request. This compares each
+        # row's word with the `experimental` input of the job the row names.
+        run: python3 tools/check_ci_table.py
+
       - name: No overlay is behind both the pin and the Node.js tree
         # The three numbers per overlay - its own, the registry's at the pin, and the one in the
         # Node.js source tree - live in docs/overlay-versions.json, because lint has no vcpkg
