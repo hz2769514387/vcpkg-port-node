@@ -35,9 +35,11 @@ three things in this order: a measurement (a run id), a written reason (in the s
 CMake that adds it), and the narrowest scope that explains the measurement — one cell rather than
 every platform, one case rather than a directory.
 
-Two examples worth copying: `test/cases/externalization` skips only the *date* half of its ICU check on one cell
-(README known limits), and `test/cases/suite` adds two skips keyed on `node_LIBRARY_LINKAGE`
-rather than on the platform, because the reason is the linkage.
+Two examples worth copying. `test/cases/suite` adds three skips keyed on
+`node_LIBRARY_LINKAGE` rather than on the platform, because the reason is the linkage: a shared
+libnode moves node's frames into the library and makes the executable non-relocatable. The same
+file skips `test-watch-mode` on the x64 macOS cells alone, where the measurement is a 60-second
+upstream deadline those cells sit inside (issues #28 and #113) - every other cell still runs it.
 
 ## Language and comments
 
