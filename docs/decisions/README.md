@@ -9,7 +9,7 @@ a change of mind gets a new ADR that supersedes the old one, so the history stay
 | [0001](0001-record-decisions-as-adrs.md) | Record decisions as ADRs in `docs/decisions/` | Accepted | 2026-10-15 |
 | [0002](0002-node-version-policy.md) | Track the Node.js v26 line and pin the exact patch | Accepted | 2026-10-15 |
 | [0003](0003-vcpkg-baseline-policy.md) | Pin the vcpkg baseline and upgrade it deliberately | Superseded (mechanism) by 0005 | 2026-10-15 |
-| [0004](0004-continuous-integration.md) | CI lives in GitHub Actions, builds through the consumer, and gates in two tiers | Accepted | 2026-10-16 |
+| [0004](0004-continuous-integration.md) | CI lives in GitHub Actions, builds through the consumer, and gates in two tiers | Superseded by 0015 | 2026-10-16 |
 | [0005](0005-vcpkg-pin-without-a-manifest-baseline.md) | Pin vcpkg by the checkout, not by a manifest baseline | Accepted | 2026-10-17 |
 | [0006](0006-versioning-and-branch-policy.md) | Date-versioned releases, LTS-tracking `main`, and branch-per-line | Accepted | 2026-10-18 |
 | [0007](0007-toolchain-configuration-and-linkage-policy.md) | One toolchain per platform, three configurations, both linkages and both CRTs, all proven in CI | Accepted | 2026-10-18 |
@@ -20,3 +20,4 @@ a change of mind gets a new ADR that supersedes the old one, so the history stay
 | [0012](0012-vcpkg-make-supports-clang-cl.md) | The make flow drives a clang-cl triplet, through an overlay of `vcpkg-make` | Accepted | 2026-11-04 |
 | [0013](0013-clang-cl-triplets-live-here.md) | clang-cl triplets live here as CI cells, and the chainloaded toolchain is the copyable part | Accepted | 2026-11-05 |
 | [0014](0014-native-addons-are-consumer-contract.md) | Consumer-built native addons are part of the embedding contract | Accepted | 2026-11-11 |
+| [0015](0015-four-ci-gates-on-every-push.md) | Four CI gates on every push, through the consumer | Accepted | 2026-11-24 |

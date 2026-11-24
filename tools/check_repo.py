@@ -635,6 +635,52 @@ def check_case_registration(report, index):
         )
 
 
+def check_adr_status(report, index):
+    """Each ADR's own Status line must agree with the index row that points at it.
+
+    The index is where a reader starts. 0003 was indexed as superseded while its header
+    still said Accepted, and 0004 stayed Accepted after the two-tier CI it describes was
+    replaced. Neither is visible from the code, so both survived the repository's other
+    drift checks.
+    """
+    doc = "docs/decisions/README.md"
+    if not index.isfile(doc):
+        report.error(doc, "missing: the ADR index")
+        return
+    rows = {
+        number: status.strip()
+        for number, status in re.findall(
+            r"^\|\s*\[(\d{4})\]\([^)]*\)\s*\|[^|]*\|\s*([^|]+?)\s*\|",
+            index.text(doc),
+            re.M,
+        )
+    }
+    seen = set()
+    for path in index.paths():
+        match = re.fullmatch(r"docs/decisions/(\d{4})-.*\.md", path)
+        if not match:
+            continue
+        number = match.group(1)
+        seen.add(number)
+        status = re.search(r"^[-*]?\s*Status:\s*(.+?)\s*$", index.text(path), re.M)
+        if not status:
+            report.error(path, "no Status line; the index cannot be checked against it")
+            continue
+        if number not in rows:
+            report.error(doc, "ADR %s has no index row" % number)
+            continue
+        header_word = status.group(1).split()[0]
+        index_word = rows[number].split()[0]
+        if header_word != index_word:
+            report.error(
+                path,
+                "header says '%s' but %s indexes it as '%s'"
+                % (header_word, doc, index_word),
+            )
+    for number in sorted(set(rows) - seen):
+        report.error(doc, "index row for ADR %s has no file" % number)
+
+
 def main(argv=None):
     cwd = os.getcwd()
     root = repo_root(cwd)
@@ -654,6 +700,7 @@ def main(argv=None):
     check_preset_names(report, index)
     check_triplet_role_markers(report, index)
     check_case_registration(report, index)
+    check_adr_status(report, index)
 
     for line in report.warnings:
         print(line)

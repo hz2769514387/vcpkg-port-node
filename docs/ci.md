@@ -5,7 +5,8 @@ What runs, where, and what each run actually proves. Every workflow lives in
 here ([0002](decisions/0002-node-version-policy.md), [0003](decisions/0003-vcpkg-baseline-policy.md),
 [0004](decisions/0004-continuous-integration.md),
 [0005](decisions/0005-vcpkg-pin-without-a-manifest-baseline.md),
-[0010](decisions/0010-build-cells-run-when-a-change-can-affect-the-build.md)).
+[0010](decisions/0010-build-cells-run-when-a-change-can-affect-the-build.md),
+[0015](decisions/0015-four-ci-gates-on-every-push.md)).
 
 ## 1. The gates
 

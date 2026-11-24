@@ -1,8 +1,9 @@
 # 4. CI lives in GitHub Actions, builds through the consumer, and gates in two tiers
 
-- Status: Accepted
+- Status: Superseded by 0015
 - Date: 2026-10-16
 - Supersedes: —
+- Superseded by: [0015](0015-four-ci-gates-on-every-push.md)
 
 ## Context
 

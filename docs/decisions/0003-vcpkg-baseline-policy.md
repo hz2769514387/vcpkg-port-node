@@ -1,8 +1,9 @@
 # 3. Pin the vcpkg baseline and upgrade it deliberately
 
-- Status: Accepted
+- Status: Superseded (mechanism) by 0005
 - Date: 2026-10-15
 - Supersedes: —
+- Superseded by: [0005](0005-vcpkg-pin-without-a-manifest-baseline.md)
 
 ## Context
 
