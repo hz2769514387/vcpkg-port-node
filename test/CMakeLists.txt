@@ -23,10 +23,10 @@
 #                     is linked: a module graph, command-line flags, shutdown, the
 #                     externalized dependencies behind the builtin modules, and V8.
 #   the host's side   embed, thread-loop, host-loop, host-call, lifecycle, multi-isolate,
-#                     loop-wakeup, low-level, embedder-snapshot, addon - repeated runtimes,
-#                     concurrent isolates, a loop driven and signalled by the host, a host call
-#                     into JavaScript, the lower-level environment API, the embedder snapshot
-#                     API, and a consumer-built native addon.
+#                     loop-wakeup, low-level, embedder-snapshot, addon, addon-cpp - repeated
+#                     runtimes, concurrent isolates, a loop driven and signalled by the host, a
+#                     host call into JavaScript, the lower-level environment API, the embedder
+#                     snapshot API, and consumer-built native addons (C and the C++ wrapper).
 #   Node.js's suite   cases/suite - minutes to an hour, labelled `node-suite`.
 #
 # `LABELS "smoke"` spans every fast case across all of those directories, so `ctest -L smoke`
@@ -156,6 +156,7 @@ set(NODE_TEST_EMBED_DIR "${CMAKE_CURRENT_SOURCE_DIR}/cases/embed")
 add_subdirectory(cases/embed)
 add_subdirectory(cases/abi)
 add_subdirectory(cases/addon)
+add_subdirectory(cases/addon-cpp)
 add_subdirectory(cases/application)
 add_subdirectory(cases/cli)
 add_subdirectory(cases/coexist)

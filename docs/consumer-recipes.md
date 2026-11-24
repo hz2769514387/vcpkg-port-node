@@ -215,6 +215,29 @@ The headers are the ones in `<prefix>/include/node`: `node_api.h`, `js_native_ap
 `process.versions.modules`; `test/cases/addon` asserts it, because a mismatch is otherwise only
 reported when a prebuilt addon is rejected.
 
+### The C++ wrapper: node-addon-api
+
+The C API above is what a `.node` module needs. A C++ addon written with `napi.h` gets its
+headers from this repository's overlay port instead of the registry's:
+
+```cmake
+find_package(unofficial-node-addon-api CONFIG REQUIRED)
+target_link_libraries(your_addon PRIVATE
+  unofficial::node-addon-api::node-addon-api
+  unofficial::node::node)
+```
+
+The overlay depends on the `node` port, installs only `napi.h` and its two companions, and
+leaves `<node_api.h>` to `include/node` - the same header the runtime was built from. The
+registry port instead depends on `node-api-headers`, which puts a second `node_api.h` in the
+include path and a `lib/node.lib` (the `node.exe` import library) in the prefix; neither is
+what an embedding engine links. The overlay also supports arm64 Windows, which the registry
+port's `supports` expression excludes.
+
+Scope: this is for addons compiled into an embedding engine. A project that builds a `.node`
+module for an installed `node.exe` should use the registry port and must not put this overlay
+on its port path. `test/cases/addon-cpp` builds the shape above.
+
 ## 8. Driving the loop, and calling into JavaScript
 
 The embedding documentation gives the lifecycle - initialize once, create an environment, load,
@@ -290,5 +313,5 @@ thread": it may be called from any thread and behaves like `worker.terminate()`.
 The README's *Known limits* is the authoritative list. Three of its rows are worth reading before a
 first build: the macOS deployment target comes from the dependency graph rather than from Node.js,
 Visual Studio 2022 or newer is required, and consuming this repository substitutes its build for
-twenty registry ports across the whole graph. Consuming it is also building it: the first
+twenty-one registry ports across the whole graph. Consuming it is also building it: the first
 configure costs tens of minutes.

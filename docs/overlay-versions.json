@@ -68,6 +68,11 @@
       "vendored": "1.70.0",
       "vendored_source": "deps/nghttp2/lib/includes/nghttp2/nghttp2ver.h"
     },
+    "node-addon-api": {
+      "registry": "8.9.2",
+      "vendored": null,
+      "vendored_note": "the Node.js tree carries no copy: node-addon-api is not a dependency of Node.js itself"
+    },
     "node": {
       "registry": null,
       "vendored": "26.13.1",
