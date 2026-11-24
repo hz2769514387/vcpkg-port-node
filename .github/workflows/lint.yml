@@ -34,6 +34,12 @@ jobs:
       - name: Version files match the ports
         run: python3 tools/version_tree.py --check
 
+      - name: The version-tree hash follows Git's ignore rules
+        # --force used to stage gitignored files (a __pycache__ under ports/node is enough),
+        # so a local Python run changed the hash in the version file without any commit.
+        # --self-check proves both halves of the contract in a throwaway repository.
+        run: python3 tools/version_tree.py --self-check
+
       - name: Repository hygiene
         run: python3 tools/check_repo.py
 

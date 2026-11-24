@@ -44,6 +44,9 @@ Usage
     # what would be written, without touching the version files
     python3 tools/version_tree.py --print
 
+    # prove in a throwaway repository that ignored files cannot change the hash
+    python3 tools/version_tree.py --self-check
+
 Exit status: 0 when everything is consistent (or was written), 1 when `--check` finds a
 mismatch, 2 when the environment is wrong (not a Git repository, missing port directory).
 """
@@ -106,9 +109,10 @@ def compute_git_tree(root, port_rel):
             # Unborn branch (no commits yet): start from an empty index.
             run_git(["read-tree", "--empty"], cwd=root, env=env)
 
-        # --force: stage the directory even if some rule would ignore it. Nothing inside a
-        # port directory should ever be ignored.
-        run_git(["add", "--force", "--", port_rel], cwd=root, env=env)
+        # Never use --force here. The hash must describe what Git would actually commit:
+        # an ignored file (e.g. a __pycache__ under a Python-using port) is not part of that
+        # tree, and staging it would make the version file name a tree that does not exist.
+        run_git(["add", "--", port_rel], cwd=root, env=env)
         root_tree = run_git(["write-tree"], cwd=root, env=env)
 
         # write-tree gives the tree of the repository root; the version file wants the
@@ -206,6 +210,61 @@ def write_port(root, port, tree, vfile, wanted):
     return action
 
 
+def self_check():
+    """Prove the hash follows Git's ignore rules without touching this repository.
+
+    Two directions matter. An ignored file under a port must not change the tree (otherwise
+    lint reports a drift no commit can fix); a new, non-ignored file must change it (otherwise
+    a real port edit goes unnoticed). Both are exercised in a throwaway repository with a
+    committed port, which is also what makes the check independent of the host's ignore rules.
+    """
+    with tempfile.TemporaryDirectory(prefix="vcpkg-version-tree-selfcheck-") as tmp:
+        root = os.path.join(tmp, "repo")
+        port_dir = os.path.join(root, "ports", "node")
+        os.makedirs(port_dir)
+        env = os.environ.copy()
+        env.update({
+            "GIT_AUTHOR_NAME": "version-tree-self-check",
+            "GIT_AUTHOR_EMAIL": "version-tree-self-check@example.invalid",
+            "GIT_COMMITTER_NAME": "version-tree-self-check",
+            "GIT_COMMITTER_EMAIL": "version-tree-self-check@example.invalid",
+        })
+
+        def write_text(path, text):
+            with open(path, "w", encoding="utf-8", newline="\n") as fh:
+                fh.write(text)
+
+        write_text(os.path.join(root, ".gitignore"), "__pycache__/\n")
+        write_text(os.path.join(port_dir, "vcpkg.json"), '{"version": "1.0.0"}\n')
+        run_git(["init", "-q"], cwd=root, env=env)
+        run_git(["add", ".gitignore", "ports/node"], cwd=root, env=env)
+        run_git(["commit", "-q", "-m", "base"], cwd=root, env=env)
+        committed = run_git(["rev-parse", "HEAD:ports/node"], cwd=root, env=env)
+
+        cache = os.path.join(port_dir, "__pycache__")
+        os.makedirs(cache)
+        with open(os.path.join(cache, "junk.pyc"), "wb") as fh:
+            fh.write(b"not a source file")
+        ignored_tree = compute_git_tree(root, "ports/node")
+        if ignored_tree != committed:
+            sys.stderr.write(
+                "::error:: self-check: an ignored file changed the tree (%s -> %s)\n"
+                % (committed, ignored_tree)
+            )
+            return 1
+
+        write_text(os.path.join(port_dir, "new.txt"), "new file\n")
+        added_tree = compute_git_tree(root, "ports/node")
+        if added_tree == committed:
+            sys.stderr.write(
+                "::error:: self-check: a new file under the port did not change the tree\n"
+            )
+            return 1
+
+    print("self-check ok: ignored files excluded, new files included")
+    return 0
+
+
 def main(argv=None):
     ap = argparse.ArgumentParser(
         description="Generate (or verify) the git-tree in the vcpkg version files."
@@ -221,7 +280,12 @@ def main(argv=None):
     ap.add_argument("--print", dest="do_print", action="store_true",
                     help="print one '<port> <git-tree>' line per port and exit")
     ap.add_argument("--cwd", default=os.getcwd(), help="any directory inside the repository")
+    ap.add_argument("--self-check", action="store_true",
+                    help="verify in a throwaway repository that ignore rules are honoured")
     args = ap.parse_args(argv)
+
+    if args.self_check:
+        return self_check()
 
     root = repo_root(args.cwd)
     ports_root_abs = os.path.join(root, args.ports_root)
