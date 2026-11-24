@@ -413,7 +413,7 @@ adds the corresponding `#cmakedefine` entries to `sqlite3-vcpkg-config.h.in`
 so they are visible to `sqlite3.c` at compile time. All other files are
 identical to the vcpkg 2026.07.29 `sqlite3` port, which is where this overlay was derived from; the
 baseline has since moved to 2026.10.16 and the overlay has not been re-derived, so its version
-(3.54.0) is now ahead of the registry's 3.53.4 rather than behind it.
+(3.54.1) is now ahead of the registry's 3.53.4 rather than behind it.
 
 ### 6.4 Test suite
 

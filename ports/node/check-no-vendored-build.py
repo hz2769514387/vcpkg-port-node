@@ -18,7 +18,7 @@ cheap to read: gyp's ninja output states every source it compiles.
 Usage
 -----
 
-    python3 check_no_vendored_build.py --build-dir <out/Release>
+    python3 check-no-vendored-build.py --build-dir <out/Release>
                                        [--vendored <dir>]... [--except <dir>]...
 
 Exits 0 when no compile step comes from a vendored directory, 1 when one does (naming the file

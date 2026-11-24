@@ -41,17 +41,35 @@ actually matters — *what is in it*.
 
 One file, at the repository root, machine-read and hand-edited only in the `port` block:
 
+The block below is copied from the root file and checked against it by `tools/check_repo.py`:
+
 ```json
 {
-  "port":  { "version": "20261110", "released": true,
-             "tagged_version": "26.13.0", "tagged_port_version": 4,
-             "manifest_version": "26.13.0", "manifest_port_version": 4 },
-  "node":  { "version": "26.13.0", "released": "2026-10-28", "lts": true,
-             "lts_start": "2026-10-28", "eol": "2029-04-30",
-             "url": "https://nodejs.org/dist/v26.13.0/node-v26.13.0.tar.xz",
-             "sha512": "b264…", "v8": "14.6.202.34",
-             "module_version": 147, "napi_version": 8, "npm": "11.20.0" },
-  "vcpkg": { "release": "2026.10.16", "commit": "9eec002…" }
+  "port": {
+    "version": "20261118",
+    "released": true,
+    "tagged_version": "26.13.1",
+    "tagged_port_version": 1,
+    "manifest_version": "26.13.1",
+    "manifest_port_version": 1
+  },
+  "node": {
+    "version": "26.13.1",
+    "released": "2026-11-10",
+    "lts": true,
+    "lts_start": "2026-10-28",
+    "eol": "2029-04-30",
+    "url": "https://nodejs.org/dist/v26.13.1/node-v26.13.1.tar.xz",
+    "sha512": "149fd201f1b99c67484daacdb2f6b0dbfc742c9f71f120b5b7160b389b04d6e0b1c17b228c5e27dd0194bc42076fb16909756d021ab0eb0054dacba1a589131a",
+    "v8": "14.6.202.34",
+    "module_version": 147,
+    "napi_version": 8,
+    "npm": "11.20.0"
+  },
+  "vcpkg": {
+    "release": "2026.10.16",
+    "commit": "9eec002df1cd109f8f104cd966a763daf9751489"
+  }
 }
 ```
 

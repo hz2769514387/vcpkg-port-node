@@ -7,7 +7,7 @@
 # path and avoids maintaining a translated CMake tree. gyp's own cmake
 # generator is declared experimental and Linux-only upstream.
 #
-# This port is self-contained: portfile / vcpkg.json / patches / scripts /
+# This port is self-contained: portfile / vcpkg.json / patches / cmake /
 # usage, nothing outside its own directory, and no triplet or toolchain (those
 # belong to the consumer). A stock vcpkg triplet is enough: on Windows this
 # port locates clang-cl and assembles the MSVC command-line environment itself

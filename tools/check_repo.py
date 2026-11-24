@@ -526,6 +526,40 @@ def check_versions_json(report, index):
                 )
 
 
+def check_versions_json_example(report, index):
+    """The `versions.json` printed in docs/versioning.md is the root file, verbatim.
+
+    The root file is checked against the code, but the copy a reader sees in the guide was
+    not: it still described the 26.13.0 release after 26.13.1 shipped, including a shortened
+    hash. A release that updates one without the other now fails lint.
+    """
+    doc = "docs/versioning.md"
+    source = "versions.json"
+    if not index.isfile(doc) or not index.isfile(source):
+        report.error(doc, "missing: docs/versioning.md or versions.json")
+        return
+    blocks = re.findall(r"```json\s*\n(.*?)\n```", index.text(doc), re.S)
+    candidates = [b for b in blocks if '"port"' in b and '"vcpkg"' in b]
+    if len(candidates) != 1:
+        report.error(
+            doc,
+            "expected exactly one JSON block describing versions.json, found %d"
+            % len(candidates),
+        )
+        return
+    try:
+        example = json.loads(candidates[0])
+    except ValueError as exc:
+        report.error(doc, "the versions.json example is not valid JSON: %s" % exc)
+        return
+    if example != json.loads(index.text(source)):
+        report.error(
+            doc,
+            "the versions.json example differs from the root file; copy it from %s"
+            % source,
+        )
+
+
 def check_preset_names(report, index):
     """A preset is named after the triplet it selects, with one documented suffix at most.
 
@@ -651,6 +685,7 @@ def main(argv=None):
     check_port_usage(report, index, ports)
     check_node_patch_version_in_descriptions(report, index, ports)
     check_versions_json(report, index)
+    check_versions_json_example(report, index)
     check_preset_names(report, index)
     check_triplet_role_markers(report, index)
     check_case_registration(report, index)
