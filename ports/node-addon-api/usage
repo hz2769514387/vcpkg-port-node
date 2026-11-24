@@ -1,0 +1,15 @@
+node-addon-api installs the C++ wrapper headers (napi.h, napi-inl.h and
+napi-inl.deprecated.h) for an engine that embeds this repository's Node.js.
+
+    find_package(unofficial-node-addon-api CONFIG REQUIRED)
+    target_link_libraries(your_addon PRIVATE unofficial::node-addon-api::node-addon-api)
+
+The target carries this port's include directory. <node_api.h> is provided by
+unofficial::node::node, which this port depends on; link that target as well, and do not add
+another node_api.h to the include path.
+
+Scope: this is an overlay, not the registry port. It depends on the node port, so it builds
+Node.js and compiles the addon against that tree's headers, and it supports the node port's
+six cells including arm64 Windows. That is right for an addon linked into an embedding
+executable. A project that builds a .node module for an installed node.exe should use the
+registry port instead and should not put this overlay on its port path.

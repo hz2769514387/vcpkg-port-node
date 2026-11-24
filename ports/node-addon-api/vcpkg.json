@@ -1,0 +1,14 @@
+{
+  "name": "node-addon-api",
+  "version": "8.9.2",
+  "description": [
+    "C++ wrapper for Node-API (napi.h, napi-inl.h, napi-inl.deprecated.h) for an engine that embeds this repository's Node.js, installed as an overlay because the registry port is written for addons loaded by node.exe.",
+    "Why an overlay exists: the registry port depends on node-api-headers, whose include/node_api.h is a different header from the Node.js 26.13.1 tree this port builds, and whose lib/node.lib is an import library for the node executable an embedding engine does not have; its supports expression also excludes arm64 Windows, while the node port supports it. This copy depends on the node port, so <node_api.h> resolves to the header of the runtime the engine links, installs the three wrapper headers, exports the same unofficial::node-addon-api::node-addon-api target, and supports the same six cells. The version matches the registry at the pin."
+  ],
+  "homepage": "https://github.com/nodejs/node-addon-api",
+  "license": "MIT",
+  "supports": "(windows | linux | osx) & (x64 | arm64)",
+  "dependencies": [
+    "node"
+  ]
+}
