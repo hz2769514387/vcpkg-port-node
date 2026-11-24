@@ -39,9 +39,8 @@ actually matters — *what is in it*.
 
 ## 2. `versions.json`
 
-One file, at the repository root, machine-read and hand-edited only in the `port` block:
-
-The block below is copied from the root file and checked against it by `tools/check_repo.py`:
+One file, at the repository root, machine-read and hand-edited only in the `port` block. The
+block below is copied from the root file and checked against it by `tools/check_repo.py`:
 
 ```json
 {
